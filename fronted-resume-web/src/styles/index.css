@@ -1,0 +1,66 @@
+:root {
+  --theme-color: #2e6cff;
+  --primary-orange: #ff6b35;
+  --sidebar-bg: #ffffff;
+  --content-bg: #f7f8fa;
+  --card-bg: #ffffff;
+  --border-color: #e5e7eb;
+  --text-primary: #333333;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+}
+
+* { 
+  box-sizing: border-box;
+}
+
+/* 全局隐藏滚动条 */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
+html, body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.btn { cursor: pointer; border: 1px solid #ddd; padding: 6px 12px; border-radius: 6px; background: #fff; }
+.btn.primary { background: var(--theme-color); color: #fff; border-color: var(--theme-color); }
+
+.editor-layout { display: grid; grid-template-columns: 280px 1fr 320px; height: calc(100vh - 56px); }
+.panel { border-right: 1px solid #eee; overflow: auto; }
+.panel.right { border-left: 1px solid #eee; border-right: none; }
+.canvas { background: #f7f8fa; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
+.page { width: 794px; /* A4 96DPI approx */ background: #fff; min-height: 1123px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 24px 36px; }
+
+@media print {
+  .topbar, .panel.right, .panel.left { display: none; }
+  .page { width: auto; min-height: auto; box-shadow: none; padding: 0; }
+}
+
+

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试自定义CSS注入</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-title {
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .code-block {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 测试自定义CSS注入功能</h1>
+        
+        <div class="test-section">
+            <div class="test-title">问题分析</div>
+            <p>调试信息显示 <code>customCss长度: 0</code>，说明模板数据中没有自定义CSS。</p>
+            <p>我们需要测试两种情况：</p>
+            <ol>
+                <li>在模板数据中添加 <code>customCss</code></li>
+                <li>在简历数据中添加 <code>customCss</code></li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">测试方法1：在简历数据中添加customCss</div>
+            <p>在浏览器控制台中运行以下代码：</p>
+            <div class="code-block">
+// 获取Vue应用实例
+const app = document.querySelector('#app');
+if (app && app.__vue__) {
+  const vueApp = app.__vue__;
+  
+  // 查找ResumeEditorNew组件
+  let resumeEditor = null;
+  function findResumeEditor(component) {
+    if (component.type && component.type.name === 'ResumeEditorNew') {
+      resumeEditor = component;
+      return;
+    }
+    if (component.subTree && component.subTree.component) {
+      findResumeEditor(component.subTree.component);
+    }
+    if (component.children) {
+      component.children.forEach(child => {
+        if (child.component) {
+          findResumeEditor(child.component);
+        }
+      });
+    }
+  }
+  
+  findResumeEditor(vueApp);
+  
+  if (resumeEditor) {
+    console.log('找到ResumeEditorNew组件');
+    
+    // 添加自定义CSS到简历数据
+    if (resumeEditor.setupState && resumeEditor.setupState.resumeData) {
+      resumeEditor.setupState.resumeData.value.customCss = `
+        .dynamic-resume-preview {
+          border: 5px solid red !important;
+          background: linear-gradient(45deg, #ff6b6b, #4ecdc4) !important;
+        }
+        .resume-content {
+          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%) !important;
+          border: 3px solid blue !important;
+          border-radius: 20px !important;
+        }
+      `;
+      console.log('✅ 已添加自定义CSS到简历数据');
+    } else {
+      console.log('❌ 无法访问简历数据');
+    }
+  } else {
+    console.log('❌ 未找到ResumeEditorNew组件');
+  }
+} else {
+  console.log('❌ 未找到Vue应用');
+}
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">测试方法2：检查模板数据结构</div>
+            <p>在浏览器控制台中运行以下代码：</p>
+            <div class="code-block">
+// 检查模板数据结构
+const app = document.querySelector('#app');
+if (app && app.__vue__) {
+  const vueApp = app.__vue__;
+  
+  // 查找ResumeEditorNew组件
+  let resumeEditor = null;
+  function findResumeEditor(component) {
+    if (component.type && component.type.name === 'ResumeEditorNew') {
+      resumeEditor = component;
+      return;
+    }
+    if (component.subTree && component.subTree.component) {
+      findResumeEditor(component.subTree.component);
+    }
+    if (component.children) {
+      component.children.forEach(child => {
+        if (child.component) {
+          findResumeEditor(child.component);
+        }
+      });
+    }
+  }
+  
+  findResumeEditor(vueApp);
+  
+  if (resumeEditor && resumeEditor.setupState) {
+    console.log('模板数据结构:', resumeEditor.setupState.templateData);
+    console.log('简历数据结构:', resumeEditor.setupState.resumeData);
+  }
+}
+            </div>
+        </div>
+
+        <div class="test-section">
+            <div class="test-title">预期结果</div>
+            <div class="status success">
+                <strong>✅ 成功标志：</strong>
+                <ul>
+                    <li>控制台显示 "✅ 自定义CSS注入成功，长度: XXX"</li>
+                    <li>简历预览区域出现红色边框和渐变背景</li>
+                    <li>在开发者工具的Elements中看到 <code>data-resume-custom="true"</code> 的style元素</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

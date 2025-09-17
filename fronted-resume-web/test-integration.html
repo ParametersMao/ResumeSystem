@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完全自定义样式集成测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: white;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-title {
+            color: #333;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .code-block {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 完全自定义样式功能集成测试</h1>
+        
+        <div class="test-section">
+            <h2 class="test-title">测试步骤</h2>
+            <ol>
+                <li>启动开发服务器：<code>npm run dev</code></li>
+                <li>打开简历编辑器页面</li>
+                <li>在浏览器开发者工具中检查以下内容：</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">1. 检查CSS注入</h2>
+            <p>在开发者工具的 <strong>Elements</strong> 标签中，检查 <code>&lt;head&gt;</code> 部分是否有：</p>
+            <div class="code-block">
+&lt;style data-resume-custom="true" type="text/css"&gt;
+  /* 自定义CSS内容 */
+&lt;/style&gt;
+            </div>
+            <div class="status warning">
+                <strong>注意：</strong> 如果看不到这个style标签，说明CSS注入功能没有正常工作。
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">2. 检查样式应用</h2>
+            <p>在开发者工具的 <strong>Elements</strong> 标签中，检查简历预览区域是否有：</p>
+            <ul>
+                <li><code>.dynamic-resume-preview</code> 元素有红色边框和渐变背景</li>
+                <li><code>.resume-content</code> 元素有蓝色边框和圆角</li>
+                <li>如果使用了测试模板，应该有明显的视觉变化</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">3. 检查CSS变量</h2>
+            <p>在开发者工具的 <strong>Elements</strong> 标签中，检查 <code>:root</code> 是否有CSS变量：</p>
+            <div class="code-block">
+:root {
+  --colors-primary: #3498db;
+  --colors-secondary: #2ecc71;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+}
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">4. 检查响应式样式</h2>
+            <p>在开发者工具的 <strong>Elements</strong> 标签中，检查是否有媒体查询：</p>
+            <div class="code-block">
+@media (min-width: 768px) {
+  .some-class {
+    font-size: 16px;
+  }
+}
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">5. 检查Schema渲染</h2>
+            <p>如果使用了Schema配置，检查是否有：</p>
+            <ul>
+                <li><code>.schema-renderer</code> 类名的元素</li>
+                <li><code>.schema-grid</code> 或 <code>.schema-flex</code> 类名的元素</li>
+                <li>自定义的样式是否正确应用</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">6. 调试信息</h2>
+            <p>在浏览器控制台中运行以下代码来检查功能状态：</p>
+            <div class="code-block">
+// 检查是否有自定义样式元素
+const customStyle = document.querySelector('style[data-resume-custom="true"]');
+console.log('自定义样式元素:', customStyle);
+
+// 检查样式内容
+if (customStyle) {
+  console.log('样式内容:', customStyle.textContent);
+}
+
+// 检查CSS变量
+const rootStyles = getComputedStyle(document.documentElement);
+console.log('CSS变量 primary:', rootStyles.getPropertyValue('--colors-primary'));
+console.log('CSS变量 spacing-lg:', rootStyles.getPropertyValue('--spacing-lg'));
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">常见问题排查</h2>
+            <div class="status error">
+                <strong>问题1：</strong> 看不到自定义样式元素<br>
+                <strong>解决：</strong> 检查模板数据中是否有 <code>customCss</code> 字段，或者检查组件是否正确加载
+            </div>
+            <div class="status error">
+                <strong>问题2：</strong> 样式没有生效<br>
+                <strong>解决：</strong> 检查CSS选择器是否正确，或者是否有样式冲突
+            </div>
+            <div class="status error">
+                <strong>问题3：</strong> Schema渲染不工作<br>
+                <strong>解决：</strong> 检查 <code>SchemaRenderer.vue</code> 是否正确导入到 <code>BaseSection.vue</code> 中
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2 class="test-title">预期结果</h2>
+            <div class="status success">
+                <strong>✅ 成功标志：</strong>
+                <ul>
+                    <li>在 <code>&lt;head&gt;</code> 中看到 <code>data-resume-custom="true"</code> 的style标签</li>
+                    <li>简历预览区域有明显的视觉变化（如果使用了测试模板）</li>
+                    <li>CSS变量在 <code>:root</code> 中定义</li>
+                    <li>响应式样式通过媒体查询实现</li>
+                    <li>Schema渲染的组件正确显示</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 自动检查功能状态
+        function checkCustomStylesStatus() {
+            console.log('🔍 开始检查完全自定义样式功能状态...');
+            
+            // 检查自定义样式元素
+            const customStyle = document.querySelector('style[data-resume-custom="true"]');
+            if (customStyle) {
+                console.log('✅ 自定义样式元素存在');
+                console.log('样式内容长度:', customStyle.textContent.length);
+            } else {
+                console.log('❌ 自定义样式元素不存在');
+            }
+            
+            // 检查CSS变量
+            const rootStyles = getComputedStyle(document.documentElement);
+            const primaryColor = rootStyles.getPropertyValue('--colors-primary');
+            if (primaryColor) {
+                console.log('✅ CSS变量存在:', primaryColor);
+            } else {
+                console.log('❌ CSS变量不存在');
+            }
+            
+            // 检查Schema渲染器
+            const schemaElements = document.querySelectorAll('.schema-renderer');
+            if (schemaElements.length > 0) {
+                console.log('✅ Schema渲染器工作正常，找到', schemaElements.length, '个元素');
+            } else {
+                console.log('⚠️ 未找到Schema渲染元素（可能没有使用Schema配置）');
+            }
+        }
+        
+        // 页面加载完成后检查
+        document.addEventListener('DOMContentLoaded', checkCustomStylesStatus);
+    </script>
+</body>
+</html>

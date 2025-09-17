@@ -1,0 +1,73 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
+import { useUserStore } from '@/store/modules/user'
+
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/',
+    component: () => import('@/layouts/MainLayout.vue'),
+    redirect: '/dashboard',
+    children: [
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: () => import('@/views/Dashboard.vue'),
+        meta: { title: '仪表盘', icon: 'Odometer' }
+      },
+      {
+        path: 'user-management',
+        name: 'UserManagement',
+        component: () => import('@/views/UserManagement.vue'),
+        meta: { title: '用户管理', icon: 'User' }
+      },
+      {
+        path: 'cuser-management',
+        name: 'CUserManagement',
+        component: () => import('@/views/CUserManagement.vue'),
+        meta: { title: 'C端用户管理', icon: 'UserFilled' }
+      },
+      {
+        path: 'template-management',
+        name: 'TemplateManagement',
+        component: () => import('@/views/TemplateManagement.vue'),
+        meta: { title: '模板管理', icon: 'Document' }
+      },
+      {
+        path: 'data-statistics',
+        name: 'DataStatistics',
+        component: () => import('@/views/DataStatistics.vue'),
+        meta: { title: '数据统计', icon: 'TrendCharts' }
+      },
+      {
+        path: 'ai-operations',
+        name: 'AiOperations',
+        component: () => import('@/views/AiOperationMonitoring.vue'),
+        meta: { title: 'AI操作监控', icon: 'Monitor' }
+      }
+    ]
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  const userStore = useUserStore()
+  
+  if (to.meta.requiresAuth !== false && !userStore.isLoggedIn) {
+    next('/login')
+  } else {
+    next()
+  }
+})
+
+export default router 

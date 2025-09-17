@@ -1,0 +1,48 @@
+import { Controller, Get, Query } from '@nestjs/common';
+import { StatisticsService } from './statistics.service';
+import { ApiResponse } from '../../common/interfaces/pagination.interface';
+
+@Controller('api/statistics')
+export class StatisticsController {
+  constructor(private readonly statisticsService: StatisticsService) {}
+
+  @Get('overview')
+  async getOverview(): Promise<ApiResponse<any>> {
+    const overview = await this.statisticsService.getOverview();
+    return {
+      code: 200,
+      message: 'success',
+      data: overview,
+    };
+  }
+
+  @Get('trend')
+  async getTrend(@Query('period') period: string = 'day'): Promise<ApiResponse<any>> {
+    const trend = await this.statisticsService.getTrendData(period);
+    return {
+      code: 200,
+      message: 'success',
+      data: trend,
+    };
+  }
+
+  @Get('popular-templates')
+  async getPopularTemplates(): Promise<ApiResponse<any>> {
+    const templates = await this.statisticsService.getPopularTemplates();
+    return {
+      code: 200,
+      message: 'success',
+      data: templates,
+    };
+  }
+
+  @Get('user-activity')
+  async getUserActivity(): Promise<ApiResponse<any>> {
+    const users = await this.statisticsService.getUserActivity();
+    return {
+      code: 200,
+      message: 'success',
+      data: users,
+    };
+  }
+} 

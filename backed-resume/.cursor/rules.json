@@ -1,0 +1,118 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "name": "代码格式化规则",
+      "description": "NestJS项目的代码格式化规则",
+      "settings": {
+        "typescript": {
+          "indentSize": 2,
+          "tabSize": 2,
+          "insertSpaces": true,
+          "braceStyle": "1tbs",
+          "singleQuote": true,
+          "trailingComma": "es5",
+          "semicolons": true,
+          "quoteProps": "as-needed",
+          "arrowParens": "avoid",
+          "printWidth": 100
+        },
+        "javascript": {
+          "indentSize": 2,
+          "tabSize": 2,
+          "insertSpaces": true,
+          "singleQuote": true
+        }
+      }
+    },
+    {
+      "name": "文件夹结构规则",
+      "description": "基于NestJS模块化结构的文件夹组织规则",
+      "folderPatterns": {
+        "modules/*/": {
+          "expectedFiles": ["*.controller.ts", "*.service.ts", "*.module.ts"]
+        },
+        "dto/": {
+          "fileNaming": "*.dto.ts"
+        },
+        "entities/": {
+          "fileNaming": "*.entity.ts"
+        },
+        "common/": {
+          "subfolders": ["dto", "interfaces"]
+        }
+      }
+    },
+    {
+      "name": "命名规范",
+      "description": "项目的命名规范",
+      "naming": {
+        "classes": {
+          "suffix": {
+            "Controller": "控制器类",
+            "Service": "服务类",
+            "Module": "模块类",
+            "Entity": "实体类",
+            "Dto": "数据传输对象"
+          },
+          "format": "PascalCase"
+        },
+        "methods": {
+          "format": "camelCase"
+        },
+        "variables": {
+          "format": "camelCase"
+        },
+        "constants": {
+          "format": "UPPER_CASE"
+        },
+        "interfaces": {
+          "prefix": "I",
+          "format": "PascalCase"
+        }
+      }
+    },
+    {
+      "name": "导入排序规则",
+      "description": "导入语句的排序规则",
+      "importOrder": [
+        "^@nestjs/(.*)$",
+        "^@/(.*)$",
+        "^[./]"
+      ]
+    },
+    {
+      "name": "代码检查规则",
+      "description": "代码质量检查规则",
+      "linting": {
+        "noUnusedVariables": true,
+        "noImplicitAny": true,
+        "noConsole": false,
+        "complexity": {
+          "maxCyclomaticComplexity": 10
+        },
+        "maxParameters": 5
+      }
+    },
+    {
+      "name": "注释规则",
+      "description": "代码注释规范",
+      "commenting": {
+        "functionDocumentation": true,
+        "classDocumentation": true,
+        "todoFormat": "// TODO: "
+      }
+    },
+    {
+      "name": "SQL查询规则",
+      "description": "SQL查询构建规则",
+      "custom": {
+        "typeorm": {
+          "preferQueryBuilder": true,
+          "logGeneratedQueries": true,
+          "useMeaningfulAliases": true
+        }
+      }
+    }
+  ]
+}

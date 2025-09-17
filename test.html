@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简历模板</title>
+    <style>
+        :root {
+            --theme-color: #2f80ed;
+            --paragraph-spacing: 16px;
+            --element-spacing: 10px;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f7f7f7;
+        }
+
+        .resume-container {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+            max-width: 900px;
+            margin: auto;
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2, h3 {
+            color: var(--theme-color);
+            margin-top: 0;
+            margin-bottom: var(--element-spacing);
+        }
+
+        .profile-header {
+            grid-column: 1 / -1;
+            text-align: center;
+        }
+        .profile-summary {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: var(--paragraph-spacing);
+        }
+
+        .section {
+            padding: 10px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: var(--element-spacing);
+        }
+
+        /* Styles from JSON */
+        #basic-1700000000000 {
+            grid-column: 1 / 2;
+            padding: 0 12px;
+        }
+
+        #skills-1700000000001 {
+            grid-column: 1 / 2;
+            padding: 8px 16px;
+        }
+        #skills-170000000001 li {
+            border-bottom: 1px dashed #ddd;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+        #skills-170000000001 ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #skills-170000000001 li:last-child {
+             border-bottom: none;
+        }
+
+        #intention-1700000000002 {
+            grid-column: 2 / 3;
+            padding: 8px 16px;
+        }
+
+        #education-1700000000003 {
+            grid-column: 2 / 3;
+            padding: 8px 16px;
+        }
+        #education-1700000000003 .section-item {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+        }
+
+        #experience-1700000000004 {
+            grid-column: 2 / 3;
+            padding: 8px 16px;
+        }
+        #experience-170000000004 .section-item {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 14px;
+        }
+
+        #projects-1700000000005 {
+            grid-column: 2 / 3;
+            padding: 8px 16px;
+        }
+        #projects-170000000005 .section-item {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 14px;
+        }
+        #projects-1700000000005 .timeline-item:last-child::after {
+            content: none;
+        }
+
+        #awards-1700000000006 {
+            grid-column: 2 / 3;
+            padding: 8px 0;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        #hobbies-1700000000007 {
+            grid-column: 2 / 3;
+            padding: 8px 0;
+        }
+        
+        .contact-info {
+            list-style: none;
+            padding: 0;
+            margin-top: 5px;
+        }
+        .contact-info li {
+            margin-bottom: 5px;
+        }
+        .contact-info strong {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .timeline-item {
+            margin-bottom: 14px;
+            position: relative;
+        }
+        .timeline-item:before {
+            content: '';
+            position: absolute;
+            left: -15px;
+            top: 5px;
+            width: 8px;
+            height: 8px;
+            background-color: var(--theme-color);
+            border-radius: 50%;
+        }
+
+        .timeline-item:after {
+            content: '';
+            position: absolute;
+            left: -12px;
+            top: 15px;
+            bottom: -5px;
+            width: 2px;
+            background-color: #ddd;
+        }
+        .timeline-item:last-child:after {
+            display: none;
+        }
+
+        /* 这是新增和修改的部分，用于实现丝带效果 */
+        .ribbon-title {
+            background-color: var(--theme-color);
+            color: white;
+            padding: 5px 15px;
+            display: inline-block;
+            margin-bottom: 10px;
+            position: relative; /* 启用定位 */
+            font-weight: normal; /* 重置标题的粗体 */
+        }
+        .ribbon-title::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -10px; /* 调整位置 */
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 15px 0 15px 10px; /* 调整边框宽度来创建形状 */
+            border-color: transparent transparent transparent var(--theme-color);
+        }
+
+    </style>
+</head>
+<body>
+    <div class="resume-container">
+        <div class="profile-header">
+            <h1>全民简历</h1>
+            <h2>行政专员</h2>
+        </div>
+        <div class="profile-summary">
+            <p>五年行政经验，熟悉办公室日常管理流程，具备较强的沟通协调与执行能力。</p>
+        </div>
+
+        <div id="basic-1700000000000" class="section">
+            <div class="section-title">个人信息</div>
+            <ul class="contact-info">
+                <li><strong>邮箱:</strong> qianlianli@qq.com</li>
+                <li><strong>电话:</strong> 15288888884</li>
+                <li><strong>网站:</strong> https://example.com</li>
+            </ul>
+        </div>
+        
+        <div id="skills-1700000000001" class="section">
+            <div class="section-title">技能特长</div>
+            <ul>
+                <li>沟通协调</li>
+                <li>文档撰写</li>
+                <li>Office 高级功能</li>
+                <li>会议组织与接待</li>
+            </ul>
+        </div>
+
+        <div id="intention-1700000000002" class="section">
+            <div class="section-title">求职意向</div>
+            <p>行政专员（期望薪资：6000/月，地点：上海）</p>
+        </div>
+        
+        <div id="education-1700000000003" class="section">
+            <div class="section-title" style="color: #2f80ed;">教育背景</div>
+            <div class="section-item">
+                <p><strong>西南大学</strong></p>
+                <p>全日制本科 · 文学</p>
+                <p>2012-09 至 2016-07</p>
+            </div>
+        </div>
+
+        <div id="experience-1700000000004" class="section">
+            <div class="ribbon-title">工作经验</div>
+            <div class="timeline-item">
+                <p><strong>全民网络科技有限公司</strong></p>
+                <p>行政专员</p>
+                <p>2018-09 至 至今</p>
+                <ul>
+                    <li>负责访客接待、会议安排以及文档归档;</li>
+                    <li>协调各部门物资采购与报销流程;</li>
+                    <li>优化行政制度与流程，提升办公效率。</li>
+                </ul>
+            </div>
+            <div class="timeline-item">
+                <p><strong>上海某管理咨询有限公司</strong></p>
+                <p>行政专员</p>
+                <p>2016-09 至 2018-08</p>
+                <ul>
+                    <li>负责固定资产台账管理与盘点;</li>
+                    <li>组织团建与培训活动;</li>
+                    <li>对接人事招聘与入离职手续。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="projects-1700000000005" class="section">
+            <div class="ribbon-title">项目经验</div>
+            <div class="timeline-item">
+                <p><strong>办公室制度优化项目</strong></p>
+                <p>项目执行</p>
+                <p>2019-04 至 2019-12</p>
+                <p>梳理办公制度与流程，建立电子化审批与档案系统，平均处理时效提升30%。</p>
+            </div>
+        </div>
+
+        <div id="awards-1700000000006" class="section">
+            <div class="section-title">荣誉证书</div>
+            <div class="award-grid">
+                <div><strong>优秀员工</strong><br>全民网络<br>2020-12</div>
+                <div><strong>高级办公自动化证书</strong><br>某培训中心<br>2018-06</div>
+            </div>
+        </div>
+
+        <div id="hobbies-1700000000007" class="section">
+            <div class="section-title">兴趣爱好</div>
+            <p>阅读、运动、摄影、志愿服务</p>
+        </div>
+    </div>
+</body>
+</html>
