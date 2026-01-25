@@ -1,9 +1,15 @@
 <template>
-  <div class="simple-section-editor">
+  <div
+    class="simple-section-editor"
+    :class="{ 'is-highlighted': highlighted }"
+  >
     <!-- 模块标题栏 -->
     <div class="section-header">
       <div class="section-info">
-        <span class="section-icon">📝</span>
+        <span class="drag-handle" title="拖拽排序">
+          <el-icon><Rank /></el-icon>
+        </span>
+        <span class="section-icon">{{ displayIcon }}</span>
         <template v-if="!editingTitle">
           <span class="section-title">{{ modelValue.title }}</span>
           <el-button text size="small" class="edit-title-btn" @click="startEditTitle">重命名</el-button>
@@ -26,8 +32,7 @@
           size="small"
           :active-text="modelValue.visible ? '显示' : '隐藏'"
         />
-        <el-button size="small" @click="$emit('move-up')">上移</el-button>
-        <el-button size="small" @click="$emit('move-down')">下移</el-button>
+        <el-button text size="small" @click="$emit('settings')">设置</el-button>
         <el-button 
           v-if="showAddButton"
           type="primary" 
@@ -126,13 +131,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import { Rank } from '@element-plus/icons-vue'
 import { SECTION_TYPES } from '@/config/sectionTypes'
 import type { ResumeSection } from '@/types/resume'
 import DynamicField from '@/components/form/DynamicField.vue'
+import { createEmptyRichText, normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   modelValue: ResumeSection
+  highlighted?: boolean
 }
 
 interface Emits {
@@ -143,6 +151,10 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+const displayIcon = computed(() => {
+  return (props.modelValue.config as any)?.icon || '📝'
+})
 
 // 响应式数据
 const sectionVisible = ref(props.modelValue.visible)
@@ -228,6 +240,8 @@ function addItem() {
   sectionConfig.value.fields?.forEach(field => {
     if (field.type === 'dateRange') {
       emptyItem[field.name] = { start: '', end: '' }
+    } else if (field.type === 'textarea' && field.richText) {
+      emptyItem[field.name] = createEmptyRichText()
     } else {
       emptyItem[field.name] = ''
     }
@@ -259,7 +273,11 @@ function moveDown(index: number) {
 
 function updateItemField(itemIndex: number, fieldName: string, value: any) {
   const newItems = [...props.modelValue.items]
-  newItems[itemIndex] = { ...newItems[itemIndex], [fieldName]: value }
+  const field = sectionConfig.value.fields?.find(f => f.name === fieldName)
+  const normalizedValue = field?.type === 'textarea' && field.richText
+    ? normalizeRichTextValue(value)
+    : value
+  newItems[itemIndex] = { ...newItems[itemIndex], [fieldName]: normalizedValue }
   emit('update:modelValue', { ...props.modelValue, items: newItems })
 }
 
@@ -307,6 +325,12 @@ function removeSkill(index: number) {
   border-radius: 8px;
   margin-bottom: 16px;
   background: white;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.simple-section-editor.is-highlighted {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
 }
 
 .section-header {
@@ -323,6 +347,18 @@ function removeSkill(index: number) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drag-handle:hover {
+  color: #4b5563;
 }
 
 .section-icon {

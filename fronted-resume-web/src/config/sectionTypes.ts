@@ -1,5 +1,7 @@
 import type { SectionConfig } from '@/types/resume'
 
+export const BULLET_ICON_OPTIONS = ['•', '◦', '✔️', '⭐', '🔥', '💡', '🚀', '📌']
+
 // 预定义的模块类型配置
 export const SECTION_TYPES: Record<string, SectionConfig> = {
 
@@ -17,7 +19,8 @@ export const SECTION_TYPES: Record<string, SectionConfig> = {
       { name: 'company', label: '公司名称', type: 'text', required: true },
       { name: 'role', label: '职位', type: 'text', required: true },
       { name: 'duration', label: '时间区间', type: 'dateRange', required: true },
-      { name: 'desc', label: '工作描述', type: 'textarea', required: false, richText: true }
+      { name: 'desc', label: '工作描述', type: 'textarea', required: false, richText: true },
+      { name: 'icon', label: '图标', type: 'select', required: false, options: BULLET_ICON_OPTIONS }
     ]
   },
   education: {
@@ -36,7 +39,8 @@ export const SECTION_TYPES: Record<string, SectionConfig> = {
       { name: 'company', label: '公司/机构', type: 'text', required: true },
       { name: 'role', label: '岗位', type: 'text', required: true },
       { name: 'duration', label: '时间区间', type: 'dateRange', required: true },
-      { name: 'desc', label: '实习描述', type: 'textarea', required: false, richText: true }
+      { name: 'desc', label: '实习描述', type: 'textarea', required: false, richText: true },
+      { name: 'icon', label: '图标', type: 'select', required: false, options: BULLET_ICON_OPTIONS }
     ]
   },
   campus: {
@@ -46,7 +50,8 @@ export const SECTION_TYPES: Record<string, SectionConfig> = {
       { name: 'org', label: '组织/社团/比赛', type: 'text', required: true },
       { name: 'role', label: '职责', type: 'text', required: true },
       { name: 'duration', label: '时间区间', type: 'dateRange', required: true },
-      { name: 'desc', label: '经历描述', type: 'textarea', required: false, richText: true }
+      { name: 'desc', label: '经历描述', type: 'textarea', required: false, richText: true },
+      { name: 'icon', label: '图标', type: 'select', required: false, options: BULLET_ICON_OPTIONS }
     ]
   },
   projects: {
@@ -56,7 +61,8 @@ export const SECTION_TYPES: Record<string, SectionConfig> = {
       { name: 'name', label: '项目名称', type: 'text', required: true },
       { name: 'role', label: '担任角色', type: 'text', required: true },
       { name: 'duration', label: '项目时间', type: 'dateRange', required: true },
-      { name: 'desc', label: '项目描述', type: 'textarea', required: false, richText: true }
+      { name: 'desc', label: '项目描述', type: 'textarea', required: false, richText: true },
+      { name: 'icon', label: '图标', type: 'select', required: false, options: BULLET_ICON_OPTIONS }
     ]
   },
   skills: {

@@ -71,6 +71,7 @@
 import { computed } from 'vue'
 import type { FieldConfig } from '@/types/resume'
 import RichTextEditor from './RichTextEditor.vue'
+import { createEmptyRichText, normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   field: FieldConfig
@@ -87,8 +88,22 @@ const emit = defineEmits<Emits>()
 
 // 处理 v-model 绑定
 const fieldValue = computed({
-  get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value)
+  get: () => {
+    if (props.field.type === 'textarea' && props.field.richText) {
+      if (!props.modelValue) {
+        return createEmptyRichText()
+      }
+      return normalizeRichTextValue(props.modelValue)
+    }
+    return props.modelValue
+  },
+  set: (value) => {
+    if (props.field.type === 'textarea' && props.field.richText) {
+      emit('update:modelValue', normalizeRichTextValue(value))
+    } else {
+      emit('update:modelValue', value)
+    }
+  }
 })
 
 // dateRange 的拆分绑定

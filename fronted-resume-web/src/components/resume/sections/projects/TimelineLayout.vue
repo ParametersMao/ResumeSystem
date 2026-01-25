@@ -16,15 +16,20 @@
       >
         <div class="timeline-header" :style="headerStyle">
           <div class="timeline-content" :style="contentStyle">
-            <div class="project-name" :style="nameStyle">
-              {{ item.name || '项目名称' }}
+            <div v-if="item.icon" class="icon-wrapper">
+              {{ sanitizeIcon(item.icon) }}
             </div>
-            <div class="project-role" :style="roleStyle">
-              {{ item.role || '项目角色' }}
+            <div class="text-block">
+              <div class="project-name" :style="nameStyle">
+                {{ item.name || '项目名称' }}
+              </div>
+              <div class="project-role" :style="roleStyle">
+                {{ item.role || '项目角色' }}
+              </div>
             </div>
           </div>
           <div class="timeline-date" :style="dateStyle">
-            {{ item.date || '项目时间' }}
+            {{ formatDuration(item) }}
           </div>
         </div>
         <div v-if="item.desc" class="description" :style="descriptionStyle">
@@ -37,6 +42,7 @@
 
 <script setup lang="ts">
 import { computed, defineProps } from 'vue'
+import { normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   data: any
@@ -47,42 +53,23 @@ interface Props {
 const props = defineProps<Props>()
 
 // 渲染富文本描述（兼容多种存储结构）
-const renderDescription = (desc: any) => {
-  if (typeof desc === 'string') return desc
-  if (desc && typeof desc === 'object') {
-    if (desc.html && typeof desc.html === 'string') return desc.html
-    if (Array.isArray(desc.json)) return convertJsonToHtml(desc.json)
-    if (Array.isArray(desc.ops)) return desc.ops.map((op: any) => op.insert).join('')
-  }
-  return ''
+const renderDescription = (desc: any) => normalizeRichTextValue(desc).html
+
+const sanitizeIcon = (icon: any) => {
+  if (!icon) return ''
+  const value = typeof icon === 'string' ? icon : icon?.text || ''
+  return value?.slice(0, 2) || ''
 }
 
-// 简易 JSON -> HTML 转换（与富文本组件保持一致）
-function convertJsonToHtml(jsonData: any[]): string {
-  if (!Array.isArray(jsonData)) return ''
-  return jsonData
-    .map((node: any) => {
-      if (typeof node === 'string') return node
-      const { type, children } = node || {}
-      const childrenHtml = children ? convertJsonToHtml(children) : ''
-      switch (type) {
-        case 'paragraph':
-          return `<p>${childrenHtml}</p>`
-        case 'header': {
-          const level = node.level || 1
-          return `<h${level}>${childrenHtml}</h${level}>`
-        }
-        case 'list-item':
-          return `<li>${childrenHtml}</li>`
-        case 'bulleted-list':
-          return `<ul>${childrenHtml}</ul>`
-        case 'numbered-list':
-          return `<ol>${childrenHtml}</ol>`
-        default:
-          return childrenHtml
-      }
-    })
-    .join('')
+const formatDuration = (item: any) => {
+  const duration = item?.duration || {}
+  const start = duration.start ?? item.start ?? ''
+  const end = duration.end ?? item.end ?? ''
+  const fallback = item.date || ''
+  if (start && end) return `${start} - ${end}`
+  if (start) return start
+  if (end) return end
+  return fallback
 }
 
 const titleStyle = computed(() => {
@@ -130,9 +117,11 @@ const containerStyle = computed(() => ({
 }))
 
 const itemStyle = computed(() => ({
-  marginBottom: props.data?.style?.elementSpacing || '20px',
-  paddingBottom: '15px',
-  borderBottom: props.config?.itemSeparator === 'dashed' ? '1px dashed #f0f0f0' : '1px solid #f0f0f0',
+  marginBottom: props.data?.style?.elementSpacing || '18px',
+  paddingBottom: '12px',
+  borderBottom: props.config?.itemSeparator === 'dashed'
+    ? `1px dashed ${props.styles?.colors?.border || 'rgba(15, 23, 42, 0.12)'}`
+    : `1px solid ${props.styles?.colors?.border || 'rgba(15, 23, 42, 0.12)'}`,
   ...props.config?.itemStyle
 }))
 
@@ -152,21 +141,21 @@ const contentStyle = computed(() => ({
 const nameStyle = computed(() => ({
   fontSize: '16px',
   fontWeight: '600',
-  color: props.styles?.colors?.text || '#333',
+  color: props.styles?.colors?.text || '#111827',
   marginBottom: '5px',
   ...props.config?.nameStyle
 }))
 
 const roleStyle = computed(() => ({
   fontSize: '14px',
-  color: props.styles?.colors?.primary || '#4a90a4',
+  color: props.styles?.colors?.primary || '#2563eb',
   marginBottom: '8px',
   ...props.config?.roleStyle
 }))
 
 const dateStyle = computed(() => ({
   fontSize: '14px',
-  color: props.styles?.colors?.primary || '#4a90a4',
+  color: props.styles?.colors?.secondary || props.styles?.colors?.primary || '#2563eb',
   fontWeight: '500',
   whiteSpace: 'nowrap',
   marginLeft: '20px',
@@ -176,7 +165,7 @@ const dateStyle = computed(() => ({
 const descriptionStyle = computed(() => ({
   fontSize: '14px',
   lineHeight: '1.6',
-  color: props.styles?.colors?.text || '#333',
+  color: props.styles?.colors?.text || '#111827',
   ...props.config?.descriptionStyle
 }))
 </script>
@@ -193,5 +182,28 @@ const descriptionStyle = computed(() => ({
   top: 0;
   width: 0;
   height: 0;
+}
+
+.icon-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  font-size: 16px;
+}
+
+.timeline-content {
+  display: flex;
+  align-items: center;
+}
+
+.text-block {
+  flex: 1;
 }
 </style>

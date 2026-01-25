@@ -37,8 +37,10 @@ interface Props {
 const props = defineProps<Props>()
 
 // 组件映射表 - 支持动态扩展
+// 注意：模板中可以使用 'personal' 或 'basic'，都会映射到 PersonalInfoSection
 const componentMap = {
   'basic': PersonalInfoSection,
+  'personal': PersonalInfoSection, // 兼容模板中的 'personal' 类型
   'experience': ExperienceSection,
   'education': EducationSection,
   'skills': SkillsSection,

@@ -1,11 +1,30 @@
 <template>
   <div class="rich-text-editor">
     <div class="rte-toolbar">
-      <label v-if="label" class="field-label">
-        {{ label }}
-        <span v-if="required" class="required">*</span>
-      </label>
-      <el-button size="small" class="ai-btn" @click="emitAi">AI润色</el-button>
+      <div class="left-tools">
+        <label v-if="label" class="field-label">
+          {{ label }}
+          <span v-if="required" class="required">*</span>
+        </label>
+      </div>
+      <div class="right-tools">
+        <el-popover placement="bottom" trigger="click" width="200">
+          <div class="icon-grid">
+            <span
+              v-for="icon in ICON_PRESETS"
+              :key="icon"
+              class="icon-item"
+              @click="insertIcon(icon)"
+            >
+              {{ icon }}
+            </span>
+          </div>
+          <template #reference>
+            <el-button size="small" class="icon-btn">插入图标</el-button>
+          </template>
+        </el-popover>
+        <el-button size="small" class="ai-btn" @click="emitAi">AI润色</el-button>
+      </div>
     </div>
 
     <div class="editor-container">
@@ -26,9 +45,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, watch } from 'vue'
+import { ref, onBeforeUnmount, watch } from 'vue'
 import { Editor, Toolbar } from '@wangeditor-next/editor-for-vue'
 import '@wangeditor-next/editor/dist/css/style.css'
+import { createEmptyRichText, normalizeRichTextValue } from '@/utils/richText'
+import type { RichTextValue } from '@/types/resume'
 
 interface Props {
   modelValue: any
@@ -50,65 +71,54 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-// 编辑器实例
-const editorRef = ref()
+const ICON_PRESETS = ['✔️', '⭐', '🔥', '💡', '🚀', '📌', '🎯', '💼']
 
-// 内容值 - 支持HTML和JSON两种格式
+const editorRef = ref<any>()
 const valueHtml = ref('')
+const currentValue = ref<RichTextValue>(createEmptyRichText())
 
-// 工具栏配置
 const toolbarConfig = {
-  excludeKeys: [
-    'uploadImage',
-    'uploadVideo', 
-    'insertTable',
-    'codeBlock',
-    'insertLink'
-  ]
+  excludeKeys: ['uploadImage', 'uploadVideo', 'insertTable', 'codeBlock', 'insertLink']
 }
 
-// 编辑器配置
 const editorConfig = {
   placeholder: props.placeholder,
   MENU_CONF: {}
 }
 
-// 监听props变化，同步到编辑器
-watch(() => props.modelValue, (newValue) => {
-  if (newValue && typeof newValue === 'object') {
-    // 如果是JSON格式，转换为HTML
-    try {
-      if (Array.isArray(newValue)) {
-        // wangeditor的JSON格式是数组
-        editorRef.value?.setHtml(convertJsonToHtml(newValue))
-      } else if (newValue.html) {
-        valueHtml.value = newValue.html
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    const normalized = normalizeRichTextValue(newValue)
+    currentValue.value = normalized
+    if (normalized.html !== valueHtml.value) {
+      valueHtml.value = normalized.html
+      if (editorRef.value && typeof editorRef.value.setHtml === 'function') {
+        const html = normalized.html || '<p><br></p>'
+        if (editorRef.value.getHtml() !== html) {
+          editorRef.value.setHtml(html)
+        }
       }
-    } catch (error) {
-      console.warn('富文本内容解析失败:', error)
-      valueHtml.value = ''
     }
-  } else if (typeof newValue === 'string') {
-    valueHtml.value = newValue
-  }
-}, { immediate: true })
+  },
+  { immediate: true, deep: true }
+)
 
-// 编辑器创建完成
 function handleCreated(editor: any) {
   editorRef.value = editor
+  if (currentValue.value.html) {
+    editor.setHtml(currentValue.value.html)
+  }
 }
 
-// 内容变化处理
 function handleChange(editor: any) {
   const html = editor.getHtml()
-  const json = editor.children // wangeditor-next的JSON格式
-  
-  // 发送包含HTML和JSON的对象
-  emit('update:modelValue', {
-    html: html,
-    json: json,
-    text: editor.getText() // 纯文本
-  })
+  const text = editor.getText()
+  const json = Array.isArray(editor.children) ? editor.children : []
+  const normalized = normalizeRichTextValue({ html, text, json })
+  currentValue.value = normalized
+  valueHtml.value = normalized.html
+  emit('update:modelValue', normalized)
 }
 
 function emitAi() {
@@ -116,39 +126,15 @@ function emitAi() {
   emit('ai', html)
 }
 
-// JSON转HTML的简单实现（可以根据需要扩展）
-function convertJsonToHtml(jsonData: any[]): string {
-  if (!Array.isArray(jsonData)) return ''
-  
-  return jsonData.map(node => {
-    if (typeof node === 'string') return node
-    
-    const { type, children } = node
-    const childrenHtml = children ? convertJsonToHtml(children) : ''
-    
-    switch (type) {
-      case 'paragraph':
-        return `<p>${childrenHtml}</p>`
-      case 'header':
-        const level = node.level || 1
-        return `<h${level}>${childrenHtml}</h${level}>`
-      case 'list-item':
-        return `<li>${childrenHtml}</li>`
-      case 'bulleted-list':
-        return `<ul>${childrenHtml}</ul>`
-      case 'numbered-list':
-        return `<ol>${childrenHtml}</ol>`
-      default:
-        return childrenHtml
-    }
-  }).join('')
+function insertIcon(icon: string) {
+  if (!editorRef.value) return
+  editorRef.value.insertText?.(`${icon} `)
 }
 
-// 组件销毁前清理
 onBeforeUnmount(() => {
   const editor = editorRef.value
-  if (editor == null) return
-  editor.destroy()
+  if (!editor) return
+  editor.destroy?.()
 })
 </script>
 
@@ -159,7 +145,6 @@ onBeforeUnmount(() => {
 
 .field-label {
   display: block;
-  margin-bottom: 6px;
   font-weight: 500;
   color: #374151;
 }
@@ -180,7 +165,34 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   margin-bottom: 6px;
 }
-.ai-btn { margin-left: 8px; }
+
+.right-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-item {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.icon-item:hover {
+  background: #f3f4f6;
+}
 
 .editor-toolbar {
   border-bottom: 1px solid #e5e7eb;
@@ -189,20 +201,16 @@ onBeforeUnmount(() => {
 .editor-content {
   height: v-bind('props.height + "px"');
   overflow-y: auto;
-  
-  /* 隐藏滚动条但保持滚动功能 */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* Internet Explorer 10+ */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .editor-content::-webkit-scrollbar {
-  display: none; /* WebKit */
+  display: none;
 }
 
-/* 自定义编辑器样式 */
 :deep(.w-e-text-container) {
   background-color: #fff;
-  /* 隐藏编辑器内部滚动条 */
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -220,7 +228,6 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-/* 隐藏编辑器滚动条的所有可能容器 */
 :deep(.w-e-scroll) {
   scrollbar-width: none;
   -ms-overflow-style: none;

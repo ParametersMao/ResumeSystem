@@ -20,7 +20,7 @@
       <div class="editor-help">
         <h4>使用说明：</h4>
         <ul>
-          <li><code>.dynamic-resume-preview</code> - 整个简历预览容器</li>
+          <li><code>.resume-renderer</code> - 整个简历预览容器（新版引擎）</li>
           <li><code>.resume-content</code> - 简历内容区域</li>
           <li><code>.resume-section</code> - 单个模块容器</li>
           <li><code>.skill-tag</code> - 技能标签</li>
@@ -29,7 +29,7 @@
         
         <h4>示例：</h4>
         <div class="example-code">
-          <pre><code>.dynamic-resume-preview {
+          <pre><code>.resume-renderer {
   border: 2px solid #3498db;
   border-radius: 10px;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);

@@ -3,6 +3,10 @@
 export interface BasicProfile {
   name: string
   title: string
+  gender?: string
+  age?: string
+  yearsOfExperience?: string
+  avatar?: string
   contacts: {
     email: string
     phone: string
@@ -40,7 +44,13 @@ export interface CustomItem {
   [key: string]: any
 }
 
-export type SectionItem = ExperienceItem | EducationItem | ProjectItem | string | CustomItem
+export interface RichTextValue {
+  html: string
+  text: string
+  json?: any[]
+}
+
+export type SectionItem = ExperienceItem | EducationItem | ProjectItem | string | CustomItem | RichTextValue
 
 // 模块配置
 export interface SectionConfig {
@@ -68,6 +78,7 @@ export interface ResumeSection {
   items: SectionItem[]
   config?: SectionConfig
   style?: Record<string, any>
+  data?: Record<string, any>
 }
 
 // 完整的简历数据结构
@@ -101,19 +112,82 @@ export interface TemplateStyles {
   }
 }
 
-// 模板数据
+// 旧版模板数据（兼容保留）
 export interface TemplateData {
   templateName?: string
   styles: TemplateStyles
-  sections: {
-    [key: string]: any
-  }
+  sections: Record<string, any>
+}
+
+export type TemplateLayoutType = 'single-column' | 'two-column' | 'three-column' | 'custom' | string
+
+export interface TemplateTheme {
+  colors?: Record<string, any>
+  typography?: Record<string, any>
+  spacing?: Record<string, any>
+  borders?: Record<string, any>
+  [key: string]: any
+}
+
+export interface TemplateGlobalStyles {
+  backgroundColor?: string
+  fontFamily?: string
+  fontSize?: string
+  lineHeight?: string
+  color?: string
+  css?: string
+  elements?: Record<string, Record<string, string>>
+  [key: string]: any
+}
+
+export interface TemplateResponsiveConfig {
+  breakpoints?: Record<string, string>
+  styles?: Record<string, Record<string, Record<string, string>>>
+}
+
+export interface TemplateLayoutColumnsConfig {
+  widths?: string[]
+  gap?: string
+  leftStyle?: Record<string, string>
+  middleStyle?: Record<string, string>
+  rightStyle?: Record<string, string>
+  [key: string]: any
+}
+
+export interface TemplateLayoutConfig {
+  type: TemplateLayoutType
+  container?: Record<string, string>
+  content?: Record<string, string>
+  columns?: TemplateLayoutColumnsConfig
+  custom?: Record<string, any>
+}
+
+export interface TemplateSectionStyleConfig {
+  container?: Record<string, any>
+  title?: Record<string, any>
+  content?: Record<string, any>
+  items?: Record<string, any>
+  custom?: Record<string, Record<string, any>>
+}
+
+export type TemplateSectionStyles = Record<string, TemplateSectionStyleConfig>
+
+export interface TemplateSectionDefinition {
+  id: string
+  type: string
+  title?: string
+  visible?: boolean
+  order?: number
+  items?: any[]
+  config?: Record<string, any>
+  style?: Record<string, any>
+  data?: Record<string, any>
 }
 
 // ========== 新增：分层控制状态管理 ==========
 
 // 模块类型枚举
-export type ModuleType = 
+export type ModuleType =
   | 'basic'           // 基本信息（必需）
   | 'intention'       // 求职意向
   | 'education'       // 教育背景
@@ -171,16 +245,17 @@ export interface TemplateLayout {
 
 // 完整的模板数据结构
 export interface TemplateDataV2 {
-  templateName: string
-  templateVersion: number
-  styles: TemplateStyles
-  globalConfig?: {
-    maxWidth?: string
-    padding?: string
-    borderRadius?: string
-    boxShadow?: string
-    contentBackground?: string
-    layout?: string
-  }
-  layout: TemplateLayout[]
+  templateName?: string
+  templateType?: TemplateLayoutType
+  templateVersion?: number | string
+  description?: string
+  theme?: TemplateTheme
+  globalStyles?: TemplateGlobalStyles
+  layout?: TemplateLayoutConfig | TemplateLayout[]
+  sectionStyles?: TemplateSectionStyles
+  sections?: TemplateSectionDefinition[]
+  profile?: Record<string, any>
+  customCss?: string
+  responsive?: TemplateResponsiveConfig
+  [key: string]: any
 }

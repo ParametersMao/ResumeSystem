@@ -31,8 +31,7 @@ export async function listMyResumes(userId: number, page = 1, limit = 10) {
 }
 
 export async function exportResumePdfByHtml(html: string) {
-  // 后端导出接口：POST /resumes/export
-  const { data } = await http.post<ApiResponse<{ url: string }>>('/resumes/export', { html })
+  const { data } = await http.post<ApiResponse<{ url: string }>>('/api/resumes/export', { html })
   return data.data
 }
 

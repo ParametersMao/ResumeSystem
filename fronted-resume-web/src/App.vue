@@ -1,9 +1,9 @@
 <template>
   <router-view />
-  
 </template>
 
 <script setup lang="ts">
+// 开发工具已移除
 </script>
 
 <style>

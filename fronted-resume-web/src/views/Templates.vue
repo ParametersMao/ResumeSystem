@@ -7,6 +7,10 @@
           <h1 class="page-title">简历库</h1>
         </div>
         <div class="header-right">
+          <el-button class="upload-btn" @click="triggerTemplateUpload" :loading="isUploadingTemplate">
+            <el-icon><Upload /></el-icon>
+            上传模板校验
+          </el-button>
           <el-button type="warning" class="create-btn" @click="createProject">
             <el-icon><Plus /></el-icon>
             新建简历
@@ -28,6 +32,14 @@
           </template>
         </el-input>
       </div>
+
+      <input
+        ref="uploadInputRef"
+        type="file"
+        accept="application/json,.json,.template"
+        class="hidden-file-input"
+        @change="handleTemplateUpload"
+      />
 
       <!-- 模板网格 -->
       <div class="template-grid">
@@ -97,15 +109,14 @@
       <div class="preview-content">
         <el-tabs v-model="activeTab" class="preview-tabs">
           <el-tab-pane label="渲染效果" name="preview">
-            <div class="iframe-container">
-              <iframe
-                ref="previewIframe"
-                class="preview-iframe"
-                :srcdoc="previewHtml"
-                sandbox="allow-scripts allow-same-origin"
-                width="100%"
-                height="600"
-              ></iframe>
+            <div class="preview-renderer">
+              <NewResumePreview
+                v-if="normalizedTemplateData"
+                :resume-data="previewResumeData"
+                :template-data="normalizedTemplateData"
+                :template-type="normalizedTemplateType"
+              />
+              <el-empty v-else description="暂无可预览模板" />
             </div>
           </el-tab-pane>
           <el-tab-pane label="可编辑数据" name="data">
@@ -128,8 +139,49 @@
           </el-tab-pane>
           <el-tab-pane label="模板数据" name="template">
             <el-card class="template-data-card">
-              <pre class="template-data-content">{{ JSON.stringify(templateDataJson, null, 2) }}</pre>
+              <pre class="template-data-content">{{ JSON.stringify(normalizedTemplateData || templateDataJson, null, 2) }}</pre>
             </el-card>
+          </el-tab-pane>
+          <el-tab-pane label="校验结果" name="validation">
+            <div class="validation-panel">
+              <template v-if="templateValidation">
+                <el-result
+                  v-if="templateValidation.success"
+                  icon="success"
+                  title="校验通过"
+                  sub-title="模板结构符合规范，可正常使用。"
+                />
+                <div v-else class="issues-list">
+                  <el-alert
+                    type="error"
+                    :closable="false"
+                    title="模板存在以下格式问题："
+                    class="issues-alert"
+                  />
+                  <ul>
+                    <li v-for="(issue, idx) in templateValidation.issues" :key="idx">{{ issue }}</li>
+                  </ul>
+                </div>
+              </template>
+              <template v-else>
+                <el-empty description="尚未进行校验" />
+              </template>
+              <template v-if="templateDiagnostics && templateDiagnostics.warnings.length">
+                <div class="issues-list">
+                  <el-alert
+                    type="warning"
+                    :closable="false"
+                    title="模板兼容性提示："
+                    class="issues-alert"
+                  />
+                  <ul>
+                    <li v-for="(warning, idx) in templateDiagnostics.warnings" :key="`warn-${idx}`">
+                      {{ warning.message }}（{{ warning.path }}）
+                    </li>
+                  </ul>
+                </div>
+              </template>
+            </div>
           </el-tab-pane>
         </el-tabs>
       </div>
@@ -149,11 +201,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, View, Plus, Picture } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Search, View, Plus, Picture, Upload } from '@element-plus/icons-vue'
 import { fetchTemplates, getTemplateDetail } from '@/api/template'
-import { createResume, updateResume } from '@/api/resume'
+import { type TemplateValidationResult } from '@/utils/templateSchema'
+import { normalizeTemplateFile, normalizeTemplateData } from '@/utils/templateFile'
+import { transformProfileDataToSections } from '@/utils/dataTransform'
+import { type DiagnosticResult } from '@/utils/templateDiagnostics'
+import NewResumePreview from '@/components/resume/NewResumePreview.vue'
 
 const list = ref<any[]>([])
 const total = ref(0)
@@ -172,11 +229,9 @@ async function load() {
 
 // 预览与使用弹窗
 const previewVisible = ref(false)
-const previewHtml = ref('')
 const currentTemplateId = ref<string>('')
 const autoUseAfterConfirm = ref(false)
 const activeTab = ref('preview')
-const previewIframe = ref<HTMLIFrameElement>()
 const profileJson = ref<string>(JSON.stringify({
   basic: { name: '张三', title: '前端工程师', contacts: { email: 'zhangsan@example.com', phone: '13800138000', site: 'https://example.com' } },
   summary: '拥有3+年前端经验，熟悉 Vue3/TypeScript，关注性能与体验。',
@@ -186,11 +241,29 @@ const profileJson = ref<string>(JSON.stringify({
   projects: [ { name: '在线简历平台', role: '前端负责人', date: '2023', desc: '搭建在线编辑与导出能力。' } ]
 }, null, 2))
 const templateDataJson = ref<any>(null)
+const normalizedTemplateData = ref<any>(null)
+const templateDiagnostics = ref<DiagnosticResult | null>(null)
+const templateValidation = ref<TemplateValidationResult | null>(null)
+const uploadInputRef = ref<HTMLInputElement | null>(null)
+const isUploadingTemplate = ref(false)
+
+const previewResumeData = computed(() => {
+  const profile = safeParse(profileJson.value)
+  return transformProfileDataToSections(profile || {})
+})
+
+const normalizedTemplateType = computed(() => {
+  const layoutType = normalizedTemplateData.value?.layout?.type
+  return layoutType || normalizedTemplateData.value?.templateType || 'single-column'
+})
 
 function openPreview(templateId: string) {
   currentTemplateId.value = templateId
   autoUseAfterConfirm.value = false
   activeTab.value = 'preview'
+  templateValidation.value = null
+  templateDiagnostics.value = null
+  normalizedTemplateData.value = null
   loadTemplateAndRender()
 }
 
@@ -198,6 +271,47 @@ function useTemplate(templateId: string) {
   // 在新标签页中打开编辑器
   const editorUrl = `/resume-editor?templateId=${templateId}`
   window.open(editorUrl, '_blank')
+}
+
+function triggerTemplateUpload() {
+  uploadInputRef.value?.click()
+}
+
+async function handleTemplateUpload(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  try {
+    isUploadingTemplate.value = true
+    const text = await file.text()
+    const result = normalizeTemplateFile(text)
+    templateDataJson.value = result.raw
+    normalizedTemplateData.value = result.normalized
+    templateValidation.value = result.validation
+    templateDiagnostics.value = result.diagnostics
+
+    if (templateValidation.value?.success) {
+      ElMessage.success('模板校验通过，可以预览并使用该模板')
+    } else {
+      ElMessage.warning('模板结构存在问题，请检查校验结果')
+    }
+    if (result.format === 'old') {
+      ElMessage.info('已检测到旧格式模板，系统已自动转换为新格式进行预览')
+    }
+
+    previewVisible.value = true
+    currentTemplateId.value = ''
+    activeTab.value = templateValidation.value?.success ? 'preview' : 'validation'
+  } catch (error) {
+    console.error('本地模板解析失败:', error)
+    ElMessage.error('上传的模板文件解析失败，请确认 JSON 格式')
+  } finally {
+    isUploadingTemplate.value = false
+    if (target) {
+      target.value = ''
+    }
+  }
 }
 
 async function loadTemplateAndRender() {
@@ -218,247 +332,27 @@ async function loadTemplateAndRender() {
     console.log('用户端解析后的模板数据:', templateDataObj) // 调试日志
     console.log('用户端模板颜色配置:', templateDataObj?.styles?.colors) // 调试日志
     
-    templateDataJson.value = templateDataObj
-    
-    // 生成预览HTML
-    previewHtml.value = generatePreviewHtml(templateDataObj, safeParse(profileJson.value))
+    const normalized = normalizeTemplateData(templateDataObj)
+    templateDataJson.value = normalized.raw
+    normalizedTemplateData.value = normalized.normalized
+    templateDiagnostics.value = normalized.diagnostics
+    templateValidation.value = normalized.validation
+    if (templateValidation.value && !templateValidation.value.success) {
+      ElMessage.warning('模板校验未通过，已列出问题，仍可预览。')
+    }
+
     previewVisible.value = true
     
   } catch (error) {
     console.error('加载模板详情失败:', error)
     // 生成错误预览
-    previewHtml.value = generateErrorPreview(error)
+    templateDataJson.value = null
+    normalizedTemplateData.value = null
     previewVisible.value = true
   }
 }
 
-function generateErrorPreview(error: any) {
-  return `
-    <div style="padding: 40px; text-align: center; background-color: #ffffff; color: #333; font-family: 'Open Sans', sans-serif;">
-      <h2 style="color: #e74c3c; margin-bottom: 20px; font-size: 24px;">模板预览失败</h2>
-      <p style="margin-bottom: 20px; color: #666; font-size: 16px;">无法加载模板数据，请稍后重试或联系管理员。</p>
-      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: left; font-family: 'Consolas', monospace; font-size: 12px; color: #666; border: 1px solid #e9ecef;">
-        <strong>错误信息:</strong> ${error.message || '未知错误'}
-      </div>
-    </div>
-  `
-}
-
-watch(profileJson, (v) => {
-  try {
-    if (!templateDataJson.value) return
-    const p = JSON.parse(v)
-    previewHtml.value = generatePreviewHtml(templateDataJson.value, p)
-  } catch {}
-})
-
 function safeParse(v: string) { try { return JSON.parse(v) } catch { return {} } }
-
-function generatePreviewHtml(templateData: any, profile: any) {
-  console.log('用户端 generatePreviewHtml 接收到的 templateData:', templateData) // 调试日志
-  
-  const styles = templateData?.styles || {}
-  const sections = templateData?.sections || {}
-  
-  // 正确处理颜色配置，确保使用真实的模板数据
-  const defaultColors = { primary: '#3498db', secondary: '#f0f8ff', text: '#2c3e50', background: '#ffffff' }
-  const colors = {
-    primary: styles.colors?.primary || defaultColors.primary,
-    secondary: styles.colors?.secondary || defaultColors.secondary, 
-    text: styles.colors?.text || defaultColors.text,
-    background: styles.colors?.background || defaultColors.background,
-    accent: styles.colors?.accent || styles.colors?.primary || defaultColors.primary
-  }
-  
-  // 正确处理字体配置
-  const defaultFonts = { heading: 'Montserrat, sans-serif', body: 'Open Sans, sans-serif' }
-  const fonts = {
-    heading: styles.fonts?.heading || defaultFonts.heading,
-    body: styles.fonts?.body || defaultFonts.body
-  }
-  
-  // 正确处理间距配置
-  const defaultSpacing = { sectionMargin: '25px', elementMargin: '15px' }
-  const spacing = {
-    sectionMargin: styles.spacing?.sectionMargin || defaultSpacing.sectionMargin,
-    elementMargin: styles.spacing?.elementMargin || defaultSpacing.elementMargin
-  }
-  
-  console.log('用户端提取出的颜色配置:', colors) // 调试日志
-  console.log('用户端提取出的字体配置:', fonts) // 调试日志
-
-  const basic = profile.basic || {}
-  const contacts = basic.contacts || {}
-  const summary = profile.summary || ''
-  const exps = Array.isArray(profile.experience) ? profile.experience : []
-  const edus = Array.isArray(profile.education) ? profile.education : []
-  const skills = Array.isArray(profile.skills) ? profile.skills : []
-  const projects = Array.isArray(profile.projects) ? profile.projects : []
-
-  // 获取各部分配置
-  const headerConfig = sections.header || {}
-  const summaryConfig = sections.summary || {}
-  const skillsConfig = sections.skills || {}
-  const experienceConfig = sections.experience || {}
-  const educationConfig = sections.education || {}
-  const projectsConfig = sections.projects || {}
-
-  // 生成头部样式
-  const headerNameStyle = headerConfig.elements?.[0] ? 
-    `font-size: ${headerConfig.elements[0].fontSize || '32px'}; 
-     font-weight: ${headerConfig.elements[0].fontWeight || '700'}; 
-     color: ${headerConfig.elements[0].color || colors.primary};` :
-    `font-size: 32px; font-weight: 700; color: ${colors.primary};`
-
-  const headerTitleStyle = headerConfig.elements?.[1] ? 
-    `font-size: ${headerConfig.elements[1].fontSize || '18px'}; 
-     font-weight: ${headerConfig.elements[1].fontWeight || '400'}; 
-     color: ${headerConfig.elements[1].color || colors.text};` :
-    `font-size: 18px; font-weight: 400; color: ${colors.text};`
-
-  // 生成标题样式函数
-  const getSectionTitleStyle = (sectionConfig: any) => {
-    const titleStyle = sectionConfig.titleStyle || {}
-    return `font-size: ${titleStyle.fontSize || '22px'}; 
-            font-weight: ${titleStyle.fontWeight || '600'}; 
-            color: ${titleStyle.color || colors.primary};
-            border-bottom: ${titleStyle.borderBottom || `2px solid ${colors.primary}`};
-            padding-bottom: 6px;
-            margin-bottom: ${spacing.elementMargin || '15px'};`
-  }
-
-  return `
-  <div style="padding: 20px; font-family: ${fonts.body}; color: ${colors.text}; background-color: ${colors.background};">
-    <div style="background: ${colors.background}; padding: 30px; border-radius: 6px; max-width: 860px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-      
-      <!-- 头部信息 -->
-      ${headerConfig.enabled !== false ? `
-      <div style="text-align: center; margin-bottom: ${spacing.sectionMargin || '25px'};">
-        <div style="${headerNameStyle}">${basic.name || '张三'}</div>
-        <div style="${headerTitleStyle}">${basic.title || '前端工程师'}</div>
-        <div style="margin-top: 10px; font-size: 14px; color: ${colors.text}; opacity: 0.8;">
-          ${contacts.email || 'zhangsan@example.com'} · ${contacts.phone || '13800138000'} · ${contacts.site || 'https://example.com'}
-        </div>
-      </div>` : ''}
-
-      <!-- 个人概述 -->
-      ${summaryConfig.enabled !== false && summary ? `
-      <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-        <div style="${getSectionTitleStyle(summaryConfig)}">${summaryConfig.title || '个人概述'}</div>
-        <div style="font-size: ${summaryConfig.contentStyle?.fontSize || '15px'}; 
-                    line-height: ${summaryConfig.contentStyle?.lineHeight || '1.6'}; 
-                    color: ${colors.text};">
-          ${summary}
-        </div>
-      </div>` : ''}
-
-      <!-- 专业技能 -->
-      ${skillsConfig.enabled !== false && skills.length ? `
-      <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-        <div style="${getSectionTitleStyle(skillsConfig)}">${skillsConfig.title || '专业技能'}</div>
-        <div>
-          ${skills.map((s: string) => `
-            <span style="display: inline-block; 
-                         background: ${skillsConfig.itemStyle?.backgroundColor || colors.secondary}; 
-                         color: ${skillsConfig.itemStyle?.color || colors.text}; 
-                         padding: ${skillsConfig.itemStyle?.padding || '8px 12px'}; 
-                         margin: ${skillsConfig.itemStyle?.margin || '6px'}; 
-                         border-radius: ${skillsConfig.itemStyle?.borderRadius || '20px'}; 
-                         font-size: ${skillsConfig.itemStyle?.fontSize || '14px'};">
-              ${s}
-            </span>
-          `).join('')}
-        </div>
-      </div>` : ''}
-
-      <!-- 工作经验 -->
-      ${experienceConfig.enabled !== false && exps.length ? `
-      <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-        <div style="${getSectionTitleStyle(experienceConfig)}">${experienceConfig.title || '工作经验'}</div>
-        ${exps.map((e: any) => `
-          <div style="margin: ${spacing.elementMargin || '15px'} 0;">
-            <div style="font-size: ${experienceConfig.itemStyle?.company?.fontSize || '18px'}; 
-                        font-weight: ${experienceConfig.itemStyle?.company?.fontWeight || '600'}; 
-                        color: ${experienceConfig.itemStyle?.company?.color || colors.text};">
-              ${e.company || '示例公司A'}
-            </div>
-            <div style="font-size: ${experienceConfig.itemStyle?.position?.fontSize || '16px'}; 
-                        font-weight: ${experienceConfig.itemStyle?.position?.fontWeight || '500'}; 
-                        color: ${experienceConfig.itemStyle?.position?.color || colors.primary};">
-              ${e.role || '前端工程师'}
-            </div>
-            <div style="font-size: ${experienceConfig.itemStyle?.date?.fontSize || '14px'}; 
-                        color: ${experienceConfig.itemStyle?.date?.color || colors.text}; 
-                        opacity: 0.7; margin: 5px 0;">
-              ${e.start || '2022-01'} - ${e.end || '2023-12'}
-            </div>
-            <div style="font-size: ${experienceConfig.itemStyle?.description?.fontSize || '14px'}; 
-                        line-height: ${experienceConfig.itemStyle?.description?.lineHeight || '1.5'}; 
-                        color: ${colors.text};">
-              ${e.desc || '负责核心业务前端研发与性能优化。'}
-            </div>
-          </div>
-        `).join('')}
-      </div>` : ''}
-
-      <!-- 项目经历 -->
-      ${projectsConfig.enabled !== false && projects.length ? `
-      <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-        <div style="${getSectionTitleStyle(projectsConfig)}">${projectsConfig.title || '项目经历'}</div>
-        ${projects.map((p: any) => `
-          <div style="margin: ${spacing.elementMargin || '15px'} 0;">
-            <div style="font-size: ${projectsConfig.itemStyle?.name?.fontSize || '18px'}; 
-                        font-weight: ${projectsConfig.itemStyle?.name?.fontWeight || '600'}; 
-                        color: ${projectsConfig.itemStyle?.name?.color || colors.text};">
-              ${p.name || '在线简历平台'}
-            </div>
-            <div style="font-size: ${projectsConfig.itemStyle?.role?.fontSize || '16px'}; 
-                        font-weight: ${projectsConfig.itemStyle?.role?.fontWeight || '500'}; 
-                        color: ${projectsConfig.itemStyle?.role?.color || colors.primary};">
-              ${p.role || '前端负责人'}
-            </div>
-            <div style="font-size: ${projectsConfig.itemStyle?.date?.fontSize || '14px'}; 
-                        color: ${projectsConfig.itemStyle?.date?.color || colors.text}; 
-                        opacity: 0.7; margin: 5px 0;">
-              ${p.date || '2023'}
-            </div>
-            <div style="font-size: ${projectsConfig.itemStyle?.description?.fontSize || '14px'}; 
-                        line-height: ${projectsConfig.itemStyle?.description?.lineHeight || '1.5'}; 
-                        color: ${colors.text};">
-              ${p.desc || '搭建在线编辑与导出能力。'}
-            </div>
-          </div>
-        `).join('')}
-      </div>` : ''}
-
-      <!-- 教育背景 -->
-      ${educationConfig.enabled !== false && edus.length ? `
-      <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-        <div style="${getSectionTitleStyle(educationConfig)}">${educationConfig.title || '教育背景'}</div>
-        ${edus.map((ed: any) => `
-          <div style="margin: ${spacing.elementMargin || '15px'} 0;">
-            <div style="font-size: ${educationConfig.itemStyle?.institution?.fontSize || '18px'}; 
-                        font-weight: ${educationConfig.itemStyle?.institution?.fontWeight || '600'}; 
-                        color: ${educationConfig.itemStyle?.institution?.color || colors.text};">
-              ${ed.school || '北京大学'}
-            </div>
-            <div style="font-size: ${educationConfig.itemStyle?.degree?.fontSize || '16px'}; 
-                        font-weight: ${educationConfig.itemStyle?.degree?.fontWeight || '500'}; 
-                        color: ${educationConfig.itemStyle?.degree?.color || colors.primary};">
-              ${ed.degree || '计算机科学 本科'}
-            </div>
-            <div style="font-size: ${educationConfig.itemStyle?.date?.fontSize || '14px'}; 
-                        color: ${educationConfig.itemStyle?.date?.color || colors.text}; 
-                        opacity: 0.7; margin: 5px 0;">
-              ${ed.start || '2016-09'} - ${ed.end || '2020-06'}
-            </div>
-          </div>
-        `).join('')}
-      </div>` : ''}
-
-    </div>
-  </div>`
-}
 
 async function confirmUse() {
   if (!currentTemplateId.value) return
@@ -534,6 +428,19 @@ onMounted(load)
   border-radius: 8px;
   background: #ff6b35;
   border-color: #ff6b35;
+}
+
+.upload-btn {
+  height: 40px;
+}
+
+.header-right {
+  display: flex;
+  gap: 12px;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 .create-btn:hover {
@@ -651,16 +558,13 @@ onMounted(load)
   overflow: auto;
 }
 
-.iframe-container {
+.preview-renderer {
   height: 100%;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  overflow: hidden;
-}
-
-.preview-iframe {
-  border: none;
-  border-radius: 8px;
+  overflow: auto;
+  background: #f9fafb;
+  padding: 16px;
 }
 
 .data-editor {
@@ -691,6 +595,27 @@ onMounted(load)
   margin-top: 12px;
   color: #666;
   font-size: 12px;
+}
+
+.validation-panel {
+  padding: 16px;
+  min-height: 320px;
+}
+
+.issues-list {
+  margin-top: 16px;
+}
+
+.issues-list ul {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  color: #c45656;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.issues-alert {
+  margin-bottom: 12px;
 }
 
 .template-data-card {

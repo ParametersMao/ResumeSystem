@@ -15,6 +15,7 @@ import { computed, defineProps, onMounted } from 'vue'
 import CenterLayout from './personal/CenterLayout.vue'
 import TableLayout from './personal/TableLayout.vue'
 import CardLayout from './personal/CardLayout.vue'
+import FlexibleLayout from './personal/FlexibleLayout.vue'
 
 interface Props {
   data: any
@@ -37,7 +38,8 @@ const layoutComponent = computed(() => {
   const layoutMap = {
     'center': CenterLayout,
     'table': TableLayout, 
-    'card': CardLayout
+    'card': CardLayout,
+    'flexible': FlexibleLayout
   }
   
   return layoutMap[layoutType] || CenterLayout

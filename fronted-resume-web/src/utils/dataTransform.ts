@@ -1,5 +1,6 @@
 import type { ResumeData, ResumeSection, ModuleType } from '@/types/resume'
 import { DEFAULT_SECTION_TITLES } from '@/config/sectionTypes'
+import { createEmptyRichText, normalizeSectionRichText } from '@/utils/richText'
 
 /**
  * 将旧的 profileData 格式转换为新的 sections 格式
@@ -9,14 +10,14 @@ export function transformProfileDataToSections(profileData: any): ResumeData {
 
   // 转换工作经验
   if (profileData.experience && profileData.experience.length > 0) {
-    sections.push({
+    sections.push(normalizeSectionRichText({
       id: 'experience-' + Date.now(),
       type: 'experience',
       title: DEFAULT_SECTION_TITLES.experience,
       visible: true,
       order: 1,
       items: profileData.experience
-    })
+    }))
   }
 
   // 转换技能
@@ -33,14 +34,14 @@ export function transformProfileDataToSections(profileData: any): ResumeData {
 
   // 转换项目经历
   if (profileData.projects && profileData.projects.length > 0) {
-    sections.push({
+    sections.push(normalizeSectionRichText({
       id: 'projects-' + Date.now(),
       type: 'projects',
       title: DEFAULT_SECTION_TITLES.projects,
       visible: true,
       order: 3,
       items: profileData.projects
-    })
+    }))
   }
 
   // 转换教育背景
@@ -128,16 +129,18 @@ export function createNewSection(
   // 为不同类型设置默认项目
   switch (type) {
     case 'experience':
-      return {
+      return normalizeSectionRichText({
         ...baseSection,
         items: [{
           company: '',
           role: '',
           start: '',
           end: '',
-          desc: ''
+          duration: { start: '', end: '' },
+          desc: createEmptyRichText(),
+          icon: ''
         }]
-      }
+      })
     case 'education':
       return {
         ...baseSection,
@@ -149,15 +152,17 @@ export function createNewSection(
         }]
       }
     case 'projects':
-      return {
+      return normalizeSectionRichText({
         ...baseSection,
         items: [{
           name: '',
           role: '',
           date: '',
-          desc: ''
+          duration: { start: '', end: '' },
+          desc: createEmptyRichText(),
+          icon: ''
         }]
-      }
+      })
     case 'skills':
       return {
         ...baseSection,

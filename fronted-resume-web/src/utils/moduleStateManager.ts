@@ -6,6 +6,7 @@ import type {
   TemplateDataV2,
   ModuleType 
 } from '@/types/resume'
+import { getCanonicalSectionType } from '@/utils/sectionType'
 
 // 默认模块配置
 const DEFAULT_MODULES: ModuleState[] = [
@@ -178,9 +179,11 @@ export class ModuleStateManager {
     }
 
     // 根据模板数据初始化状态
+    const layout = this.templateData.value!.layout || []
+
     this.moduleStates.value = DEFAULT_MODULES.map(defaultModule => {
-      const templateModule = this.templateData.value!.layout.find(
-        m => m.type === defaultModule.type
+      const templateModule = layout.find(
+        m => getCanonicalSectionType(m.type) === defaultModule.type
       )
 
       if (templateModule) {

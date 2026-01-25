@@ -1,0 +1,283 @@
+{
+  "templateName": "时间轴双列简历模板（优化版）",
+  "templateType": "two-column",
+  "version": "2.0.0",
+  "description": "基于新版渲染引擎的时间轴双列简历模板",
+  "theme": {
+    "colors": {
+      "primary": "#1E88E5",
+      "secondary": "#4CAF50",
+      "tertiary": "#FFC107",
+      "text": {
+        "primary": "#333333",
+        "secondary": "#666666",
+        "muted": "#999999"
+      },
+      "background": "#ffffff",
+      "border": "#eeeeee"
+    },
+    "typography": {
+      "fontFamily": {
+        "body": "'Microsoft YaHei', Arial, sans-serif",
+        "heading": "'Microsoft YaHei', Arial, sans-serif"
+      },
+      "fontSize": {
+        "base": "14px",
+        "large": "16px",
+        "h1": "24px",
+        "h2": "20px",
+        "h3": "18px"
+      },
+      "fontWeight": {
+        "normal": "400",
+        "medium": "500",
+        "bold": "700"
+      },
+      "lineHeight": {
+        "normal": "1.6",
+        "tight": "1.2",
+        "loose": "1.8"
+      }
+    },
+    "spacing": {
+      "xs": "4px",
+      "sm": "8px",
+      "md": "16px",
+      "lg": "24px",
+      "xl": "32px"
+    }
+  },
+  "globalStyles": {
+    "backgroundColor": "#ffffff",
+    "fontFamily": "var(--typography-fontFamily-body)",
+    "fontSize": "var(--typography-fontSize-base)",
+    "lineHeight": "var(--typography-lineHeight-normal)",
+    "color": "var(--colors-text-primary)"
+  },
+  "layout": {
+    "type": "two-column",
+    "container": {
+      "maxWidth": "800px",
+      "margin": "0 auto",
+      "padding": "20px",
+      "boxShadow": "0 0 10px rgba(0,0,0,0.1)",
+      "backgroundColor": "var(--colors-background)",
+      "borderRadius": "2px"
+    },
+    "content": {
+      "padding": "0",
+      "backgroundColor": "var(--colors-background)"
+    },
+    "columns": {
+      "widths": ["30%", "70%"],
+      "gap": "0",
+      "leftStyle": {
+        "padding": "20px 0 20px 20px",
+        "position": "relative",
+        "backgroundColor": "#f8f9fa"
+      },
+      "rightStyle": {
+        "padding": "20px",
+        "position": "relative"
+      }
+    }
+  },
+  "sectionStyles": {
+    "basic": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0",
+        "textAlign": "center"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h1)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "15px",
+        "borderBottom": "none"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "education": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0 0 0 30px",
+        "position": "relative"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "20px",
+        "backgroundColor": "var(--colors-background)",
+        "padding": "10px 15px",
+        "borderRadius": "20px",
+        "display": "inline-block",
+        "border": "2px solid var(--colors-primary)"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)",
+        "position": "relative"
+      },
+      "items": {
+        "marginBottom": "15px",
+        "position": "relative",
+        "paddingLeft": "20px"
+      }
+    },
+    "experience": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0 0 0 30px",
+        "position": "relative"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "20px",
+        "backgroundColor": "var(--colors-background)",
+        "padding": "10px 15px",
+        "borderRadius": "20px",
+        "display": "inline-block",
+        "border": "2px solid var(--colors-primary)"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)",
+        "position": "relative"
+      },
+      "items": {
+        "marginBottom": "15px",
+        "position": "relative",
+        "paddingLeft": "0"
+      }
+    },
+    "skills": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0 0 0 30px",
+        "position": "relative"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "20px",
+        "backgroundColor": "var(--colors-background)",
+        "padding": "10px 15px",
+        "borderRadius": "20px",
+        "display": "inline-block",
+        "border": "2px solid var(--colors-primary)"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "projects": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0 0 0 30px",
+        "position": "relative"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "20px",
+        "backgroundColor": "var(--colors-background)",
+        "padding": "10px 15px",
+        "borderRadius": "20px",
+        "display": "inline-block",
+        "border": "2px solid var(--colors-primary)"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)",
+        "position": "relative"
+      },
+      "items": {
+        "marginBottom": "15px",
+        "position": "relative",
+        "paddingLeft": "0"
+      }
+    },
+    "awards": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0 0 0 30px",
+        "position": "relative"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "20px",
+        "backgroundColor": "var(--colors-background)",
+        "padding": "10px 15px",
+        "borderRadius": "20px",
+        "display": "inline-block",
+        "border": "2px solid var(--colors-primary)"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "summary": {
+      "container": {
+        "marginBottom": "30px",
+        "padding": "0 0 0 30px",
+        "position": "relative"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-text-primary)",
+        "marginBottom": "20px",
+        "backgroundColor": "var(--colors-background)",
+        "padding": "10px 15px",
+        "borderRadius": "20px",
+        "display": "inline-block",
+        "border": "2px solid var(--colors-primary)"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    }
+  },
+  "responsive": {
+    "breakpoints": {
+      "mobile": "0px",
+      "tablet": "768px",
+      "desktop": "1024px",
+      "wide": "1280px"
+    },
+    "styles": {
+      "mobile": {
+        ".resume-renderer": {
+          "padding": "10px"
+        },
+        ".resume-columns": {
+          "gridTemplateColumns": "1fr",
+          "gap": "20px"
+        },
+        ".column-left::before, .column-right::before": {
+          "display": "none"
+        }
+      },
+      "tablet": {
+        ".resume-renderer": {
+          "padding": "15px"
+        }
+      }
+    }
+  },
+  "customCss": "/* 全局样式 */\n.resume-renderer {\n  font-family: var(--typography-fontFamily-body);\n  color: var(--colors-text-primary);\n  line-height: var(--typography-lineHeight-normal);\n  background-color: var(--colors-background);\n}\n\n/* 基本信息样式 */\n.section-basic,\n.section-basic-wrapper {\n  text-align: center;\n}\n\n.section-basic .section-content,\n.section-basic-wrapper .section-content {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n}\n\n.section-basic img,\n.section-basic-wrapper img {\n  width: 100px;\n  height: 100px;\n  border-radius: 50%;\n  object-fit: cover;\n  border: 3px solid var(--colors-primary);\n  margin-bottom: 15px;\n}\n\n/* 时间轴样式 */\n.column-left::before {\n  content: '';\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 40px;\n  width: 2px;\n  background-color: var(--colors-primary);\n  z-index: 1;\n}\n\n.column-right::before {\n  content: '';\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 30px;\n  width: 2px;\n  background-color: var(--colors-primary);\n  z-index: 1;\n}\n\n/* 时间轴节点 */\n.section-education .section-title::before,\n.section-skills .section-title::before,\n.section-awards .section-title::before,\n.section-summary .section-title::before,\n.section-experience .section-title::before,\n.section-projects .section-title::before,\n.section-education-wrapper .section-title::before,\n.section-skills-wrapper .section-title::before,\n.section-awards-wrapper .section-title::before,\n.section-summary-wrapper .section-title::before,\n.section-experience-wrapper .section-title::before,\n.section-projects-wrapper .section-title::before {\n  content: '';\n  position: absolute;\n  left: -30px;\n  top: 50%;\n  transform: translateY(-50%);\n  width: 40px;\n  height: 40px;\n  border-radius: 50%;\n  background-color: var(--colors-primary);\n  z-index: 2;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: white;\n  font-weight: var(--typography-fontWeight-bold);\n}\n\n/* 经验项样式 */\n.section-experience-item,\n.section-projects-item {\n  margin-bottom: 20px;\n  padding-bottom: 20px;\n  border-bottom: 1px solid var(--colors-border);\n}\n\n.section-experience-item:last-child,\n.section-projects-item:last-child {\n  border-bottom: none;\n}\n\n/* 时间和公司样式 */\n.experience-header,\n.project-header {\n  display: flex;\n  justify-content: space-between;\n  margin-bottom: 10px;\n  font-weight: var(--typography-fontWeight-bold);\n}\n\n.experience-time,\n.project-time {\n  color: var(--colors-primary);\n}\n\n.experience-company,\n.project-company {\n  color: var(--colors-text-primary);\n}\n\n/* 职位样式 */\n.experience-position,\n.project-role {\n  margin-bottom: 10px;\n  color: var(--colors-text-secondary);\n  font-style: italic;\n}\n\n/* 描述列表样式 */\n.experience-description,\n.project-description {\n  margin-left: 20px;\n  list-style-type: disc;\n}\n\n.experience-description li,\n.project-description li {\n  margin-bottom: 5px;\n}\n\n/* 技能样式 */\n.section-skills-content,\n.section-skills-wrapper .section-content {\n  display: flex;\n  flex-direction: column;\n}\n\n.skill-group {\n  margin-bottom: 15px;\n}\n\n.skill-name {\n  font-weight: var(--typography-fontWeight-bold);\n  margin-bottom: 5px;\n}\n\n.skill-level {\n  height: 8px;\n  background-color: var(--colors-border);\n  border-radius: 4px;\n  overflow: hidden;\n}\n\n.skill-level-bar {\n  height: 100%;\n  background-color: var(--colors-primary);\n}\n\n/* 教育背景样式 */\n.education-item {\n  margin-bottom: 20px;\n}\n\n.education-school {\n  font-weight: var(--typography-fontWeight-bold);\n  color: var(--colors-text-primary);\n}\n\n.education-degree {\n  color: var(--colors-text-secondary);\n  font-style: italic;\n  margin-bottom: 5px;\n}\n\n.education-time {\n  color: var(--colors-primary);\n  margin-bottom: 5px;\n}\n\n/* 联系信息样式 */\n.contact-info {\n  display: grid;\n  grid-template-columns: repeat(2, 1fr);\n  gap: 10px;\n  margin-top: 15px;\n}\n\n.contact-item {\n  display: flex;\n  align-items: center;\n}\n\n.contact-icon {\n  width: 20px;\n  height: 20px;\n  margin-right: 10px;\n  color: var(--colors-primary);\n}\n\n/* 图标样式 */\n.icon {\n  display: inline-block;\n  width: 24px;\n  height: 24px;\n  background-color: var(--colors-primary);\n  color: white;\n  border-radius: 50%;\n  text-align: center;\n  line-height: 24px;\n  margin-right: 8px;\n}\n\n/* 确保基本模块标题不显示时间轴节点 */\n.section-basic .section-title::before,\n.section-basic-wrapper .section-title::before {\n  display: none !important;\n}"
+}

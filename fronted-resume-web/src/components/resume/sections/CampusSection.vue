@@ -6,8 +6,11 @@
     <div class="list" :style="listStyle">
       <div v-for="(item, idx) in (data?.items || [])" :key="idx" class="item" :style="itemStyle">
         <div class="header" :style="headerStyle">
+          <div class="icon-wrapper" v-if="item.icon">
+            {{ sanitizeIcon(item.icon) }}
+          </div>
           <div class="org" :style="orgStyle">{{ item.org || '组织/社团/比赛' }}</div>
-          <div class="date" :style="dateStyle">{{ (item.duration && item.duration.start) || '' }} - {{ (item.duration && item.duration.end) || '' }}</div>
+          <div class="date" :style="dateStyle">{{ formatDuration(item) }}</div>
         </div>
         <div class="role" :style="roleStyle">{{ item.role || '' }}</div>
         <div v-if="item.desc" class="desc" :style="descStyle">
@@ -20,6 +23,7 @@
 
 <script setup lang="ts">
 import { computed, defineProps } from 'vue'
+import { normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   data: any
@@ -29,20 +33,21 @@ interface Props {
 
 const props = defineProps<Props>()
 
-// 渲染富文本描述（兼容 { html, json, text } / Quill ops / string）
-function renderDescription(desc: any): string {
-  if (typeof desc === 'string') return desc
-  if (desc && typeof desc === 'object') {
-    if (desc.html) return desc.html
-    if (Array.isArray(desc.json)) {
-      try {
-        return desc.json.map((n: any) => (typeof n === 'string' ? n : (n.children || []).map((c: any) => (typeof c === 'string' ? c : '')).join(''))).join('')
-      } catch {
-        return ''
-      }
-    }
-    if (Array.isArray(desc.ops)) return desc.ops.map((op: any) => op.insert).join('')
-  }
+const renderDescription = (desc: any): string => normalizeRichTextValue(desc).html
+
+const sanitizeIcon = (icon: any) => {
+  if (!icon) return ''
+  const value = typeof icon === 'string' ? icon : icon?.text || ''
+  return value?.slice(0, 2) || ''
+}
+
+const formatDuration = (item: any) => {
+  const duration = item?.duration || {}
+  const start = duration.start ?? item.start ?? ''
+  const end = duration.end ?? item.end ?? ''
+  if (start && end) return `${start} - ${end}`
+  if (start) return start
+  if (end) return end
   return ''
 }
 
@@ -67,9 +72,10 @@ const itemStyle = computed(() => ({
 }))
 
 const headerStyle = computed(() => ({
-  display: 'flex',
-  justifyContent: 'space-between',
+  display: 'grid',
+  gridTemplateColumns: 'auto 1fr auto',
   alignItems: 'center',
+  gap: '8px',
   marginBottom: '6px'
 }))
 
@@ -97,4 +103,17 @@ const descStyle = computed(() => ({
 }))
 </script>
 
+<style scoped>
+.icon-wrapper {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(64, 158, 255, 0.12);
+  color: #2573d5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+</style>
 

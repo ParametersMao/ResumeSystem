@@ -2,12 +2,14 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/store/user'
 
 const Login = () => import('@/views/Login.vue')
+const Home = () => import('@/views/Home.vue')
 const Templates = () => import('@/views/Templates.vue')
 const Editor = () => import('@/views/Editor.vue')
 // const ResumeEditor = () => import('@/views/ResumeEditor.vue')
 const ResumeEditor = () => import('@/views/ResumeEditorNew.vue')
 const Preview = () => import('@/views/Preview.vue')
 const Resumes = () => import('@/views/Resumes.vue')
+const Contact = () => import('@/views/Contact.vue')
 const AppLayout = () => import('@/layouts/AppLayout.vue')
 
 const routes: RouteRecordRaw[] = [
@@ -17,12 +19,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: AppLayout,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: false },
     children: [
-      { path: '', redirect: '/resumes' },
-      { path: 'home', redirect: '/resumes' },
+      { path: '', redirect: '/home' },
+      { path: 'home', component: Home, meta: { requiresAuth: false } },
       { path: 'resumes', component: Resumes, meta: { requiresAuth: true } },
       { path: 'templates', component: Templates, meta: { requiresAuth: false } },
+      { path: 'contact', component: Contact, meta: { requiresAuth: false } },
       { path: 'positions', component: Resumes, meta: { requiresAuth: true } },
       { path: 'mock', component: Resumes, meta: { requiresAuth: true } },
       { path: 'account', component: Resumes, meta: { requiresAuth: true } },

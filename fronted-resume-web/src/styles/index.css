@@ -1,13 +1,19 @@
 :root {
-  --theme-color: #2e6cff;
-  --primary-orange: #ff6b35;
+  --theme-color: #2563eb;
+  --primary-orange: #f97316;
   --sidebar-bg: #ffffff;
-  --content-bg: #f7f8fa;
+  --content-bg: #f5f7fb;
   --card-bg: #ffffff;
-  --border-color: #e5e7eb;
-  --text-primary: #333333;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --border-color: #e6eaf2;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9aa3b2;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --radius-md: 10px;
+  
+  /* Element Plus 相关变量保持不变 */
+  --el-color-primary: var(--theme-color);
 }
 
 * { 
@@ -46,17 +52,18 @@ body::-webkit-scrollbar {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--sidebar-bg);
 }
 
-.btn { cursor: pointer; border: 1px solid #ddd; padding: 6px 12px; border-radius: 6px; background: #fff; }
+.btn { cursor: pointer; border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 6px; background: #fff; }
 .btn.primary { background: var(--theme-color); color: #fff; border-color: var(--theme-color); }
 
 .editor-layout { display: grid; grid-template-columns: 280px 1fr 320px; height: calc(100vh - 56px); }
-.panel { border-right: 1px solid #eee; overflow: auto; }
-.panel.right { border-left: 1px solid #eee; border-right: none; }
-.canvas { background: #f7f8fa; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
-.page { width: 794px; /* A4 96DPI approx */ background: #fff; min-height: 1123px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 24px 36px; }
+.panel { border-right: 1px solid var(--border-color); overflow: auto; background: var(--sidebar-bg); }
+.panel.right { border-left: 1px solid var(--border-color); border-right: none; }
+.canvas { background: var(--content-bg); overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
+.page { width: 794px; /* A4 96DPI approx */ background: #fff; min-height: 1123px; box-shadow: var(--shadow-md); padding: 24px 36px; border-radius: var(--radius-md); }
 
 @media print {
   .topbar, .panel.right, .panel.left { display: none; }

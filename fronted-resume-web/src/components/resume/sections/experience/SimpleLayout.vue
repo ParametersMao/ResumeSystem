@@ -14,17 +14,21 @@
         :style="itemStyle"
       >
         <div class="item-header" :style="headerStyle">
+        <div class="icon-wrapper" v-if="item.icon">
+          <img v-if="isIconUrl(item.icon)" :src="normalizeIconUrl(item.icon)" alt="" />
+          <span v-else>{{ sanitizeIcon(item.icon) }}</span>
+        </div>
           <div class="company" :style="companyStyle">
             {{ item.company || '' }}
           </div>
           <div class="date" :style="dateStyle">
-            {{ (item.duration && item.duration.start) || '' }} - {{ (item.duration && item.duration.end) || '' }}
+            {{ formatDuration(item) }}
           </div>
         </div>
         <div class="position" :style="positionStyle">
           {{ item.role || '' }}
         </div>
-        <div v-if="item.desc" class="description" :style="descriptionStyle">
+        <div v-if="hasContent(item.desc)" class="description" :style="descriptionStyle">
           <div v-html="renderDescription(item.desc)"></div>
         </div>
       </div>
@@ -34,6 +38,7 @@
 
 <script setup lang="ts">
 import { computed, defineProps } from 'vue'
+import { normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   data: any
@@ -43,20 +48,46 @@ interface Props {
 
 const props = defineProps<Props>()
 
+// 检查是否有实际内容
+const hasContent = (desc: any): boolean => {
+  if (!desc) return false
+  const normalized = normalizeRichTextValue(desc)
+  return normalized.html.trim().length > 0 || normalized.text.trim().length > 0
+}
+
 // 渲染富文本描述
-const renderDescription = (desc: any) => {
-  if (typeof desc === 'string') return desc
-  if (desc && typeof desc === 'object') {
-    if (desc.html) return desc.html
-    if (Array.isArray(desc.json)) {
-      try {
-        return desc.json.map((n: any) => (typeof n === 'string' ? n : (n.children || []).map((c: any) => (typeof c === 'string' ? c : '')).join(''))).join('')
-      } catch {
-        return ''
-      }
-    }
-    if (desc.ops) return desc.ops.map((op: any) => op.insert).join('')
-  }
+const renderDescription = (desc: any) => normalizeRichTextValue(desc).html
+
+const sanitizeIcon = (icon: any) => {
+  if (!icon) return ''
+  const value = typeof icon === 'string' ? icon : icon?.text || icon?.value || ''
+  return value?.slice(0, 2) || ''
+}
+
+const isIconUrl = (icon: any) => {
+  const value = getIconValue(icon)
+  return (
+    value.startsWith('http') ||
+    value.startsWith('data:') ||
+    /\.(svg|png|jpe?g|gif|webp)$/i.test(value)
+  )
+}
+
+const normalizeIconUrl = (icon: any) => getIconValue(icon)
+
+const getIconValue = (icon: any) => {
+  if (!icon) return ''
+  if (typeof icon === 'string') return icon.trim()
+  return String(icon.url || icon.value || icon.text || '').trim()
+}
+
+const formatDuration = (item: any) => {
+  const duration = item?.duration || {}
+  const start = duration.start ?? item.start ?? ''
+  const end = duration.end ?? item.end ?? ''
+  if (start && end) return `${start} - ${end}`
+  if (start) return start
+  if (end) return end
   return ''
 }
 
@@ -85,9 +116,10 @@ const itemStyle = computed(() => ({
 }))
 
 const headerStyle = computed(() => ({
-  display: 'flex',
-  justifyContent: 'space-between',
+  display: 'grid',
+  gridTemplateColumns: 'auto 1fr auto',
   alignItems: 'center',
+  gap: '8px',
   marginBottom: '8px',
   ...props.config?.headerStyle
 }))
@@ -125,5 +157,23 @@ const descriptionStyle = computed(() => ({
 <style scoped>
 .simple-item:last-child {
   border-bottom: none;
+}
+
+.icon-wrapper {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(64, 158, 255, 0.12);
+  color: #2573d5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.icon-wrapper img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 </style>

@@ -1,0 +1,87 @@
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #409eff;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &.full-width {
+    grid-column: 1 / -1;
+  }
+
+  label {
+    font-size: 14px;
+    color: #606266;
+    font-weight: 500;
+
+    .required {
+      color: #f56c6c;
+      margin-left: 2px;
+    }
+  }
+
+  :deep(.el-input-number) {
+    width: 100%;
+  }
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.item-card {
+  padding: 20px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  position: relative;
+
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    h4 {
+      font-size: 16px;
+      color: #303133;
+      margin: 0;
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 8px;
+    }
+  }
+}
+
+.add-item-btn {
+  width: 100%;
+  margin-top: 16px;
+  border-style: dashed;
+}
+
+.rich-editor {
+  margin-top: 12px;
+
+  :deep(.ql-container) {
+    min-height: 150px;
+  }
+}
+

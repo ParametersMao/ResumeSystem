@@ -14,14 +14,14 @@
         </template>
       </div>
       <div class="section-actions">
+        <el-button text size="small" @click="collapsed = !collapsed">{{ collapsed ? '展开' : '收起' }}</el-button>
         <el-switch v-model="localVisible" size="small" :active-text="localVisible ? '显示' : '隐藏'" @change="onToggleVisible" />
-        <el-button size="small" @click="$emit('move-up')">上移</el-button>
-        <el-button size="small" @click="$emit('move-down')">下移</el-button>
+        <el-button text size="small" @click="$emit('settings')">设置</el-button>
         <el-button size="small" type="danger" plain disabled>不可删除</el-button>
       </div>
     </div>
 
-    <div class="section-content">
+    <div class="section-content" v-show="!collapsed">
       <el-form label-width="90px" class="form-grid">
         <el-form-item label="姓名">
           <el-input v-model="localProfile.basic.name" @change="emitProfile" />
@@ -38,7 +38,16 @@
         <el-form-item label="主页">
           <el-input v-model="localProfile.basic.contacts.site" @change="emitProfile" />
         </el-form-item>
-        <el-form-item label="自我概述">
+        <el-form-item label="性别">
+          <el-input v-model="localProfile.basic.gender" @change="emitProfile" />
+        </el-form-item>
+        <el-form-item label="年龄">
+          <el-input v-model="localProfile.basic.age" @change="emitProfile" />
+        </el-form-item>
+        <el-form-item label="经验">
+          <el-input v-model="localProfile.basic.yearsOfExperience" @change="emitProfile" />
+        </el-form-item>
+        <el-form-item label="自我概述" class="summary-item">
           <el-input type="textarea" :rows="4" v-model="localProfile.summary" @change="emitProfile" />
         </el-form-item>
       </el-form>
@@ -58,26 +67,32 @@ interface Props {
 interface Emits {
   (e: 'update:modelValue', v: ResumeProfile): void
   (e: 'update:section', v: ResumeSection): void
-  (e: 'move-up'): void
-  (e: 'move-down'): void
+  (e: 'settings'): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+// 直接使用 profile 作为数据源，简化数据流
 const localProfile = ref<ResumeProfile>(JSON.parse(JSON.stringify(props.modelValue)))
 const localVisible = ref<boolean>(props.section.visible)
+const collapsed = ref(false)
 
+// 监听 profile 变化，同步到本地
 watch(() => props.modelValue, (v) => {
   localProfile.value = JSON.parse(JSON.stringify(v))
 }, { deep: true })
 
+// 监听 section.visible 变化
 watch(() => props.section.visible, (v) => {
   localVisible.value = v
 })
 
+// 更新 profile 数据
 function emitProfile() {
-  emit('update:modelValue', JSON.parse(JSON.stringify(localProfile.value)))
+  const profileClone = JSON.parse(JSON.stringify(localProfile.value))
+  // 直接更新 profile，不需要维护 section.data
+  emit('update:modelValue', profileClone)
 }
 
 const editingTitle = ref(false)
@@ -107,13 +122,14 @@ function onToggleVisible() {
 
 <style scoped>
 .basic-section-editor { border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; margin-bottom: 16px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; }
+.section-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; border-radius: 8px 8px 0 0; }
 .section-info { display: flex; align-items: center; gap: 8px; }
 .section-icon { font-size: 16px; }
 .section-title { font-weight: 600; color: #1f2937; }
 .section-actions { display: flex; align-items: center; gap: 12px; }
-.section-content { padding: 15px; }
+.section-content { padding: 20px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.summary-item { grid-column: 1 / -1; }
 .form-grid :deep(.el-form-item) { margin-bottom: 0; }
 .title-input { width: 180px; }
 @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }

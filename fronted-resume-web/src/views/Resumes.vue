@@ -54,8 +54,10 @@ import { useRouter } from 'vue-router'
 import html2canvas from 'html2canvas'
 import { listMyResumes } from '@/api/resume'
 import type { Resume, SectionItem } from '@/store/resume'
+import { useUserStore } from '@/store/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 const list = ref<Resume[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -63,7 +65,11 @@ const limit = ref(8)
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)))
 
 async function load() {
-  const data = await listMyResumes(page.value, limit.value)
+  const userId = userStore.user?.id
+  if (!userId) {
+    return
+  }
+  const data = await listMyResumes(userId, page.value, limit.value)
   list.value = data.list
   total.value = data.total
   await nextTick()

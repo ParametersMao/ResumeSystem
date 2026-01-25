@@ -16,18 +16,24 @@
       >
         <div class="timeline-header" :style="headerStyle">
           <div class="timeline-content" :style="contentStyle">
-            <div class="company" :style="companyStyle">
-              {{ item.company || '' }}
+            <div v-if="item.icon" class="icon-wrapper">
+              <img v-if="isIconUrl(item.icon)" :src="normalizeIconUrl(item.icon)" alt="" />
+              <span v-else>{{ sanitizeIcon(item.icon) }}</span>
             </div>
-            <div class="position" :style="positionStyle">
-              {{ item.role || '' }}
+            <div class="text-block">
+              <div class="company" :style="companyStyle">
+                {{ item.company || '' }}
+              </div>
+              <div class="position" :style="positionStyle">
+                {{ item.role || '' }}
+              </div>
             </div>
           </div>
           <div class="timeline-date" :style="dateStyle">
-            {{ item.start || '' }} - {{ item.end || '' }}
+            {{ formatDuration(item) }}
           </div>
         </div>
-        <div v-if="item.desc" class="description" :style="descriptionStyle">
+        <div v-if="hasContent(item.desc)" class="description" :style="descriptionStyle">
           <div v-html="renderDescription(item.desc)"></div>
         </div>
       </div>
@@ -37,6 +43,7 @@
 
 <script setup lang="ts">
 import { computed, defineProps } from 'vue'
+import { normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   data: any
@@ -46,14 +53,46 @@ interface Props {
 
 const props = defineProps<Props>()
 
+// 检查是否有实际内容
+const hasContent = (desc: any): boolean => {
+  if (!desc) return false
+  const normalized = normalizeRichTextValue(desc)
+  return normalized.html.trim().length > 0 || normalized.text.trim().length > 0
+}
+
 // 渲染富文本描述（兼容多种存储结构）
-const renderDescription = (desc: any) => {
-  if (typeof desc === 'string') return desc
-  if (desc && typeof desc === 'object') {
-    if (desc.html && typeof desc.html === 'string') return desc.html
-    if (Array.isArray(desc.json)) return convertJsonToHtml(desc.json)
-    if (Array.isArray(desc.ops)) return desc.ops.map((op: any) => op.insert).join('')
-  }
+const renderDescription = (desc: any) => normalizeRichTextValue(desc).html
+
+const sanitizeIcon = (icon: any) => {
+  if (!icon) return ''
+  const value = typeof icon === 'string' ? icon : icon?.text || icon?.value || ''
+  return value?.slice(0, 2) || ''
+}
+
+const isIconUrl = (icon: any) => {
+  const value = getIconValue(icon)
+  return (
+    value.startsWith('http') ||
+    value.startsWith('data:') ||
+    /\.(svg|png|jpe?g|gif|webp)$/i.test(value)
+  )
+}
+
+const normalizeIconUrl = (icon: any) => getIconValue(icon)
+
+const getIconValue = (icon: any) => {
+  if (!icon) return ''
+  if (typeof icon === 'string') return icon.trim()
+  return String(icon.url || icon.value || icon.text || '').trim()
+}
+
+const formatDuration = (item: any) => {
+  const duration = item?.duration || {}
+  const start = duration.start ?? item.start ?? ''
+  const end = duration.end ?? item.end ?? ''
+  if (start && end) return `${start} - ${end}`
+  if (start) return start
+  if (end) return end
   return ''
 }
 
@@ -130,9 +169,11 @@ const containerStyle = computed(() => ({
 }))
 
 const itemStyle = computed(() => ({
-  marginBottom: props.data?.style?.elementSpacing || '20px',
-  paddingBottom: '15px',
-  borderBottom: props.config?.itemSeparator === 'dashed' ? '1px dashed #f0f0f0' : '1px solid #f0f0f0',
+  marginBottom: props.data?.style?.elementSpacing || '18px',
+  paddingBottom: '12px',
+  borderBottom: props.config?.itemSeparator === 'dashed'
+    ? `1px dashed ${props.styles?.colors?.border || 'rgba(15, 23, 42, 0.12)'}`
+    : `1px solid ${props.styles?.colors?.border || 'rgba(15, 23, 42, 0.12)'}`,
   ...props.config?.itemStyle
 }))
 
@@ -152,21 +193,21 @@ const contentStyle = computed(() => ({
 const companyStyle = computed(() => ({
   fontSize: '16px',
   fontWeight: '600',
-  color: props.styles?.colors?.text || '#333',
+  color: props.styles?.colors?.text || '#111827',
   marginBottom: '5px',
   ...props.config?.companyStyle
 }))
 
 const positionStyle = computed(() => ({
   fontSize: '14px',
-  color: props.styles?.colors?.text || '#333',
+  color: props.styles?.colors?.text || '#4b5563',
   marginBottom: '8px',
   ...props.config?.positionStyle
 }))
 
 const dateStyle = computed(() => ({
   fontSize: '14px',
-  color: props.styles?.colors?.primary || '#4a90a4',
+  color: props.styles?.colors?.secondary || props.styles?.colors?.primary || '#2563eb',
   fontWeight: '500',
   whiteSpace: 'nowrap',
   marginLeft: '20px',
@@ -176,7 +217,7 @@ const dateStyle = computed(() => ({
 const descriptionStyle = computed(() => ({
   fontSize: '14px',
   lineHeight: '1.6',
-  color: props.styles?.colors?.text || '#333',
+  color: props.styles?.colors?.text || '#111827',
   ...props.config?.descriptionStyle
 }))
 </script>
@@ -193,5 +234,34 @@ const descriptionStyle = computed(() => ({
   top: 0;
   width: 0;
   height: 0;
+}
+
+.icon-wrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  font-size: 16px;
+}
+
+.icon-wrapper img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.timeline-content {
+  display: flex;
+  align-items: center;
+}
+
+.text-block {
+  flex: 1;
 }
 </style>

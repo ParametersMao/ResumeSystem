@@ -1,121 +1,110 @@
 /**
- * 动态组件注册系统
- * 支持模板自定义渲染器注册和管理
+ * 组件注册表
+ * 用于动态注册和解析Vue组件
  */
 
+import { markRaw } from 'vue'
 import type { Component } from 'vue'
 
-export interface ComponentDefinition {
-  id: string
-  name: string
-  component: Component
-  description?: string
-  version?: string
-  author?: string
-  tags?: string[]
-  props?: Record<string, any>
-  example?: any
+// 组件注册项
+interface ComponentRegistryItem {
+  id: string;
+  component: Component;
+  metadata?: Record<string, any>;
 }
 
-export interface ComponentRegistry {
-  register(definition: ComponentDefinition): void
-  unregister(id: string): void
-  get(id: string): ComponentDefinition | undefined
-  list(): ComponentDefinition[]
-  has(id: string): boolean
-}
+// 组件注册表
+const registry = new Map<string, ComponentRegistryItem>()
 
-class ComponentRegistryImpl implements ComponentRegistry {
-  private components = new Map<string, ComponentDefinition>()
-
-  register(definition: ComponentDefinition): void {
-    if (!definition.id || !definition.component) {
-      throw new Error('Component definition must have id and component')
+/**
+ * 组件注册表 API
+ */
+export const componentRegistry = {
+  /**
+   * 注册组件
+   * @param id 组件ID
+   * @param component 组件定义
+   * @param metadata 组件元数据
+   */
+  register(id: string, component: Component, metadata: Record<string, any> = {}) {
+    if (registry.has(id)) {
+      console.warn(`ComponentRegistry: 组件 "${id}" 已存在，将被覆盖`)
     }
     
-    // 验证组件是否有效
-    if (typeof definition.component !== 'object' && typeof definition.component !== 'function') {
-      throw new Error('Component must be a valid Vue component')
-    }
-
-    this.components.set(definition.id, definition)
-    console.log(`Component registered: ${definition.id}`)
-  }
-
-  unregister(id: string): void {
-    if (this.components.has(id)) {
-      this.components.delete(id)
-      console.log(`Component unregistered: ${id}`)
-    }
-  }
-
-  get(id: string): ComponentDefinition | undefined {
-    return this.components.get(id)
-  }
-
-  list(): ComponentDefinition[] {
-    return Array.from(this.components.values())
-  }
-
-  has(id: string): boolean {
-    return this.components.has(id)
-  }
-}
-
-// 全局组件注册表实例
-export const componentRegistry = new ComponentRegistryImpl()
-
-// 预注册一些内置组件
-export function registerBuiltinComponents() {
-  // 这里可以预注册一些内置的自定义组件
-  // 例如：图表组件、媒体组件等
-}
-
-// 从远程加载组件的工具函数
-export async function loadRemoteComponent(url: string, id: string): Promise<ComponentDefinition> {
-  try {
-    const module = await import(/* @vite-ignore */ url)
-    const component = module.default || module
-    
-    return {
+    // 使用markRaw优化性能，防止组件被代理
+    registry.set(id, {
       id,
-      name: component.name || id,
-      component,
-      description: component.description,
-      version: component.version,
-      author: component.author,
-      tags: component.tags || [],
-      props: component.props,
-      example: component.example
-    }
-  } catch (error) {
-    console.error(`Failed to load remote component from ${url}:`, error)
-    throw error
+      component: markRaw(component),
+      metadata
+    })
+    
+    return this
+  },
+  
+  /**
+   * 批量注册组件
+   * @param components 组件配置数组
+   */
+  registerBatch(components: Array<{ id: string; component: Component; metadata?: Record<string, any> }>) {
+    components.forEach(item => {
+      this.register(item.id, item.component, item.metadata)
+    })
+    
+    return this
+  },
+  
+  /**
+   * 获取组件
+   * @param id 组件ID
+   */
+  get(id: string): ComponentRegistryItem | undefined {
+    return registry.get(id)
+  },
+  
+  /**
+   * 检查组件是否存在
+   * @param id 组件ID
+   */
+  has(id: string): boolean {
+    return registry.has(id)
+  },
+  
+  /**
+   * 移除组件
+   * @param id 组件ID
+   */
+  unregister(id: string): boolean {
+    return registry.delete(id)
+  },
+  
+  /**
+   * 获取所有组件
+   */
+  getAll(): ComponentRegistryItem[] {
+    return Array.from(registry.values())
+  },
+  
+  /**
+   * 查找满足条件的组件
+   * @param filter 过滤函数
+   */
+  find(filter: (item: ComponentRegistryItem) => boolean): ComponentRegistryItem[] {
+    return this.getAll().filter(filter)
+  },
+  
+  /**
+   * 按类型查找组件
+   * @param type 组件类型
+   */
+  findByType(type: string): ComponentRegistryItem[] {
+    return this.find(item => item.metadata?.type === type)
+  },
+  
+  /**
+   * 清空注册表
+   */
+  clear() {
+    registry.clear()
+    return this
   }
-}
-
-// 验证组件安全性的工具函数
-export function validateComponent(definition: ComponentDefinition): boolean {
-  // 检查组件是否包含危险代码
-  const componentStr = definition.component.toString()
-  
-  // 基础安全检查
-  const dangerousPatterns = [
-    /eval\s*\(/,
-    /Function\s*\(/,
-    /setTimeout\s*\(/,
-    /setInterval\s*\(/,
-    /document\.write/,
-    /innerHTML\s*=/,
-    /outerHTML\s*=/
-  ]
-  
-  for (const pattern of dangerousPatterns) {
-    if (pattern.test(componentStr)) {
-      console.warn(`Component ${definition.id} contains potentially dangerous code`)
-      return false
-    }
-  }
-  
-  return true
 }

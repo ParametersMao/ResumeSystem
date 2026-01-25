@@ -14,11 +14,14 @@
         :style="itemStyle"
       >
         <div class="item-header" :style="headerStyle">
+          <div class="icon-wrapper" v-if="item.icon">
+            {{ sanitizeIcon(item.icon) }}
+          </div>
           <div class="project-name" :style="nameStyle">
             {{ item.name || '项目名称' }}
           </div>
           <div class="date" :style="dateStyle">
-            {{ (item.duration && item.duration.start) || '' }} - {{ (item.duration && item.duration.end) || '' }}
+            {{ formatDuration(item) }}
           </div>
         </div>
         <div class="project-role" :style="roleStyle">
@@ -34,6 +37,7 @@
 
 <script setup lang="ts">
 import { computed, defineProps } from 'vue'
+import { normalizeRichTextValue } from '@/utils/richText'
 
 interface Props {
   data: any
@@ -44,20 +48,23 @@ interface Props {
 const props = defineProps<Props>()
 
 // 渲染富文本描述（兼容 { html, json, text } / Quill ops / string）
-const renderDescription = (desc: any) => {
-  if (typeof desc === 'string') return desc
-  if (desc && typeof desc === 'object') {
-    if (desc.html) return desc.html
-    if (Array.isArray(desc.json)) {
-      try {
-        return desc.json.map((n: any) => (typeof n === 'string' ? n : (n.children || []).map((c: any) => (typeof c === 'string' ? c : '')).join(''))).join('')
-      } catch {
-        return ''
-      }
-    }
-    if (Array.isArray(desc.ops)) return desc.ops.map((op: any) => op.insert).join('')
-  }
-  return ''
+const renderDescription = (desc: any) => normalizeRichTextValue(desc).html
+
+const sanitizeIcon = (icon: any) => {
+  if (!icon) return ''
+  const value = typeof icon === 'string' ? icon : icon?.text || ''
+  return value?.slice(0, 2) || ''
+}
+
+const formatDuration = (item: any) => {
+  const duration = item?.duration || {}
+  const start = duration.start ?? item.start ?? ''
+  const end = duration.end ?? item.end ?? ''
+  const fallback = item.date || ''
+  if (start && end) return `${start} - ${end}`
+  if (start) return start
+  if (end) return end
+  return fallback
 }
 
 const titleStyle = computed(() => ({
@@ -85,9 +92,10 @@ const itemStyle = computed(() => ({
 }))
 
 const headerStyle = computed(() => ({
-  display: 'flex',
-  justifyContent: 'space-between',
+  display: 'grid',
+  gridTemplateColumns: 'auto 1fr auto',
   alignItems: 'center',
+  gap: '8px',
   marginBottom: '8px',
   ...props.config?.headerStyle
 }))
@@ -125,5 +133,17 @@ const descriptionStyle = computed(() => ({
 <style scoped>
 .simple-item:last-child {
   border-bottom: none;
+}
+
+.icon-wrapper {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(64, 158, 255, 0.12);
+  color: #2573d5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
 }
 </style>
