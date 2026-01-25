@@ -10,8 +10,13 @@
       <div class="editor-content">
         <!-- 动态模块列表 -->
         <ModuleListEditor 
+          ref="moduleListRef"
           :resume-data="resumeData"
           @ai="onAiFromSection"
+          :highlighted-section-id="highlightedSectionId"
+          @highlight="handleEditorHighlight"
+          @clear-highlight="clearEditorHighlight"
+          @select="handleEditorSelect"
         />
         
         <!-- 自定义模块配置弹窗 -->
@@ -43,12 +48,17 @@
               <el-button size="small" type="primary" @click="exportPdf">导出PDF</el-button>
             </div>
           </div>
-          <div class="preview-container">
-            <DynamicResumePreview 
+          <div class="preview-container" ref="previewContainerRef">
+            <NewResumePreview 
               :resume-data="resumeData"
               :template-data="templateData"
+              :template-type="templateData?.templateType || 'single-column'"
               :extra-styles="templateStyles"
               :custom-css="customCss"
+              :key="`preview-${Date.now()}`"
+              :highlighted-section-id="highlightedSectionId"
+              @section-hover="handlePreviewHighlight"
+              @section-select="handlePreviewSelect"
             />
           </div>
         </div>
@@ -84,6 +94,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus, ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 // 组件导入
 import SimpleSectionEditor from '@/components/editor/SimpleSectionEditor.vue'
@@ -93,18 +105,23 @@ import AiPolishPanel from '@/components/editor/AiPolishPanel.vue'
 import ModuleListEditor from '@/components/editor/ModuleListEditor.vue'
 
 // 类型和工具导入
-import type { ResumeData, TemplateData, TemplateDataV2, TemplateStyles, ResumeSection } from '@/types/resume'
+import type { ResumeData, TemplateData, TemplateDataV2, TemplateStyles, ResumeSection, ModuleType } from '@/types/resume'
 import { getTemplateDetail } from '@/api/template'
 import { createResume, getResume, updateResume } from '@/api/resume'
 import { useUserStore } from '@/store/user'
-import DynamicResumePreview from '@/components/resume/DynamicResumePreview.vue'
+import NewResumePreview from '@/components/resume/NewResumePreview.vue'
 import { 
   transformProfileDataToSections, 
   transformSectionsToProfileData, 
   createNewSection,
   reorderSections
 } from '@/utils/dataTransform'
-import { ResumeRenderEngine } from '@/utils/renderEngine'
+import { createEmptyRichText, normalizeSectionRichText } from '@/utils/richText'
+import { adaptLegacyTemplateData, adaptLegacyResumeData } from '@/utils/templateAdapter'
+import { applyTemplateToResume } from '@/utils/templateMapper'
+import { isBasicSection, getCanonicalSectionType } from '@/utils/sectionType'
+import { exportResumeWithPagedjs } from '@/utils/pagedExport'
+import { DEFAULT_SECTION_TITLES, SECTION_TYPE_OPTIONS } from '@/config/sectionTypes'
 // 已移除 moduleStateManager 依赖，统一以 resumeData.sections 为数据源
 
 // 其他组件已在上面导入
@@ -128,6 +145,9 @@ const customCss = ref<string>('')
 const aiVisible = ref(false)
 const currentRichText = ref<string>('')
 const aiTarget = ref<{ sectionId: string; itemIndex: number; fieldName: string } | null>(null)
+const highlightedSectionId = ref<string | null>(null)
+const moduleListRef = ref<InstanceType<typeof ModuleListEditor> | null>(null)
+const previewContainerRef = ref<HTMLElement | null>(null)
 
 // 简历数据 - 新的结构
 const resumeData = ref<ResumeData>({
@@ -165,6 +185,77 @@ const templateStyles = ref<TemplateStyles>({
     elementMargin: '15px'
   }
 })
+
+interface BasicSectionOverrides {
+  title?: string
+  visible?: boolean
+  config?: Record<string, any>
+  style?: Record<string, any>
+  order?: number
+}
+
+function extractOverridesFromSection(section?: ResumeSection | null): BasicSectionOverrides | undefined {
+  if (!section) return undefined
+  return {
+    title: section.title,
+    visible: section.visible,
+    config: section.config,
+    style: section.style,
+    order: section.order
+  }
+}
+
+function buildBasicSection(overrides?: BasicSectionOverrides): ResumeSection {
+  const sections = resumeData.value.sections || []
+  const existing = sections.find((section) => isBasicSection(section.type))
+  const base: ResumeSection = existing
+    ? { ...existing, type: 'basic' }
+    : {
+        id: `basic-${Date.now()}`,
+        type: 'basic',
+        title: '个人信息',
+        visible: true,
+        order: 0,
+        items: [],
+        config: {}
+      }
+
+  if (overrides?.title) base.title = overrides.title
+  if (overrides?.visible !== undefined) base.visible = overrides.visible
+  if (overrides?.config) {
+    base.config = { ...overrides.config }
+  } else if (!base.config) {
+    base.config = {}
+  }
+  if (overrides?.style) {
+    base.style = { ...overrides.style }
+  } else if (!base.style) {
+    base.style = {}
+  }
+  if (overrides?.order !== undefined) {
+    base.order = overrides.order
+  }
+
+  return base
+}
+
+function setSectionsKeepingBasic(
+  sectionsInput: ResumeSection[] | undefined,
+  explicitOverrides?: BasicSectionOverrides
+) {
+  const sections = Array.isArray(sectionsInput) ? sectionsInput : []
+  const inlineBasic = explicitOverrides ? undefined : sections.find((section) => isBasicSection(section.type))
+  const overrides = explicitOverrides || extractOverridesFromSection(inlineBasic)
+  const filteredSections = sections.filter((section) => !isBasicSection(section.type))
+  const basicSection = buildBasicSection(overrides)
+  const normalized = [basicSection, ...filteredSections].map((section, index) => ({
+    ...section,
+    type: isBasicSection(section.type) ? 'basic' : section.type,
+    order: index
+  }))
+  resumeData.value.sections = normalized
+  return normalized
+}
 
 // 计算属性
 const saveStatusText = computed(() => {
@@ -284,72 +375,56 @@ async function loadTemplate() {
     
     // 处理两种模板格式：新格式(sections) 和 旧格式(layout)
     if (parsedTemplateData?.sections && Array.isArray(parsedTemplateData.sections)) {
-      // 新格式：直接使用 sections 数组
       try {
-        // 回填 profile（包含 basic 和 summary）
-        if (parsedTemplateData.profile) {
-          // 确保 profile.basic 存在
-          if (parsedTemplateData.profile.basic) {
-            resumeData.value.profile.basic = {
-              name: parsedTemplateData.profile.basic.name || '',
-              title: parsedTemplateData.profile.basic.title || '',
-              contacts: {
-                email: parsedTemplateData.profile.basic.contacts?.email || '',
-                phone: parsedTemplateData.profile.basic.contacts?.phone || '',
-                site: parsedTemplateData.profile.basic.contacts?.site || ''
-              }
-            }
-          }
-          
-          // 确保 profile.summary 存在
-          if (parsedTemplateData.profile.summary) {
-            resumeData.value.profile.summary = parsedTemplateData.profile.summary
-          }
-          
-          console.log('成功回填 profile 数据:', resumeData.value.profile)
-        }
-        // 回填 sections，保留所有模块包括 basic，保留顺序/可见性/items/title/style/config
-        resumeData.value.sections = parsedTemplateData.sections
-          .filter((s: any) => s && s.type)  // 只过滤掉无效的模块
-          .map((s: any, idx: number) => ({
-            id: s.id || `${s.type}-${Date.now()}-${idx}`,
-            type: s.type,
-            title: s.title || s.config?.title || '',
-            visible: s.visible !== false,
-            order: typeof s.order === 'number' ? s.order : idx + 1,
-            items: Array.isArray(s.items) ? s.items : [],
-            config: s.config,
-            style: s.style
-          }))
-        
-        console.log('成功回填新格式模板数据到 resumeData:', resumeData.value)
+        mergeTemplateProfile(parsedTemplateData.profile)
+        const mergedSections = applyTemplateToResume(
+          parsedTemplateData.sections,
+          resumeData.value.sections
+        )
+        const completedSections = ensureAllStandardSections(mergedSections)
+        setSectionsKeepingBasic(completedSections)
+        console.log('成功回填新格式模板数据到 resumeData:', completedSections)
       } catch (sectionError) {
         console.error('回填新格式模板数据时出错:', sectionError)
       }
     } else if (parsedTemplateData?.layout && Array.isArray(parsedTemplateData.layout)) {
       // 旧格式：根据 layout 数组创建 sections
       try {
-        // 回填 profile（如果有的话）
-        if (parsedTemplateData.profile) {
-          resumeData.value.profile = parsedTemplateData.profile
-        }
+        mergeTemplateProfile(parsedTemplateData.profile)
         
         // 根据 layout 创建 sections
-        const newSections: any[] = []
+        const newSections: ResumeSection[] = []
+        let basicOverrides: BasicSectionOverrides | undefined
+
         parsedTemplateData.layout.forEach((moduleConfig: any, index: number) => {
-          if (moduleConfig.visible && moduleConfig.type !== 'basic') {
-            // 跳过 basic 类型（对应基本信息，通过 profile 处理）
-            const section = createNewSection(moduleConfig.type as any, newSections)
-            section.title = moduleConfig.config?.title || getDefaultSectionTitle(moduleConfig.type)
-            section.order = moduleConfig.order || index
-            section.visible = moduleConfig.visible !== false
-            section.config = moduleConfig.config || {}
-            newSections.push(section)
+          if (!moduleConfig) return
+
+          const canonicalType = getCanonicalSectionType(moduleConfig.type) || moduleConfig.type
+
+          if (isBasicSection(canonicalType)) {
+            basicOverrides = {
+              title: moduleConfig.title || moduleConfig.config?.title || '基本信息',
+              visible: moduleConfig.visible !== false,
+              config: moduleConfig.config,
+              style: moduleConfig.style,
+              order: moduleConfig.order ?? index
+            }
+            return
           }
+
+          const sectionType = canonicalType as ModuleType
+          const section = createNewSection(sectionType, newSections)
+          section.title = moduleConfig.config?.title || getDefaultSectionTitle(sectionType)
+          section.order = typeof moduleConfig.order === 'number' ? moduleConfig.order : index
+          section.visible = moduleConfig.visible !== false
+          section.config = moduleConfig.config || section.config
+          section.style = moduleConfig.style || section.style
+          newSections.push(section)
         })
         
-        // 更新 resumeData.sections
-        resumeData.value.sections = newSections
+        const normalizedSections = newSections.map(section => normalizeSectionRichText(section))
+        const completedSections = ensureAllStandardSections(normalizedSections)
+        setSectionsKeepingBasic(completedSections, basicOverrides)
         
         console.log('成功根据 layout 创建 sections:', newSections)
       } catch (layoutError) {
@@ -373,20 +448,86 @@ async function loadTemplate() {
 
 // 获取模块类型的默认标题
 function getDefaultSectionTitle(type: string): string {
-  const titleMap: Record<string, string> = {
-    'experience': '工作经验',
-    'education': '教育背景', 
-    'projects': '项目经历',
-    'skills': '专业技能',
-    'intention': '求职意向',
-    'internship': '实习经历',
-    'campus': '校园经历',
-    'awards': '荣誉证书',
-    'summary': '自我评价',
-    'hobbies': '兴趣爱好',
-    'custom': '自定义模块'
+  return DEFAULT_SECTION_TITLES[type] || type
+}
+
+const STANDARD_SECTION_TYPES = SECTION_TYPE_OPTIONS.map(option => option.value) as ModuleType[]
+
+function buildPlaceholderSection(type: ModuleType, visible: boolean, order: number): ResumeSection {
+  const id = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const base: ResumeSection = {
+    id,
+    type,
+    title: getDefaultSectionTitle(type),
+    visible,
+    order,
+    items: []
   }
-  return titleMap[type] || type
+
+  if (type === 'custom') {
+    base.config = {
+      fields: [
+        { name: 'title', label: '标题', type: 'text', required: true },
+        { name: 'content', label: '内容', type: 'textarea', required: false }
+      ]
+    }
+  }
+
+  return base
+}
+
+function ensureAllStandardSections(sectionsInput: ResumeSection[]): ResumeSection[] {
+  const sections = Array.isArray(sectionsInput) ? [...sectionsInput] : []
+  const existingTypes = new Set<string>()
+
+  sections.forEach((section) => {
+    const canonical = getCanonicalSectionType(section.type) || section.type
+    if (!canonical || canonical === 'basic') return
+    existingTypes.add(canonical)
+  })
+
+  let maxOrder = Math.max(-1, ...sections.map(section => section.order || 0))
+
+  STANDARD_SECTION_TYPES.forEach((type) => {
+    if (type === 'basic') return
+    if (existingTypes.has(type)) return
+    maxOrder += 1
+    sections.push(buildPlaceholderSection(type, false, maxOrder))
+  })
+
+  return sections
+}
+
+function mergeTemplateProfile(templateProfile: any) {
+  if (!templateProfile) return
+  const target = resumeData.value.profile
+
+  if (!target.basic) {
+    target.basic = {
+      name: '',
+      title: '',
+      contacts: {
+        email: '',
+        phone: '',
+        site: ''
+      }
+    }
+  }
+
+  const templateBasic = templateProfile.basic || {}
+  target.basic.name = target.basic.name || templateBasic.name || ''
+  target.basic.title = target.basic.title || templateBasic.title || ''
+  const targetContacts = target.basic.contacts || {}
+  const templateContacts = templateBasic.contacts || {}
+  target.basic.contacts = {
+    email: targetContacts.email || templateContacts.email || '',
+    phone: targetContacts.phone || templateContacts.phone || '',
+    site: targetContacts.site || templateContacts.site || ''
+  }
+
+  if (!target.summary && templateProfile.summary) {
+    target.summary = templateProfile.summary
+  }
 }
 
 
@@ -416,6 +557,12 @@ async function loadResume() {
       if (content.styles) {
         Object.assign(templateStyles.value, content.styles)
       }
+
+      const normalizedSections = Array.isArray(resumeData.value.sections)
+        ? resumeData.value.sections.map(section => normalizeSectionRichText(section))
+        : []
+      const completedSections = ensureAllStandardSections(normalizedSections)
+      setSectionsKeepingBasic(completedSections)
     }
     
     ElMessage.success('简历加载成功')
@@ -439,10 +586,19 @@ function initializeDefaultSections() {
     createNewSection('campus', orderSeed),
     createNewSection('skills', orderSeed),
     createNewSection('awards', orderSeed),
-    { id: `summary-${Date.now() + 2}`, type: 'summary', title: '自我评价', visible: true, order: 9, items: [], config: { fields: [{ name: 'text', label: '自我评价', type: 'textarea', richText: true }] } },
+    normalizeSectionRichText({
+      id: `summary-${Date.now() + 2}`,
+      type: 'summary',
+      title: '自我评价',
+      visible: true,
+      order: 9,
+      items: [{ text: createEmptyRichText() }],
+      config: { fields: [{ name: 'text', label: '自我评价', type: 'textarea', richText: true }] }
+    }),
     { id: `hobbies-${Date.now() + 3}`, type: 'hobbies', title: '兴趣爱好', visible: false, order: 10, items: [], config: { fields: [{ name: 'text', label: '兴趣爱好', type: 'text' }] } },
     createNewSection('custom', orderSeed)
   ]
+  setSectionsKeepingBasic([...resumeData.value.sections])
 }
 
 // 添加新模块
@@ -487,7 +643,8 @@ function moveSection(sectionId: string, delta: 1 | -1) {
   if (idx === -1) return
   const target = idx + delta
   if (target < 0 || target >= resumeData.value.sections.length) return
-  resumeData.value.sections = reorderSections(resumeData.value.sections, idx, target)
+  const reordered = reorderSections(resumeData.value.sections, idx, target)
+  setSectionsKeepingBasic(reordered)
 }
 
 // 设置面板操作
@@ -527,6 +684,30 @@ function applyAiSuggestion(html: string) {
   item[fieldName] = { html }
 }
 
+function handleEditorHighlight(sectionId: string) {
+  highlightedSectionId.value = sectionId
+}
+
+function clearEditorHighlight() {
+  highlightedSectionId.value = null
+}
+
+function handleEditorSelect(sectionId: string) {
+  highlightedSectionId.value = sectionId
+}
+
+function handlePreviewHighlight(sectionId: string | null) {
+  highlightedSectionId.value = sectionId
+  if (sectionId) {
+    moduleListRef.value?.scrollToSection(sectionId)
+  }
+}
+
+function handlePreviewSelect(sectionId: string) {
+  highlightedSectionId.value = sectionId
+  moduleListRef.value?.scrollToSection(sectionId)
+}
+
 // 保存简历
 async function saveResume() {
   if (!userStore.user?.id) {
@@ -538,8 +719,43 @@ async function saveResume() {
   
   try {
     // 生成导出HTML（与 JSON 一并保存）
-    const engine = new ResumeRenderEngine(templateData.value || { styles: templateStyles.value } as any, templateStyles.value)
-    const html = engine.generateHtml(resumeData.value)
+    // 使用新版渲染引擎
+    const adaptedTemplate = adaptLegacyTemplateData(
+      templateData.value,
+      'single-column',
+      templateStyles.value
+    )
+    const adaptedResumeData = adaptLegacyResumeData(resumeData.value)
+    
+    // 创建一个临时div来渲染HTML以便导出
+    const tempDiv = document.createElement('div')
+    const tempStyleElement = document.createElement('style')
+    
+    // 注入基本样式确保导出页面可用
+    tempStyleElement.textContent = `
+      body, html { margin: 0; padding: 0; font-family: 'Microsoft YaHei', sans-serif; }
+      .resume-container { max-width: 860px; margin: 0 auto; padding: 30px; background: white; }
+      .resume-section { margin-bottom: 20px; }
+      .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: ${templateStyles.value.colors?.primary || '#2f80ed'}; }
+      .section-content { font-size: 14px; line-height: 1.6; }
+    `
+    
+    // 使用Renderer生成HTML并应用样式
+    const html = [
+      '<!DOCTYPE html>',
+      '<html>',
+      '<head>',
+      '  <meta charset="utf-8">',
+      '  <title>' + (resumeData.value.profile?.basic?.name || '简历') + '</title>',
+      '  ' + tempStyleElement.outerHTML,
+      '</head>',
+      '<body>',
+      '  <div class="resume-container">',
+      '    ' + tempDiv.innerHTML,
+      '  </div>',
+      '</body>',
+      '</html>'
+    ].join('\n')
 
     const content = {
       profile: resumeData.value.profile,
@@ -598,8 +814,44 @@ async function saveResume() {
   }
 }
 
-function exportPdf() {
-  ElMessage.info('导出功能开发中...')
+async function exportPdf() {
+  const container = previewContainerRef.value
+  if (!container) {
+    ElMessage.error('未找到预览区域')
+    return
+  }
+  try {
+    const filename = `${resumeData.value.profile?.basic?.name || '我的简历'}`
+    await exportResumeWithPagedjs({ container, title: filename })
+    ElMessage.success('已打开打印窗口，请选择保存为 PDF')
+  } catch (e) {
+    console.error('export pdf error', e)
+    // 回退到截图导出，避免阻断导出流程
+    const scale = 2
+    const canvas = await html2canvas(container, { scale, useCORS: true })
+    const imgData = canvas.toDataURL('image/jpeg', 0.92)
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = 210
+    const pageHeight = 297
+    const imgWidth = pageWidth
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+    let heightLeft = imgHeight
+    let position = 0
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+    heightLeft -= pageHeight
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight
+      pdf.addPage()
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+    }
+    const filename = `${resumeData.value.profile?.basic?.name || '我的简历'}.pdf`
+    pdf.save(filename)
+    ElMessage.success('PDF 导出成功')
+  } catch (fallbackError) {
+    ElMessage.error('导出失败')
+    console.error('export pdf fallback error', fallbackError)
+  }
 }
 
 // 自动保存（防抖）
@@ -630,7 +882,7 @@ watch(templateData, (newTemplate) => {
 }
 
 .editor-left {
-  width: 50%;
+  width: 30%;
   min-width: 480px;
   background: white;
   overflow-y: auto;
@@ -699,7 +951,7 @@ watch(templateData, (newTemplate) => {
 }
 
 .editor-right {
-  width: 50%;
+  width: 70%;
   display: flex;
   flex-direction: column;
   background: white;
@@ -716,8 +968,8 @@ watch(templateData, (newTemplate) => {
 .preview-column { display: flex; flex-direction: column; }
 
 /* 打开 AI 时，左侧与右侧整体也需要收缩以让出空间 */
-.resume-editor.ai-open .editor-left { width: 40%; }
-.resume-editor.ai-open .editor-right { width: 60%; }
+.resume-editor.ai-open .editor-left { width: 25%; }
+.resume-editor.ai-open .editor-right { width: 75%; }
 
 .preview-header {
   display: flex;
@@ -794,12 +1046,12 @@ watch(templateData, (newTemplate) => {
 /* 响应式 */
 @media (max-width: 1200px) {
   .editor-left {
-    width: 45%;
+    width: 30%;
     min-width: 420px;
   }
   
   .editor-right {
-    width: 55%;
+    width: 70%;
   }
 }
 
