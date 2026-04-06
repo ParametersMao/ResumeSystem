@@ -5,6 +5,6 @@ export declare class StatisticsController {
     constructor(statisticsService: StatisticsService);
     getOverview(): Promise<ApiResponse<any>>;
     getTrend(period?: string): Promise<ApiResponse<any>>;
-    getPopularTemplates(): Promise<ApiResponse<any>>;
+    getPopularTemplates(limit?: string): Promise<ApiResponse<any>>;
     getUserActivity(): Promise<ApiResponse<any>>;
 }

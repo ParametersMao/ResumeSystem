@@ -3,8 +3,9 @@
     <nav class="top-navbar" :class="{ 'navbar-visible': isVisible }">
       <div class="nav-items">
         <router-link class="nav-item" to="/home">首页</router-link>
-        <router-link class="nav-item" to="/resumes">个人中心</router-link>
+        <router-link class="nav-item" to="/resumes">我的简历</router-link>
         <router-link class="nav-item" to="/templates">简历库</router-link>
+        <router-link class="nav-item" to="/account">个人资料</router-link>
         <router-link class="nav-item" to="/contact">联系我们</router-link>
       </div>
       <div class="user-section">

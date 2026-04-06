@@ -17,6 +17,7 @@ class TemplateSearchDto extends pagination_dto_1.PaginationDto {
     templateName;
     description;
     status;
+    industryTags;
 }
 exports.TemplateSearchDto = TemplateSearchDto;
 __decorate([
@@ -35,4 +36,9 @@ __decorate([
     (0, class_transformer_1.Type)(() => Boolean),
     __metadata("design:type", Boolean)
 ], TemplateSearchDto.prototype, "status", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], TemplateSearchDto.prototype, "industryTags", void 0);
 //# sourceMappingURL=template-search.dto.js.map

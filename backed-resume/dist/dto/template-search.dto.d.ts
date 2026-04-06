@@ -3,4 +3,5 @@ export declare class TemplateSearchDto extends PaginationDto {
     templateName?: string;
     description?: string;
     status?: boolean;
+    industryTags?: string;
 }

@@ -12,6 +12,11 @@ import { AiOperation } from '../entities/ai-operation.entity';
 import { Statistic } from '../entities/statistic.entity';
 import { TemplateUsage } from '../entities/template-usage.entity';
 import { ResumeDownload } from '../entities/resume-download.entity';
+import { Resume } from '../entities/resume.entity';
+import { CUserProfile } from '../entities/c-user-profile.entity';
+import { CUserEntitlement } from '../entities/c-user-entitlement.entity';
+import { ResumeVersion } from '../entities/resume-version.entity';
+import { SystemLog } from '../entities/system-log.entity';
 
 // 导入功能模块
 import { AdminUsersModule } from '../modules/admin-users/admin-users.module';
@@ -21,6 +26,11 @@ import { TemplatesModule } from '../modules/templates/templates.module';
 import { AiOperationsModule } from '../modules/ai-operations/ai-operations.module';
 import { StatisticsModule } from '../modules/statistics/statistics.module';
 import { ResumesModule } from '../modules/resumes/resumes.module';
+import { CuserProfileModule } from '../modules/cuser-profile/cuser-profile.module';
+import { SystemLogsModule } from '../modules/system-logs/system-logs.module';
+import { AiModule } from '../modules/ai/ai.module';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 
 @Module({
   imports: [
@@ -42,6 +52,11 @@ import { ResumesModule } from '../modules/resumes/resumes.module';
         Statistic,
         TemplateUsage,
         ResumeDownload,
+        Resume,
+        ResumeVersion,
+        CUserProfile,
+        CUserEntitlement,
+        SystemLog,
       ],
       synchronize: false, // 关闭自动同步，避免每次启动都操作数据库。临时设置synchronize: true可同步数据表结构
       logging: process.env.NODE_ENV !== 'production',
@@ -56,8 +71,17 @@ import { ResumesModule } from '../modules/resumes/resumes.module';
     AiOperationsModule,
     StatisticsModule,
     ResumesModule,
+    CuserProfileModule,
+    SystemLogsModule,
+    AiModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
+    },
+  ],
 })
 export class AppModule {} 

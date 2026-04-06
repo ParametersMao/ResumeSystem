@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ObjectLiteral, Repository } from 'typeorm';
 import { Statistic } from '../../entities/statistic.entity';
 import { Template } from '../../entities/template.entity';
 import { CUser } from '../../entities/c-user.entity';
@@ -25,19 +25,29 @@ export class StatisticsService {
     private resumeDownloadRepository: Repository<ResumeDownload>,
   ) {}
 
+  private async safeCount<T extends ObjectLiteral>(repo: Repository<T>, fallback = 0): Promise<number> {
+    try {
+      return await repo.count();
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  private async safeRawMany<T>(fn: () => Promise<T[]>, fallback: T[] = []): Promise<T[]> {
+    try {
+      return await fn();
+    } catch (e) {
+      return fallback;
+    }
+  }
+
   async getOverview(): Promise<any> {
-    const [
-      totalUsers,
-      totalTemplates,
-      totalAiOperations,
-      totalDownloads,
-      totalTemplateUsage
-    ] = await Promise.all([
-      this.cUserRepository.count(),
-      this.templateRepository.count(),
-      this.aiOperationRepository.count(),
-      this.resumeDownloadRepository.count(),
-      this.templateUsageRepository.count(),
+    const [totalUsers, totalTemplates, totalAiOperations, totalDownloads, totalTemplateUsage] = await Promise.all([
+      this.safeCount(this.cUserRepository),
+      this.safeCount(this.templateRepository),
+      this.safeCount(this.aiOperationRepository),
+      this.safeCount(this.resumeDownloadRepository),
+      this.safeCount(this.templateUsageRepository),
     ]);
 
     return {
@@ -65,32 +75,36 @@ export class StatisticsService {
     }
 
     const [userTrend, aiOperationTrend, downloadTrend] = await Promise.all([
-      this.cUserRepository
-        .createQueryBuilder('user')
-        .select('DATE(user.create_time)', 'date')
-        .addSelect('COUNT(*)', 'count')
-        .where('user.create_time >= :startDate', { startDate })
-        .groupBy('DATE(user.create_time)')
-        .orderBy('date', 'ASC')
-        .getRawMany(),
-      
-      this.aiOperationRepository
-        .createQueryBuilder('operation')
-        .select('DATE(operation.create_time)', 'date')
-        .addSelect('COUNT(*)', 'count')
-        .where('operation.create_time >= :startDate', { startDate })
-        .groupBy('DATE(operation.create_time)')
-        .orderBy('date', 'ASC')
-        .getRawMany(),
-      
-      this.resumeDownloadRepository
-        .createQueryBuilder('download')
-        .select('DATE(download.download_time)', 'date')
-        .addSelect('COUNT(*)', 'count')
-        .where('download.download_time >= :startDate', { startDate })
-        .groupBy('DATE(download.download_time)')
-        .orderBy('date', 'ASC')
-        .getRawMany(),
+      this.safeRawMany(() =>
+        this.cUserRepository
+          .createQueryBuilder('user')
+          .select('DATE(user.create_time)', 'date')
+          .addSelect('COUNT(*)', 'count')
+          .where('user.create_time >= :startDate', { startDate })
+          .groupBy('DATE(user.create_time)')
+          .orderBy('date', 'ASC')
+          .getRawMany(),
+      ),
+      this.safeRawMany(() =>
+        this.aiOperationRepository
+          .createQueryBuilder('operation')
+          .select('DATE(operation.create_time)', 'date')
+          .addSelect('COUNT(*)', 'count')
+          .where('operation.create_time >= :startDate', { startDate })
+          .groupBy('DATE(operation.create_time)')
+          .orderBy('date', 'ASC')
+          .getRawMany(),
+      ),
+      this.safeRawMany(() =>
+        this.resumeDownloadRepository
+          .createQueryBuilder('download')
+          .select('DATE(download.download_time)', 'date')
+          .addSelect('COUNT(*)', 'count')
+          .where('download.download_time >= :startDate', { startDate })
+          .groupBy('DATE(download.download_time)')
+          .orderBy('date', 'ASC')
+          .getRawMany(),
+      ),
     ]);
 
     return {
@@ -100,21 +114,23 @@ export class StatisticsService {
     };
   }
 
-  async getPopularTemplates(): Promise<any> {
-    const templates = await this.templateRepository
-      .createQueryBuilder('template')
-      .select([
-        'template.id',
-        'template.template_name',
-        'template.use_count',
-        'template.download_count',
-      ])
-      .orderBy('template.use_count', 'DESC')
-      .addOrderBy('template.download_count', 'DESC')
-      .limit(10)
-      .getMany();
-
-    return templates;
+  async getPopularTemplates(limit: number = 10): Promise<any> {
+    try {
+      const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 50) : 10;
+      return await this.templateRepository.find({
+        select: {
+          id: true,
+          templateName: true,
+          useCount: true,
+          downloadCount: true,
+        },
+        order: { useCount: 'DESC', downloadCount: 'DESC' },
+        take: safeLimit,
+      });
+    } catch (e) {
+      // 降级：避免统计面板整页 500
+      return [];
+    }
   }
 
   async getUserActivity(): Promise<any> {
@@ -123,9 +139,9 @@ export class StatisticsService {
       .select([
         'user.id',
         'user.username',
-        'user.ai_operation_count',
+        'user.aiOperationCount',
       ])
-      .orderBy('user.ai_operation_count', 'DESC')
+      .orderBy('user.aiOperationCount', 'DESC')
       .limit(10)
       .getMany();
 

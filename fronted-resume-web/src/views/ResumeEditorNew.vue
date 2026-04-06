@@ -45,7 +45,11 @@
             <h3>实时预览</h3>
             <div class="preview-actions">
               <el-button size="small" @click="saveResume">保存</el-button>
-              <el-button size="small" type="primary" @click="exportPdf">导出PDF</el-button>
+              <el-button size="small" @click="openVersions">版本历史</el-button>
+              <el-button size="small" type="success" @click="openJobGenerate">岗位生成</el-button>
+              <el-button size="small" type="primary" :loading="exportPdfLoading" :disabled="exportPdfLoading" @click="exportPdf">
+                {{ exportPdfLoading ? '导出中…' : '导出PDF' }}
+              </el-button>
             </div>
           </div>
           <div class="preview-container" ref="previewContainerRef">
@@ -86,6 +90,43 @@
         </el-icon>
       </el-button>
     </div>
+
+    <!-- 版本历史 -->
+    <el-drawer v-model="versionsVisible" title="版本历史" size="520px" destroy-on-close>
+      <div class="versions-toolbar">
+        <el-button size="small" @click="loadVersions" :loading="versionsLoading">刷新</el-button>
+        <el-text type="info">最多展示 50 条</el-text>
+      </div>
+      <el-table :data="versions" v-loading="versionsLoading" style="width: 100%">
+        <el-table-column prop="id" label="ID" width="90" />
+        <el-table-column prop="sourceVersion" label="源版本" width="90" />
+        <el-table-column prop="createTime" label="时间">
+          <template #default="{ row }">
+            {{ formatDateTime(row.createTime) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" @click="rollbackTo(row.id)">回滚</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-divider />
+      <el-text type="info">回滚会覆盖当前 content，并生成一条“回滚前快照”。</el-text>
+    </el-drawer>
+
+    <!-- 岗位生成（Mock AI） -->
+    <el-dialog v-model="jobDialogVisible" title="基于岗位生成内容" width="520px" destroy-on-close>
+      <el-form :model="jobForm" label-width="90px">
+        <el-form-item label="岗位名称">
+          <el-input v-model="jobForm.jobTitle" placeholder="例如：前端工程师" maxlength="128" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="jobDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="jobGenerating" @click="generateByJob">生成并填充</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -107,7 +148,7 @@ import ModuleListEditor from '@/components/editor/ModuleListEditor.vue'
 // 类型和工具导入
 import type { ResumeData, TemplateData, TemplateDataV2, TemplateStyles, ResumeSection, ModuleType } from '@/types/resume'
 import { getTemplateDetail } from '@/api/template'
-import { createResume, getResume, updateResume } from '@/api/resume'
+import { createResume, getResume, updateResume, listResumeVersions, rollbackResumeVersion } from '@/api/resume'
 import { useUserStore } from '@/store/user'
 import NewResumePreview from '@/components/resume/NewResumePreview.vue'
 import { 
@@ -120,8 +161,10 @@ import { createEmptyRichText, normalizeSectionRichText } from '@/utils/richText'
 import { adaptLegacyTemplateData, adaptLegacyResumeData } from '@/utils/templateAdapter'
 import { applyTemplateToResume } from '@/utils/templateMapper'
 import { isBasicSection, getCanonicalSectionType } from '@/utils/sectionType'
-import { exportResumeWithPagedjs } from '@/utils/pagedExport'
+import { exportResumePdfByHtml } from '@/api/resume'
+import { buildExportHtmlDocument, buildResumeBodyHtml, exportResumeWithPagedjs } from '@/utils/pagedExport'
 import { DEFAULT_SECTION_TITLES, SECTION_TYPE_OPTIONS } from '@/config/sectionTypes'
+import { aiGenerate } from '@/api/ai'
 // 已移除 moduleStateManager 依赖，统一以 resumeData.sections 为数据源
 
 // 其他组件已在上面导入
@@ -148,6 +191,17 @@ const aiTarget = ref<{ sectionId: string; itemIndex: number; fieldName: string }
 const highlightedSectionId = ref<string | null>(null)
 const moduleListRef = ref<InstanceType<typeof ModuleListEditor> | null>(null)
 const previewContainerRef = ref<HTMLElement | null>(null)
+const exportPdfLoading = ref(false)
+
+// 版本历史
+const versionsVisible = ref(false)
+const versionsLoading = ref(false)
+const versions = ref<Array<{ id: number; sourceVersion: number; createTime: string }>>([])
+
+// 岗位生成
+const jobDialogVisible = ref(false)
+const jobGenerating = ref(false)
+const jobForm = ref<{ jobTitle: string }>({ jobTitle: '' })
 
 // 简历数据 - 新的结构
 const resumeData = ref<ResumeData>({
@@ -732,30 +786,31 @@ async function saveResume() {
     const tempStyleElement = document.createElement('style')
     
     // 注入基本样式确保导出页面可用
-    tempStyleElement.textContent = `
-      body, html { margin: 0; padding: 0; font-family: 'Microsoft YaHei', sans-serif; }
-      .resume-container { max-width: 860px; margin: 0 auto; padding: 30px; background: white; }
-      .resume-section { margin-bottom: 20px; }
-      .section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: ${templateStyles.value.colors?.primary || '#2f80ed'}; }
-      .section-content { font-size: 14px; line-height: 1.6; }
-    `
+    const primaryColor = templateStyles.value.colors?.primary || '#2f80ed'
+    const exportCss = [
+      "body, html { margin: 0; padding: 0; font-family: 'Microsoft YaHei', sans-serif; }",
+      '.resume-container { max-width: 860px; margin: 0 auto; padding: 30px; background: white; }',
+      '.resume-section { margin-bottom: 20px; }',
+      '.section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: ' + primaryColor + '; }',
+      '.section-content { font-size: 14px; line-height: 1.6; }'
+    ].join('\n')
+    tempStyleElement.textContent = exportCss
     
     // 使用Renderer生成HTML并应用样式
-    const html = [
-      '<!DOCTYPE html>',
-      '<html>',
-      '<head>',
-      '  <meta charset="utf-8">',
-      '  <title>' + (resumeData.value.profile?.basic?.name || '简历') + '</title>',
-      '  ' + tempStyleElement.outerHTML,
-      '</head>',
-      '<body>',
-      '  <div class="resume-container">',
-      '    ' + tempDiv.innerHTML,
-      '  </div>',
-      '</body>',
-      '</html>'
-    ].join('\n')
+    const exportTitle = resumeData.value.profile?.basic?.name || '简历'
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${exportTitle}</title>
+  ${tempStyleElement.outerHTML}
+</head>
+<body>
+  <div class="resume-container">
+    ${tempDiv.innerHTML}
+  </div>
+</body>
+</html>`
 
     const content = {
       profile: resumeData.value.profile,
@@ -820,37 +875,216 @@ async function exportPdf() {
     ElMessage.error('未找到预览区域')
     return
   }
+  const rawName = `${resumeData.value.profile?.basic?.name || '我的简历'}`
+  const safeName = sanitizeFilename(rawName)
+  const pdfFilename = `${safeName}.pdf`
+  exportPdfLoading.value = true
+
   try {
-    const filename = `${resumeData.value.profile?.basic?.name || '我的简历'}`
-    await exportResumeWithPagedjs({ container, title: filename })
-    ElMessage.success('已打开打印窗口，请选择保存为 PDF')
-  } catch (e) {
-    console.error('export pdf error', e)
-    // 回退到截图导出，避免阻断导出流程
-    const scale = 2
-    const canvas = await html2canvas(container, { scale, useCORS: true })
-    const imgData = canvas.toDataURL('image/jpeg', 0.92)
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const pageWidth = 210
-    const pageHeight = 297
-    const imgWidth = pageWidth
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
-    let heightLeft = imgHeight
-    let position = 0
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
-    heightLeft -= pageHeight
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight
-      pdf.addPage()
+    // 主路径：服务端 Puppeteer 生成 PDF，一键下载
+    try {
+      const bodyHtml = buildResumeBodyHtml(container)
+      const html = buildExportHtmlDocument({
+        title: rawName,
+        bodyHtml,
+        baseHref: `${location.origin}/`,
+        extraCss: customCss.value?.trim() || undefined,
+      })
+      const { url } = await exportResumePdfByHtml(html)
+      if (!url) throw new Error('服务端未返回PDF地址')
+      await downloadPdfFromUrl(url, pdfFilename)
+      ElMessage.success('PDF 导出成功')
+      return
+    } catch (e: unknown) {
+      console.error('export pdf by server error', e)
+      const serverMsg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      ElMessage.info(serverMsg ? `${serverMsg}，正在尝试打印方式…` : '服务端导出失败，正在尝试打印方式…')
+    }
+
+    // 回退A：分页打印（让用户选择“另存为 PDF”）
+    try {
+      await exportResumeWithPagedjs({ container, title: safeName, extraCss: customCss.value })
+      ElMessage.success('已打开打印窗口，请选择保存为 PDF')
+      return
+    } catch (e) {
+      console.error('export pdf pagedjs error', e)
+    }
+
+    // 回退B：截图导出（兜底）
+    try {
+      const scale = 2
+      const canvas = await html2canvas(container, { scale, useCORS: true })
+      const imgData = canvas.toDataURL('image/jpeg', 0.92)
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = 210
+      const pageHeight = 297
+      const imgWidth = pageWidth
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      let heightLeft = imgHeight
+      let position = 0
       pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
       heightLeft -= pageHeight
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+      pdf.save(pdfFilename)
+      ElMessage.success('PDF 导出成功（截图模式）')
+    } catch (fallbackError) {
+      ElMessage.error('导出失败')
+      console.error('export pdf fallback error', fallbackError)
     }
-    const filename = `${resumeData.value.profile?.basic?.name || '我的简历'}.pdf`
-    pdf.save(filename)
-    ElMessage.success('PDF 导出成功')
-  } catch (fallbackError) {
-    ElMessage.error('导出失败')
-    console.error('export pdf fallback error', fallbackError)
+  } finally {
+    exportPdfLoading.value = false
+  }
+}
+
+function sanitizeFilename(input: string): string {
+  return String(input || '简历')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80) || '简历'
+}
+
+async function downloadPdfFromUrl(url: string, filename: string): Promise<void> {
+  if (url.startsWith('data:application/pdf;base64,')) {
+    const base64 = url.split(',')[1] || ''
+    const binary = window.atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: 'application/pdf' })
+    triggerBlobDownload(blob, filename)
+    return
+  }
+
+  try {
+    const res = await fetch(url, { credentials: 'omit' })
+    if (!res.ok) throw new Error(`下载失败: ${res.status}`)
+    const blob = await res.blob()
+    triggerBlobDownload(blob, filename)
+  } catch (e) {
+    // 可能是跨域/CORS 导致无法 fetch，降级打开新窗口
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    // 已经提供了可访问的 PDF（新窗口），不要再回退到打印/截图
+    return
+  }
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objectUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
+
+function formatDateTime(input: any) {
+  const d = new Date(input)
+  if (Number.isNaN(d.getTime())) return String(input || '-')
+  return d.toLocaleString('zh-CN')
+}
+
+function openVersions() {
+  versionsVisible.value = true
+  loadVersions()
+}
+
+async function loadVersions() {
+  if (!resume.value?.id) {
+    versions.value = []
+    return
+  }
+  versionsLoading.value = true
+  try {
+    const data = await listResumeVersions(String(resume.value.id), userStore.user?.id)
+    versions.value = (data || []) as any
+  } catch (e) {
+    versions.value = []
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+async function rollbackTo(versionId: number) {
+  if (!resume.value?.id) return
+  try {
+    const updated = await rollbackResumeVersion(String(resume.value.id), versionId, userStore.user?.id)
+    // 重新加载简历内容（以服务端为准）
+    resume.value = updated
+    await loadResume()
+    ElMessage.success('回滚成功')
+    await loadVersions()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '回滚失败')
+  }
+}
+
+function openJobGenerate() {
+  jobDialogVisible.value = true
+}
+
+function upsertSection(type: ModuleType) {
+  const sec = resumeData.value.sections.find((s) => s.type === type)
+  if (sec) return sec
+  const created = createNewSection(type, resumeData.value.sections)
+  resumeData.value.sections.push(created)
+  setSectionsKeepingBasic([...resumeData.value.sections])
+  return created
+}
+
+async function generateByJob() {
+  const jobTitle = String(jobForm.value.jobTitle || '').trim()
+  if (!jobTitle) {
+    ElMessage.warning('请输入岗位名称')
+    return
+  }
+  jobGenerating.value = true
+  try {
+    const res = await aiGenerate({ jobTitle })
+    if (res.code !== 200) throw new Error(res.message || '生成失败')
+
+    // 1) profile.summary
+    if (res.data.summary) {
+      resumeData.value.profile.summary = res.data.summary
+    }
+
+    // 2) skills
+    if (Array.isArray(res.data.skills)) {
+      const sec = upsertSection('skills')
+      sec.visible = true
+      sec.items = [...res.data.skills]
+    }
+
+    // 3) projects（尽量按类型结构填充）
+    if (Array.isArray(res.data.projects)) {
+      const sec = upsertSection('projects')
+      sec.visible = true
+      sec.items = res.data.projects.map((p: any) => ({
+        name: p.name || '项目（示例）',
+        role: p.role || '',
+        duration: p.duration || { start: '', end: '' },
+        desc: p.desc || '',
+      }))
+    }
+
+    ElMessage.success('已生成并填充（Mock）')
+    jobDialogVisible.value = false
+  } catch (e: any) {
+    ElMessage.error(e?.message || '生成失败')
+  } finally {
+    jobGenerating.value = false
   }
 }
 
@@ -885,7 +1119,7 @@ watch(templateData, (newTemplate) => {
   width: 30%;
   min-width: 480px;
   background: white;
-  overflow-y: auto;
+  overflow: hidden;
   border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
@@ -923,6 +1157,7 @@ watch(templateData, (newTemplate) => {
 .editor-content {
   flex: 1;
   padding: 20px 24px 20px 20px; /* 右侧增加更多边距，避免挤到滚动条 */
+  min-height: 0; /* 关键：让 flex 子项可正确滚动，不“留白” */
   overflow-y: auto;
 }
 
@@ -984,6 +1219,13 @@ watch(templateData, (newTemplate) => {
 .preview-header h3 {
   margin: 0;
   color: #333;
+}
+
+.versions-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .preview-container {

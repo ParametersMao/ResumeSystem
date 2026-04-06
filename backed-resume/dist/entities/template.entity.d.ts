@@ -4,6 +4,7 @@ export declare class Template {
     templateData: string;
     previewImage: string;
     description: string;
+    industryTags: string | null;
     status: boolean;
     createTime: Date;
     updateTime: Date;

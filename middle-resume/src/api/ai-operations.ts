@@ -21,7 +21,7 @@ export const getAiOperationDetail = (id: number) => {
  * 创建AI操作记录
  * POST /api/ai-operations
  */
-export const createAiOperation = (data: { userId: number; operationType: string; prompt: string; response: string; tokenUsed: number }) => {
+export const createAiOperation = (data: { userId: number; operationType: string; inputData?: string; outputData?: string; tokenUsed?: number }) => {
   return request.post('/ai-operations', data)
 }
 

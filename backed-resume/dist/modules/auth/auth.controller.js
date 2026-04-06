@@ -36,6 +36,9 @@ let AuthController = class AuthController {
         if (!req.user || !req.user.id) {
             throw new common_1.UnauthorizedException('用户信息无效');
         }
+        if (req.user.type !== 'admin') {
+            throw new common_1.UnauthorizedException('无权限');
+        }
         const profile = await this.authService.getProfile(req.user.id);
         return {
             code: 200,
@@ -63,11 +66,28 @@ let AuthController = class AuthController {
         if (!req.user || !req.user.id) {
             throw new common_1.UnauthorizedException('用户信息无效');
         }
+        if (req.user.type !== 'cuser') {
+            throw new common_1.UnauthorizedException('无权限');
+        }
         const profile = await this.authService.getCuserProfile(req.user.id);
         return {
             code: 200,
             message: 'success',
             data: profile,
+        };
+    }
+    async getCuserCenter(req) {
+        if (!req.user || !req.user.id) {
+            throw new common_1.UnauthorizedException('用户信息无效');
+        }
+        if (req.user.type !== 'cuser') {
+            throw new common_1.UnauthorizedException('无权限');
+        }
+        const center = await this.authService.getCuserCenter(req.user.id);
+        return {
+            code: 200,
+            message: 'success',
+            data: center,
         };
     }
 };
@@ -112,6 +132,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "getCuserProfile", null);
+__decorate([
+    (0, common_1.Get)('cuser/center'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "getCuserCenter", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('api/auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService])

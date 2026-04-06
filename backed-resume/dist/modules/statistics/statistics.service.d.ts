@@ -13,8 +13,10 @@ export declare class StatisticsService {
     private templateUsageRepository;
     private resumeDownloadRepository;
     constructor(statisticRepository: Repository<Statistic>, templateRepository: Repository<Template>, cUserRepository: Repository<CUser>, aiOperationRepository: Repository<AiOperation>, templateUsageRepository: Repository<TemplateUsage>, resumeDownloadRepository: Repository<ResumeDownload>);
+    private safeCount;
+    private safeRawMany;
     getOverview(): Promise<any>;
     getTrendData(period?: string): Promise<any>;
-    getPopularTemplates(): Promise<any>;
+    getPopularTemplates(limit?: number): Promise<any>;
     getUserActivity(): Promise<any>;
 }

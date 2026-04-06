@@ -178,6 +178,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { AiOperation } from '@/types'
+import { getAiOperationDetail, getAiOperationList, deleteAiOperation } from '@/api/ai-operations'
 
 // 搜索表单
 const searchForm = reactive({
@@ -206,34 +207,34 @@ const currentOperation = ref<AiOperation | null>(null)
 const getOperationList = async () => {
   loading.value = true
   try {
-    // 模拟API调用
-    const mockData: AiOperation[] = [
-      {
-        id: 1,
-        userId: 1,
-        username: '张三',
-        operationType: 'polish',
-        inputData: '这是一段需要润色的简历内容...',
-        outputData: '经过AI润色后的简历内容，更加专业和吸引人...',
-        status: 'success',
-        createdAt: '2024-01-15T14:30:00Z',
-        processingTime: 1500
-      },
-      {
-        id: 2,
-        userId: 2,
-        username: '李四',
-        operationType: 'generate',
-        inputData: '根据以下信息生成简历：姓名、工作经验...',
-        outputData: '生成的完整简历内容，包含个人信息、工作经验、技能等...',
-        status: 'success',
-        createdAt: '2024-01-15T13:45:00Z',
-        processingTime: 2300
-      }
-    ]
-    
-    operationList.value = mockData
-    pagination.total = mockData.length
+    const res = await getAiOperationList({
+      page: pagination.page,
+      limit: pagination.pageSize,
+      operationType: searchForm.operationType || undefined
+    })
+
+    const { list, total } = res.data.data
+    let mapped: AiOperation[] = (list || []).map((item: any) => ({
+      id: item.id,
+      userId: item.userId,
+      username: item.username || '',
+      operationType: item.operationType,
+      inputData: item.inputData || '',
+      outputData: item.outputData || '',
+      // 后端当前不提供 status/processingTime，这里用真实记录“存在即成功”做展示兜底
+      status: 'success',
+      createdAt: item.createTime,
+      processingTime: undefined
+    }))
+
+    // username/dateRange/status 目前后端不支持筛选，这里先做轻量的前端过滤（不改变后端分页）
+    if (searchForm.username) {
+      const keyword = searchForm.username.trim()
+      mapped = mapped.filter(i => (i.username || '').includes(keyword))
+    }
+
+    operationList.value = mapped
+    pagination.total = total
   } catch (error) {
     ElMessage.error('获取操作列表失败')
   } finally {
@@ -269,9 +270,25 @@ const handleExport = () => {
 }
 
 // 查看详情
-const handleView = (row: AiOperation) => {
-  currentOperation.value = row
-  detailVisible.value = true
+const handleView = async (row: AiOperation) => {
+  try {
+    const res = await getAiOperationDetail(row.id)
+    const data = res.data.data
+    currentOperation.value = {
+      id: data.id,
+      userId: data.userId,
+      username: data.username || row.username,
+      operationType: data.operationType,
+      inputData: data.inputData || '',
+      outputData: data.outputData || '',
+      status: 'success',
+      createdAt: data.createTime,
+      processingTime: undefined
+    }
+    detailVisible.value = true
+  } catch (e) {
+    ElMessage.error('获取详情失败')
+  }
 }
 
 // 删除
@@ -282,14 +299,9 @@ const handleDelete = async (row: AiOperation) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    
-    // 模拟API调用
-    const index = operationList.value.findIndex(item => item.id === row.id)
-    if (index > -1) {
-      operationList.value.splice(index, 1)
-      pagination.total--
-    }
+    await deleteAiOperation(row.id)
     ElMessage.success('删除成功')
+    getOperationList()
   } catch {
     // 用户取消
   }

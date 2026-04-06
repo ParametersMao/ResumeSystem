@@ -17,6 +17,7 @@ let Template = class Template {
     templateData;
     previewImage;
     description;
+    industryTags;
     status;
     createTime;
     updateTime;
@@ -44,6 +45,10 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Template.prototype, "description", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true, name: 'industry_tags' }),
+    __metadata("design:type", Object)
+], Template.prototype, "industryTags", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)

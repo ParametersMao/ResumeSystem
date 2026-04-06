@@ -14,11 +14,6 @@ import { useUserStore } from '@/store/modules/user'
 
 import './styles/index.css'
 
-// 默认启用暗色主题（Element Plus 基于 .dark 选择器切换 css vars）
-if (!document.documentElement.classList.contains('dark')) {
-  document.documentElement.classList.add('dark')
-}
-
 const app = createApp(App)
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)

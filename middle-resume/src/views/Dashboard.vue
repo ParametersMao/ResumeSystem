@@ -110,31 +110,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { getStatisticsOverview, getStatisticsTrend, getUserActivity } from '@/api/statistics'
 
 // 统计数据
 const stats = ref([
   {
     title: '总用户数',
-    value: '1,234',
+    value: '-',
     icon: 'User',
     color: '#409EFF'
   },
   {
-    title: '今日简历生成',
-    value: '89',
+    title: '今日新增用户',
+    value: '-',
     icon: 'Document',
     color: '#67C23A'
   },
   {
-    title: '活跃模板',
-    value: '45',
+    title: '模板总数',
+    value: '-',
     icon: 'Files',
     color: '#E6A23C'
   },
   {
     title: 'AI调用次数',
-    value: '2,567',
+    value: '-',
     icon: 'Cpu',
     color: '#F56C6C'
   }
@@ -146,21 +147,21 @@ const recentActivities = ref([
     id: 1,
     username: '张三',
     avatar: '',
-    action: '生成了新的简历',
+    action: 'AI调用次数最高',
     time: new Date(Date.now() - 5 * 60 * 1000)
   },
   {
     id: 2,
     username: '李四',
     avatar: '',
-    action: '更新了个人信息',
+    action: 'AI调用次数较高',
     time: new Date(Date.now() - 15 * 60 * 1000)
   },
   {
     id: 3,
     username: '王五',
     avatar: '',
-    action: '使用了AI润色功能',
+    action: 'AI调用次数较高',
     time: new Date(Date.now() - 30 * 60 * 1000)
   }
 ])
@@ -183,12 +184,50 @@ const formatTime = (time: Date) => {
 
 // 刷新图表
 const refreshResumeChart = () => {
-  console.log('刷新简历图表')
+  init()
 }
 
 const refreshTemplateChart = () => {
-  console.log('刷新模板图表')
+  init()
 }
+
+const init = async () => {
+  try {
+    const [overviewRes, trendRes, userActivityRes] = await Promise.all([
+      getStatisticsOverview(),
+      getStatisticsTrend({ period: 'day' }),
+      getUserActivity({ limit: 3 })
+    ])
+
+    const overview = overviewRes.data.data
+    const trend = trendRes.data.data
+    const today = new Date().toISOString().slice(0, 10)
+    const todayNewUsers = (trend.user_trend || []).reduce((sum: number, item: any) => {
+      return item.date === today ? sum + Number(item.count || 0) : sum
+    }, 0)
+
+    stats.value[0].value = String(overview.total_users ?? 0)
+    stats.value[1].value = String(todayNewUsers)
+    stats.value[2].value = String(overview.total_templates ?? 0)
+    stats.value[3].value = String(overview.total_ai_operations ?? 0)
+
+    const users = userActivityRes.data.data || []
+    // “最近活动”当前用真实数据做替代：展示活跃用户排行
+    recentActivities.value = users.map((u: any, idx: number) => ({
+      id: u.id ?? idx + 1,
+      username: u.username,
+      avatar: '',
+      action: `AI调用 ${u.aiOperationCount ?? u.ai_operation_count ?? 0} 次`,
+      time: new Date()
+    }))
+  } catch (e) {
+    // 页面可渲染，失败时保留占位值
+  }
+}
+
+onMounted(() => {
+  init()
+})
 </script>
 
 <style scoped>

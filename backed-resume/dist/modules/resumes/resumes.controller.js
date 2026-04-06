@@ -69,6 +69,28 @@ let ResumesController = class ResumesController {
             data: { url },
         };
     }
+    async listVersions(id, userId) {
+        const versions = await this.resumesService.listVersions(+id, userId ? +userId : undefined);
+        return {
+            code: 200,
+            message: 'success',
+            data: versions.map(v => ({
+                id: v.id,
+                resumeId: v.resumeId,
+                userId: v.userId,
+                sourceVersion: v.sourceVersion,
+                createTime: v.createTime,
+            })),
+        };
+    }
+    async rollback(id, versionId, userId) {
+        const resume = await this.resumesService.rollback(+id, Number(versionId), userId ? +userId : undefined);
+        return {
+            code: 200,
+            message: '回滚成功',
+            data: resume,
+        };
+    }
 };
 exports.ResumesController = ResumesController;
 __decorate([
@@ -119,6 +141,23 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ResumesController.prototype, "exportPdf", null);
+__decorate([
+    (0, common_1.Get)(':id/versions'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Query)('userId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ResumesController.prototype, "listVersions", null);
+__decorate([
+    (0, common_1.Post)(':id/rollback'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)('versionId')),
+    __param(2, (0, common_1.Query)('userId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, String]),
+    __metadata("design:returntype", Promise)
+], ResumesController.prototype, "rollback", null);
 exports.ResumesController = ResumesController = __decorate([
     (0, common_1.Controller)('api/resumes'),
     __metadata("design:paramtypes", [resumes_service_1.ResumesService])

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiOperation } from '../../entities/ai-operation.entity';
@@ -56,15 +56,46 @@ export class AiOperationsService {
   }
 
   async create(createAiOperationDto: CreateAiOperationDto): Promise<AiOperation> {
-    const operation = this.aiOperationRepository.create({
-      userId: createAiOperationDto.userId,
-      operationType: createAiOperationDto.operationType,
-      inputData: createAiOperationDto.inputData,
-      outputData: createAiOperationDto.outputData,
-      tokenUsed: createAiOperationDto.tokenUsed ?? 0,
+    return this.aiOperationRepository.manager.transaction(async (manager) => {
+      const userId = createAiOperationDto.userId;
+
+      // 兜底：如果历史环境没有回填权益记录，这里先补一条默认记录
+      await manager.query(
+        `INSERT IGNORE INTO c_user_entitlements
+          (user_id, plan_code, account_weight, ai_free_total, ai_free_used, ai_free_reset_policy, expire_at)
+         VALUES (?, 'free', 0, 20, 0, 'never', NULL)`,
+        [userId],
+      );
+
+      // 并发安全扣减：仅当 ai_free_used < ai_free_total 时才 +1
+      const updateResult: any = await manager.query(
+        `UPDATE c_user_entitlements
+         SET ai_free_used = ai_free_used + 1
+         WHERE user_id = ? AND ai_free_used < ai_free_total`,
+        [userId],
+      );
+
+      const affectedRows = updateResult?.affectedRows ?? updateResult?.[0]?.affectedRows ?? 0;
+      if (!affectedRows) {
+        throw new ForbiddenException('AI 免费次数不足');
+      }
+
+      // 同步历史累计统计字段（用于现有统计接口）
+      await manager.query(
+        `UPDATE c_users SET ai_operation_count = ai_operation_count + 1 WHERE id = ?`,
+        [userId],
+      );
+
+      const operation = manager.getRepository(AiOperation).create({
+        userId,
+        operationType: createAiOperationDto.operationType,
+        inputData: createAiOperationDto.inputData,
+        outputData: createAiOperationDto.outputData,
+        tokenUsed: createAiOperationDto.tokenUsed ?? 0,
+      });
+
+      return manager.getRepository(AiOperation).save(operation);
     });
-    
-    return this.aiOperationRepository.save(operation);
   }
 
   async remove(id: number): Promise<void> {

@@ -16,6 +16,7 @@ class CreateTemplateDto {
     templateData;
     previewImage;
     description;
+    industryTags;
     status;
 }
 exports.CreateTemplateDto = CreateTemplateDto;
@@ -39,6 +40,11 @@ __decorate([
 ], CreateTemplateDto.prototype, "description", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateTemplateDto.prototype, "industryTags", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateTemplateDto.prototype, "status", void 0);
@@ -47,6 +53,7 @@ class UpdateTemplateDto {
     templateData;
     previewImage;
     description;
+    industryTags;
     status;
 }
 exports.UpdateTemplateDto = UpdateTemplateDto;
@@ -72,6 +79,11 @@ __decorate([
 ], UpdateTemplateDto.prototype, "description", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateTemplateDto.prototype, "industryTags", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], UpdateTemplateDto.prototype, "status", void 0);
@@ -80,6 +92,7 @@ class TemplateListResponseDto {
     templateName;
     previewImage;
     description;
+    industryTags;
     status;
     createTime;
     updateTime;
@@ -93,6 +106,7 @@ class TemplateDetailResponseDto {
     templateData;
     previewImage;
     description;
+    industryTags;
     status;
     createTime;
     updateTime;
@@ -106,6 +120,7 @@ class TemplateResponseDto {
     templateData;
     previewImage;
     description;
+    industryTags;
     status;
     createTime;
     updateTime;

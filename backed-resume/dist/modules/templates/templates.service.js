@@ -23,9 +23,9 @@ let TemplatesService = class TemplatesService {
         this.templateRepository = templateRepository;
     }
     async findAll(searchDto) {
-        const { page = 1, limit = 10, templateName, description, status } = searchDto;
+        const { page = 1, limit = 10, templateName, description, status, industryTags } = searchDto;
         const skip = (page - 1) * limit;
-        console.log('Template search params:', { page, limit, templateName, description, status });
+        console.log('Template search params:', { page, limit, templateName, description, status, industryTags });
         try {
             const queryBuilder = this.templateRepository.createQueryBuilder('template');
             if (templateName && templateName.trim() !== '') {
@@ -40,6 +40,16 @@ let TemplatesService = class TemplatesService {
             }
             if (status === true || status === false) {
                 queryBuilder.andWhere('template.status = :status', { status });
+            }
+            if (industryTags && industryTags.trim() !== '') {
+                const tags = industryTags
+                    .split(',')
+                    .map(t => t.trim())
+                    .filter(Boolean)
+                    .slice(0, 10);
+                for (const tag of tags) {
+                    queryBuilder.andWhere('FIND_IN_SET(:tag, template.industry_tags) > 0', { tag });
+                }
             }
             const rawQuery = queryBuilder.getSql();
             console.log('Generated SQL query:', rawQuery);
@@ -77,12 +87,13 @@ let TemplatesService = class TemplatesService {
         return template;
     }
     async create(createTemplateDto) {
-        const { templateName, templateData, previewImage, description, status } = createTemplateDto;
+        const { templateName, templateData, previewImage, description, status, industryTags } = createTemplateDto;
         const template = this.templateRepository.create({
             templateName,
             templateData,
             previewImage,
             description,
+            industryTags: industryTags ?? null,
             status,
         });
         const savedTemplate = await this.templateRepository.save(template);
@@ -110,6 +121,7 @@ let TemplatesService = class TemplatesService {
             templateName: template.templateName,
             previewImage: template.previewImage,
             description: template.description,
+            industryTags: template.industryTags ?? undefined,
             status: template.status,
             createTime: template.createTime,
             updateTime: template.updateTime,
@@ -124,6 +136,7 @@ let TemplatesService = class TemplatesService {
             templateData: template.templateData,
             previewImage: template.previewImage,
             description: template.description,
+            industryTags: template.industryTags ?? undefined,
             status: template.status,
             createTime: template.createTime,
             updateTime: template.updateTime,
@@ -138,6 +151,7 @@ let TemplatesService = class TemplatesService {
             templateData: template.templateData,
             previewImage: template.previewImage,
             description: template.description,
+            industryTags: template.industryTags ?? undefined,
             status: template.status,
             createTime: template.createTime,
             updateTime: template.updateTime,

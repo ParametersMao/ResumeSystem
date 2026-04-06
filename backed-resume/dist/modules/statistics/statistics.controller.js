@@ -36,8 +36,8 @@ let StatisticsController = class StatisticsController {
             data: trend,
         };
     }
-    async getPopularTemplates() {
-        const templates = await this.statisticsService.getPopularTemplates();
+    async getPopularTemplates(limit) {
+        const templates = await this.statisticsService.getPopularTemplates(limit ? Number(limit) : undefined);
         return {
             code: 200,
             message: 'success',
@@ -69,8 +69,9 @@ __decorate([
 ], StatisticsController.prototype, "getTrend", null);
 __decorate([
     (0, common_1.Get)('popular-templates'),
+    __param(0, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], StatisticsController.prototype, "getPopularTemplates", null);
 __decorate([

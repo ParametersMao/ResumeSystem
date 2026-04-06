@@ -10,12 +10,14 @@ const ResumeEditor = () => import('@/views/ResumeEditorNew.vue')
 const Preview = () => import('@/views/Preview.vue')
 const Resumes = () => import('@/views/Resumes.vue')
 const Contact = () => import('@/views/Contact.vue')
+const Profile = () => import('@/views/Profile.vue')
 const AppLayout = () => import('@/layouts/AppLayout.vue')
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: Login, meta: { requiresAuth: false } },
   // 独立的简历编辑器页面（全屏）
   { path: '/resume-editor', component: ResumeEditor, meta: { requiresAuth: true } },
+  { path: '/profile', redirect: '/account' },
   {
     path: '/',
     component: AppLayout,
@@ -28,7 +30,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'contact', component: Contact, meta: { requiresAuth: false } },
       { path: 'positions', component: Resumes, meta: { requiresAuth: true } },
       { path: 'mock', component: Resumes, meta: { requiresAuth: true } },
-      { path: 'account', component: Resumes, meta: { requiresAuth: true } },
+      { path: 'account', component: Profile, meta: { requiresAuth: true } },
       { path: 'editor/:resumeId', component: Editor, props: true, meta: { requiresAuth: true } },
       { path: 'preview/:resumeId', component: Preview, props: true, meta: { requiresAuth: true } }
     ]

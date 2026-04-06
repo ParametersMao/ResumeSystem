@@ -27,8 +27,8 @@ export class StatisticsController {
   }
 
   @Get('popular-templates')
-  async getPopularTemplates(): Promise<ApiResponse<any>> {
-    const templates = await this.statisticsService.getPopularTemplates();
+  async getPopularTemplates(@Query('limit') limit?: string): Promise<ApiResponse<any>> {
+    const templates = await this.statisticsService.getPopularTemplates(limit ? Number(limit) : undefined);
     return {
       code: 200,
       message: 'success',

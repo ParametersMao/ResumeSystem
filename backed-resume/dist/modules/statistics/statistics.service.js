@@ -37,13 +37,29 @@ let StatisticsService = class StatisticsService {
         this.templateUsageRepository = templateUsageRepository;
         this.resumeDownloadRepository = resumeDownloadRepository;
     }
+    async safeCount(repo, fallback = 0) {
+        try {
+            return await repo.count();
+        }
+        catch (e) {
+            return fallback;
+        }
+    }
+    async safeRawMany(fn, fallback = []) {
+        try {
+            return await fn();
+        }
+        catch (e) {
+            return fallback;
+        }
+    }
     async getOverview() {
         const [totalUsers, totalTemplates, totalAiOperations, totalDownloads, totalTemplateUsage] = await Promise.all([
-            this.cUserRepository.count(),
-            this.templateRepository.count(),
-            this.aiOperationRepository.count(),
-            this.resumeDownloadRepository.count(),
-            this.templateUsageRepository.count(),
+            this.safeCount(this.cUserRepository),
+            this.safeCount(this.templateRepository),
+            this.safeCount(this.aiOperationRepository),
+            this.safeCount(this.resumeDownloadRepository),
+            this.safeCount(this.templateUsageRepository),
         ]);
         return {
             total_users: totalUsers,
@@ -67,30 +83,30 @@ let StatisticsService = class StatisticsService {
                 startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         }
         const [userTrend, aiOperationTrend, downloadTrend] = await Promise.all([
-            this.cUserRepository
+            this.safeRawMany(() => this.cUserRepository
                 .createQueryBuilder('user')
                 .select('DATE(user.create_time)', 'date')
                 .addSelect('COUNT(*)', 'count')
                 .where('user.create_time >= :startDate', { startDate })
                 .groupBy('DATE(user.create_time)')
                 .orderBy('date', 'ASC')
-                .getRawMany(),
-            this.aiOperationRepository
+                .getRawMany()),
+            this.safeRawMany(() => this.aiOperationRepository
                 .createQueryBuilder('operation')
                 .select('DATE(operation.create_time)', 'date')
                 .addSelect('COUNT(*)', 'count')
                 .where('operation.create_time >= :startDate', { startDate })
                 .groupBy('DATE(operation.create_time)')
                 .orderBy('date', 'ASC')
-                .getRawMany(),
-            this.resumeDownloadRepository
+                .getRawMany()),
+            this.safeRawMany(() => this.resumeDownloadRepository
                 .createQueryBuilder('download')
                 .select('DATE(download.download_time)', 'date')
                 .addSelect('COUNT(*)', 'count')
                 .where('download.download_time >= :startDate', { startDate })
                 .groupBy('DATE(download.download_time)')
                 .orderBy('date', 'ASC')
-                .getRawMany(),
+                .getRawMany()),
         ]);
         return {
             user_trend: userTrend,
@@ -98,20 +114,23 @@ let StatisticsService = class StatisticsService {
             download_trend: downloadTrend,
         };
     }
-    async getPopularTemplates() {
-        const templates = await this.templateRepository
-            .createQueryBuilder('template')
-            .select([
-            'template.id',
-            'template.template_name',
-            'template.use_count',
-            'template.download_count',
-        ])
-            .orderBy('template.use_count', 'DESC')
-            .addOrderBy('template.download_count', 'DESC')
-            .limit(10)
-            .getMany();
-        return templates;
+    async getPopularTemplates(limit = 10) {
+        try {
+            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 50) : 10;
+            return await this.templateRepository.find({
+                select: {
+                    id: true,
+                    templateName: true,
+                    useCount: true,
+                    downloadCount: true,
+                },
+                order: { useCount: 'DESC', downloadCount: 'DESC' },
+                take: safeLimit,
+            });
+        }
+        catch (e) {
+            return [];
+        }
     }
     async getUserActivity() {
         const users = await this.cUserRepository
@@ -119,9 +138,9 @@ let StatisticsService = class StatisticsService {
             .select([
             'user.id',
             'user.username',
-            'user.ai_operation_count',
+            'user.aiOperationCount',
         ])
-            .orderBy('user.ai_operation_count', 'DESC')
+            .orderBy('user.aiOperationCount', 'DESC')
             .limit(10)
             .getMany();
         return users;

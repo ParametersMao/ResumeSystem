@@ -5,6 +5,11 @@ import { CUsersService } from '../c-users/c-users.service';
 import { LoginDto } from '../../dto/admin-user.dto';
 import { CreateCUserDto } from '../../dto/c-user.dto';
 import * as bcrypt from 'bcrypt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Resume } from '../../entities/resume.entity';
+import { CUserProfile } from '../../entities/c-user-profile.entity';
+import { CUserEntitlement } from '../../entities/c-user-entitlement.entity';
 
 @Injectable()
 export class AuthService {
@@ -12,6 +17,12 @@ export class AuthService {
     private adminUsersService: AdminUsersService,
     private cUsersService: CUsersService,
     private jwtService: JwtService,
+    @InjectRepository(Resume)
+    private resumeRepository: Repository<Resume>,
+    @InjectRepository(CUserProfile)
+    private cUserProfileRepository: Repository<CUserProfile>,
+    @InjectRepository(CUserEntitlement)
+    private cUserEntitlementRepository: Repository<CUserEntitlement>,
   ) {}
 
   async validateUser(username: string, password: string): Promise<any> {
@@ -36,7 +47,7 @@ export class AuthService {
         throw new UnauthorizedException('用户已被禁用');
       }
 
-      const payload = { username: user.username, sub: user.id, role: user.role };
+      const payload = { username: user.username, sub: user.id, role: user.role, type: 'admin' };
       return {
         access_token: this.jwtService.sign(payload),
         user: {
@@ -76,6 +87,20 @@ export class AuthService {
 
       // 创建用户
       const user = await this.cUsersService.create(createCUserDto);
+
+      // 初始化 1:1 资料/权益记录（即使迁移回填遗漏，也保证新用户有默认值）
+      await Promise.all([
+        this.cUserProfileRepository.save({ userId: user.id }),
+        this.cUserEntitlementRepository.save({
+          userId: user.id,
+          planCode: 'free',
+          accountWeight: 0,
+          aiFreeTotal: 20,
+          aiFreeUsed: 0,
+          aiFreeResetPolicy: 'never',
+          expireAt: null,
+        }),
+      ]);
 
       // 生成JWT token
       const payload = { username: user.username, sub: user.id, type: 'cuser' };
@@ -137,5 +162,58 @@ export class AuthService {
     const user = await this.cUsersService.findOne(userId);
     const { password, ...result } = user;
     return result;
+  }
+
+  async getCuserCenter(userId: number) {
+    const user = await this.cUsersService.findOne(userId);
+    const { password, ...safeUser } = user as any;
+
+    let [profile, entitlements, lastEditedResume] = await Promise.all([
+      this.cUserProfileRepository.findOne({ where: { userId } }),
+      this.cUserEntitlementRepository.findOne({ where: { userId } }),
+      this.resumeRepository.findOne({
+        where: { userId, status: 1 },
+        order: { updateTime: 'DESC' },
+        relations: ['template'],
+      }),
+    ]);
+
+    // 兜底：如果缺少 1:1 记录，则补齐默认值（避免历史环境未执行回填迁移）
+    if (!profile) {
+      profile = await this.cUserProfileRepository.save({ userId });
+    }
+    if (!entitlements) {
+      entitlements = await this.cUserEntitlementRepository.save({
+        userId,
+        planCode: 'free',
+        accountWeight: 0,
+        aiFreeTotal: 20,
+        aiFreeUsed: 0,
+        aiFreeResetPolicy: 'never',
+        expireAt: null,
+      });
+    }
+
+    const aiFreeRemaining = Math.max((entitlements.aiFreeTotal ?? 0) - (entitlements.aiFreeUsed ?? 0), 0);
+
+    return {
+      user: safeUser,
+      profile,
+      entitlements: {
+        ...entitlements,
+        aiFreeRemaining,
+      },
+      lastEditedResume: lastEditedResume
+        ? {
+            id: lastEditedResume.id,
+            title: lastEditedResume.title,
+            templateId: lastEditedResume.templateId,
+            templateName: lastEditedResume.template?.templateName,
+            previewImage: lastEditedResume.previewImage,
+            version: lastEditedResume.version,
+            updateTime: lastEditedResume.updateTime,
+          }
+        : null,
+    };
   }
 } 

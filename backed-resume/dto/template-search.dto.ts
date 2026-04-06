@@ -15,4 +15,8 @@ export class TemplateSearchDto extends PaginationDto {
   @IsBoolean()
   @Type(() => Boolean)
   status?: boolean;
+
+  @IsOptional()
+  @IsString()
+  industryTags?: string;
 }

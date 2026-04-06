@@ -17,8 +17,9 @@ export interface TemplateDetail extends TemplateMeta {
 type BackendTemplateList = { id: number; templateName: string; previewImage?: string; description?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; downloadCount?: number }
 type BackendTemplateDetail = { id: number; templateName: string; templateData: string; previewImage?: string; description?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; downloadCount?: number }
 
-export async function fetchTemplates(page = 1, limit = 20, keyword = '') {
-  const { data } = await http.get<ApiResponse<PageResult<BackendTemplateList>>>('/api/templates', { params: { page, limit, templateName: keyword, status: true } })
+export async function fetchTemplates(page = 1, limit = 20, keyword = '', industryTags: string[] = []) {
+  const tagParam = industryTags.length ? industryTags.join(',') : undefined
+  const { data } = await http.get<ApiResponse<PageResult<BackendTemplateList>>>('/api/templates', { params: { page, limit, templateName: keyword, status: true, industryTags: tagParam } })
   const mapped: PageResult<TemplateMeta> = {
     list: data.data.list.map((t) => ({
       templateId: String(t.id),

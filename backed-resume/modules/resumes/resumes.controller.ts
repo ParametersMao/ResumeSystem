@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { ResumesService } from './resumes.service';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { ApiResponse, PaginatedApiResponse } from '../../common/interfaces/pagination.interface';
@@ -78,6 +78,39 @@ export class ResumesController {
       code: 200,
       message: '导出成功',
       data: { url },
+    };
+  }
+
+  @Get(':id/versions')
+  async listVersions(
+    @Param('id') id: string,
+    @Query('userId') userId?: string,
+  ): Promise<ApiResponse<any[]>> {
+    const versions = await this.resumesService.listVersions(+id, userId ? +userId : undefined);
+    return {
+      code: 200,
+      message: 'success',
+      data: versions.map(v => ({
+        id: v.id,
+        resumeId: v.resumeId,
+        userId: v.userId,
+        sourceVersion: v.sourceVersion,
+        createTime: v.createTime,
+      })),
+    };
+  }
+
+  @Post(':id/rollback')
+  async rollback(
+    @Param('id') id: string,
+    @Body('versionId') versionId: number,
+    @Query('userId') userId?: string,
+  ): Promise<ApiResponse<ResumeResponseDto>> {
+    const resume = await this.resumesService.rollback(+id, Number(versionId), userId ? +userId : undefined);
+    return {
+      code: 200,
+      message: '回滚成功',
+      data: resume,
     };
   }
 } 

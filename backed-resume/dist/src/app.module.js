@@ -19,6 +19,11 @@ const ai_operation_entity_1 = require("../entities/ai-operation.entity");
 const statistic_entity_1 = require("../entities/statistic.entity");
 const template_usage_entity_1 = require("../entities/template-usage.entity");
 const resume_download_entity_1 = require("../entities/resume-download.entity");
+const resume_entity_1 = require("../entities/resume.entity");
+const c_user_profile_entity_1 = require("../entities/c-user-profile.entity");
+const c_user_entitlement_entity_1 = require("../entities/c-user-entitlement.entity");
+const resume_version_entity_1 = require("../entities/resume-version.entity");
+const system_log_entity_1 = require("../entities/system-log.entity");
 const admin_users_module_1 = require("../modules/admin-users/admin-users.module");
 const auth_module_1 = require("../modules/auth/auth.module");
 const c_users_module_1 = require("../modules/c-users/c-users.module");
@@ -26,6 +31,11 @@ const templates_module_1 = require("../modules/templates/templates.module");
 const ai_operations_module_1 = require("../modules/ai-operations/ai-operations.module");
 const statistics_module_1 = require("../modules/statistics/statistics.module");
 const resumes_module_1 = require("../modules/resumes/resumes.module");
+const cuser_profile_module_1 = require("../modules/cuser-profile/cuser-profile.module");
+const system_logs_module_1 = require("../modules/system-logs/system-logs.module");
+const ai_module_1 = require("../modules/ai/ai.module");
+const core_1 = require("@nestjs/core");
+const audit_log_interceptor_1 = require("./interceptors/audit-log.interceptor");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -50,6 +60,11 @@ exports.AppModule = AppModule = __decorate([
                     statistic_entity_1.Statistic,
                     template_usage_entity_1.TemplateUsage,
                     resume_download_entity_1.ResumeDownload,
+                    resume_entity_1.Resume,
+                    resume_version_entity_1.ResumeVersion,
+                    c_user_profile_entity_1.CUserProfile,
+                    c_user_entitlement_entity_1.CUserEntitlement,
+                    system_log_entity_1.SystemLog,
                 ],
                 synchronize: false,
                 logging: process.env.NODE_ENV !== 'production',
@@ -61,9 +76,18 @@ exports.AppModule = AppModule = __decorate([
             ai_operations_module_1.AiOperationsModule,
             statistics_module_1.StatisticsModule,
             resumes_module_1.ResumesModule,
+            cuser_profile_module_1.CuserProfileModule,
+            system_logs_module_1.SystemLogsModule,
+            ai_module_1.AiModule,
         ],
         controllers: [app_controller_1.AppController],
-        providers: [app_service_1.AppService],
+        providers: [
+            app_service_1.AppService,
+            {
+                provide: core_1.APP_INTERCEPTOR,
+                useClass: audit_log_interceptor_1.AuditLogInterceptor,
+            },
+        ],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

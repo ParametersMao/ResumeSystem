@@ -16,6 +16,10 @@ export class CreateTemplateDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  industryTags?: string;
+
+  @IsOptional()
   @IsBoolean()
   status?: boolean;
 }
@@ -38,6 +42,10 @@ export class UpdateTemplateDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  industryTags?: string;
+
+  @IsOptional()
   @IsBoolean()
   status?: boolean;
 }
@@ -48,6 +56,7 @@ export class TemplateListResponseDto {
   templateName: string;
   previewImage?: string;
   description?: string;
+  industryTags?: string;
   status?: boolean;
   createTime: Date;
   updateTime: Date;
@@ -62,6 +71,7 @@ export class TemplateDetailResponseDto {
   templateData: string;
   previewImage?: string;
   description?: string;
+  industryTags?: string;
   status?: boolean;
   createTime: Date;
   updateTime: Date;
@@ -76,6 +86,7 @@ export class TemplateResponseDto {
   templateData: string;
   previewImage?: string;
   description?: string;
+  industryTags?: string;
   status?: boolean;
   createTime: Date;
   updateTime: Date;

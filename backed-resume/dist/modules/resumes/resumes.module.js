@@ -12,12 +12,13 @@ const typeorm_1 = require("@nestjs/typeorm");
 const resumes_service_1 = require("./resumes.service");
 const resumes_controller_1 = require("./resumes.controller");
 const resume_entity_1 = require("../../entities/resume.entity");
+const resume_version_entity_1 = require("../../entities/resume-version.entity");
 let ResumesModule = class ResumesModule {
 };
 exports.ResumesModule = ResumesModule;
 exports.ResumesModule = ResumesModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([resume_entity_1.Resume])],
+        imports: [typeorm_1.TypeOrmModule.forFeature([resume_entity_1.Resume, resume_version_entity_1.ResumeVersion])],
         providers: [resumes_service_1.ResumesService],
         controllers: [resumes_controller_1.ResumesController],
         exports: [resumes_service_1.ResumesService],

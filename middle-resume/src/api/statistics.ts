@@ -12,7 +12,7 @@ export const getStatisticsOverview = () => {
  * 趋势图表数据
  * GET /api/statistics/trend
  */
-export const getStatisticsTrend = (params: { type: string; days: number }) => {
+export const getStatisticsTrend = (params?: { period?: 'day' | 'week' | 'month' }) => {
   return request.get('/statistics/trend', { params })
 }
 

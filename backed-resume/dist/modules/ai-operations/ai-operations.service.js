@@ -58,14 +58,28 @@ let AiOperationsService = class AiOperationsService {
         return operation;
     }
     async create(createAiOperationDto) {
-        const operation = this.aiOperationRepository.create({
-            userId: createAiOperationDto.userId,
-            operationType: createAiOperationDto.operationType,
-            inputData: createAiOperationDto.inputData,
-            outputData: createAiOperationDto.outputData,
-            tokenUsed: createAiOperationDto.tokenUsed ?? 0,
+        return this.aiOperationRepository.manager.transaction(async (manager) => {
+            const userId = createAiOperationDto.userId;
+            await manager.query(`INSERT IGNORE INTO c_user_entitlements
+          (user_id, plan_code, account_weight, ai_free_total, ai_free_used, ai_free_reset_policy, expire_at)
+         VALUES (?, 'free', 0, 20, 0, 'never', NULL)`, [userId]);
+            const updateResult = await manager.query(`UPDATE c_user_entitlements
+         SET ai_free_used = ai_free_used + 1
+         WHERE user_id = ? AND ai_free_used < ai_free_total`, [userId]);
+            const affectedRows = updateResult?.affectedRows ?? updateResult?.[0]?.affectedRows ?? 0;
+            if (!affectedRows) {
+                throw new common_1.ForbiddenException('AI 免费次数不足');
+            }
+            await manager.query(`UPDATE c_users SET ai_operation_count = ai_operation_count + 1 WHERE id = ?`, [userId]);
+            const operation = manager.getRepository(ai_operation_entity_1.AiOperation).create({
+                userId,
+                operationType: createAiOperationDto.operationType,
+                inputData: createAiOperationDto.inputData,
+                outputData: createAiOperationDto.outputData,
+                tokenUsed: createAiOperationDto.tokenUsed ?? 0,
+            });
+            return manager.getRepository(ai_operation_entity_1.AiOperation).save(operation);
         });
-        return this.aiOperationRepository.save(operation);
     }
     async remove(id) {
         const operation = await this.findOne(id);

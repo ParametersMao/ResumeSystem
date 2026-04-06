@@ -4,6 +4,7 @@ const core_1 = require("@nestjs/core");
 const app_module_1 = require("./app.module");
 const common_1 = require("@nestjs/common");
 const express = require("express");
+const path_1 = require("path");
 async function bootstrap() {
     process.on('uncaughtException', (err) => {
         console.error('uncaughtException:', err);
@@ -18,6 +19,8 @@ async function bootstrap() {
     }));
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ limit: '50mb', extended: true }));
+    app.use('/uploads', express.static((0, path_1.join)(process.cwd(), 'uploads')));
+    app.use('/mock', express.static((0, path_1.join)(process.cwd(), 'public', 'mock')));
     await app.listen(process.env.PORT || 3030);
     console.log(`服务已启动，监听端口：${process.env.PORT || 3030}`);
 }

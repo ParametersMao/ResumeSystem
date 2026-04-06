@@ -15,11 +15,11 @@ export class TemplatesService {
   ) {}
 
   async findAll(searchDto: TemplateSearchDto): Promise<PaginationResponse<TemplateListResponseDto>> {
-    const { page = 1, limit = 10, templateName, description, status } = searchDto;
+    const { page = 1, limit = 10, templateName, description, status, industryTags } = searchDto;
     const skip = (page - 1) * limit;
     
     // 打印接收到的查询参数，用于调试
-    console.log('Template search params:', { page, limit, templateName, description, status });
+    console.log('Template search params:', { page, limit, templateName, description, status, industryTags });
     
     try {
       // 构建查询条件
@@ -41,6 +41,19 @@ export class TemplatesService {
       // 明确检查布尔值
       if (status === true || status === false) {
         queryBuilder.andWhere('template.status = :status', { status });
+      }
+
+      // 行业标签筛选：前端传 industryTags=互联网,金融（逗号分隔）
+      if (industryTags && industryTags.trim() !== '') {
+        const tags = industryTags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean)
+          .slice(0, 10);
+        for (const tag of tags) {
+          // MySQL: FIND_IN_SET(tag, industry_tags) > 0
+          queryBuilder.andWhere('FIND_IN_SET(:tag, template.industry_tags) > 0', { tag });
+        }
       }
       
       // 打印生成的SQL，用于调试
@@ -90,12 +103,13 @@ export class TemplatesService {
   }
 
   async create(createTemplateDto: CreateTemplateDto): Promise<TemplateResponseDto> {
-    const { templateName, templateData, previewImage, description, status } = createTemplateDto;
+    const { templateName, templateData, previewImage, description, status, industryTags } = createTemplateDto;
     const template = this.templateRepository.create({
       templateName,
       templateData, // Keep as string, do not parse
       previewImage,
       description,
+      industryTags: industryTags ?? null,
       status,
     });
     const savedTemplate = await this.templateRepository.save(template);
@@ -132,6 +146,7 @@ export class TemplatesService {
       // 列表不包含 templateData 以提高性能
       previewImage: template.previewImage,
       description: template.description,
+      industryTags: template.industryTags ?? undefined,
       status: template.status,
       createTime: template.createTime,
       updateTime: template.updateTime,
@@ -147,6 +162,7 @@ export class TemplatesService {
       templateData: template.templateData, // 详情包含完整的 templateData
       previewImage: template.previewImage,
       description: template.description,
+      industryTags: template.industryTags ?? undefined,
       status: template.status,
       createTime: template.createTime,
       updateTime: template.updateTime,
@@ -162,6 +178,7 @@ export class TemplatesService {
       templateData: template.templateData,
       previewImage: template.previewImage,
       description: template.description,
+      industryTags: template.industryTags ?? undefined,
       status: template.status,
       createTime: template.createTime,
       updateTime: template.updateTime,

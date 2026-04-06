@@ -10,11 +10,15 @@ exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const passport_1 = require("@nestjs/passport");
+const typeorm_1 = require("@nestjs/typeorm");
 const auth_service_1 = require("./auth.service");
 const auth_controller_1 = require("./auth.controller");
 const admin_users_module_1 = require("../admin-users/admin-users.module");
 const c_users_module_1 = require("../c-users/c-users.module");
 const jwt_strategy_1 = require("./jwt.strategy");
+const resume_entity_1 = require("../../entities/resume.entity");
+const c_user_profile_entity_1 = require("../../entities/c-user-profile.entity");
+const c_user_entitlement_entity_1 = require("../../entities/c-user-entitlement.entity");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -23,6 +27,7 @@ exports.AuthModule = AuthModule = __decorate([
         imports: [
             admin_users_module_1.AdminUsersModule,
             c_users_module_1.CUsersModule,
+            typeorm_1.TypeOrmModule.forFeature([resume_entity_1.Resume, c_user_profile_entity_1.CUserProfile, c_user_entitlement_entity_1.CUserEntitlement]),
             passport_1.PassportModule,
             jwt_1.JwtModule.register({
                 secret: 'your-secret-key',

@@ -10,4 +10,5 @@ export declare class AuthController {
     register(createCUserDto: CreateCUserDto): Promise<ApiResponse<any>>;
     cuserLogin(loginDto: LoginDto): Promise<ApiResponse<any>>;
     getCuserProfile(req: any): Promise<ApiResponse<any>>;
+    getCuserCenter(req: any): Promise<ApiResponse<any>>;
 }

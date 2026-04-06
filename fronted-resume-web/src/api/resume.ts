@@ -35,4 +35,16 @@ export async function exportResumePdfByHtml(html: string) {
   return data.data
 }
 
+export async function listResumeVersions(resumeId: string, userId?: number) {
+  const params = userId ? { userId } : {}
+  const { data } = await http.get<ApiResponse<any[]>>(`/api/resumes/${resumeId}/versions`, { params })
+  return data.data
+}
+
+export async function rollbackResumeVersion(resumeId: string, versionId: number, userId?: number) {
+  const params = userId ? { userId } : {}
+  const { data } = await http.post<ApiResponse<any>>(`/api/resumes/${resumeId}/rollback`, { versionId }, { params })
+  return data.data
+}
+
 

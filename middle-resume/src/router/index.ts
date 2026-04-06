@@ -49,6 +49,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AiOperations',
         component: () => import('@/views/AiOperationMonitoring.vue'),
         meta: { title: 'AI操作监控', icon: 'Monitor' }
+      },
+      {
+        path: 'system-logs',
+        name: 'SystemLogs',
+        component: () => import('@/views/SystemLogs.vue'),
+        meta: { title: '审计日志', icon: 'Tickets' }
       }
     ]
   }

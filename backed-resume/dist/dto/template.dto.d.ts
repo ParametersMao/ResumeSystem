@@ -3,6 +3,7 @@ export declare class CreateTemplateDto {
     templateData: string;
     previewImage?: string;
     description?: string;
+    industryTags?: string;
     status?: boolean;
 }
 export declare class UpdateTemplateDto {
@@ -10,6 +11,7 @@ export declare class UpdateTemplateDto {
     templateData?: string;
     previewImage?: string;
     description?: string;
+    industryTags?: string;
     status?: boolean;
 }
 export declare class TemplateListResponseDto {
@@ -17,6 +19,7 @@ export declare class TemplateListResponseDto {
     templateName: string;
     previewImage?: string;
     description?: string;
+    industryTags?: string;
     status?: boolean;
     createTime: Date;
     updateTime: Date;
@@ -29,6 +32,7 @@ export declare class TemplateDetailResponseDto {
     templateData: string;
     previewImage?: string;
     description?: string;
+    industryTags?: string;
     status?: boolean;
     createTime: Date;
     updateTime: Date;
@@ -41,6 +45,7 @@ export declare class TemplateResponseDto {
     templateData: string;
     previewImage?: string;
     description?: string;
+    industryTags?: string;
     status?: boolean;
     createTime: Date;
     updateTime: Date;

@@ -12,4 +12,6 @@ export declare class ResumesController {
     exportPdf(html: string): Promise<ApiResponse<{
         url: string;
     }>>;
+    listVersions(id: string, userId?: string): Promise<ApiResponse<any[]>>;
+    rollback(id: string, versionId: number, userId?: string): Promise<ApiResponse<ResumeResponseDto>>;
 }

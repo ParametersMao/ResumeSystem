@@ -27,6 +27,9 @@ export class AuthController {
     if (!req.user || !req.user.id) {
       throw new UnauthorizedException('用户信息无效');
     }
+    if (req.user.type !== 'admin') {
+      throw new UnauthorizedException('无权限');
+    }
     const profile = await this.authService.getProfile(req.user.id);
     return {
       code: 200,
@@ -66,11 +69,32 @@ export class AuthController {
     if (!req.user || !req.user.id) {
       throw new UnauthorizedException('用户信息无效');
     }
+    if (req.user.type !== 'cuser') {
+      throw new UnauthorizedException('无权限');
+    }
     const profile = await this.authService.getCuserProfile(req.user.id);
     return {
       code: 200,
       message: 'success',
       data: profile,
+    };
+  }
+
+  // C端用户个人中心聚合信息（个人资料 + 权益/配额 + 上次编辑简历）
+  @Get('cuser/center')
+  @UseGuards(JwtAuthGuard)
+  async getCuserCenter(@Request() req): Promise<ApiResponse<any>> {
+    if (!req.user || !req.user.id) {
+      throw new UnauthorizedException('用户信息无效');
+    }
+    if (req.user.type !== 'cuser') {
+      throw new UnauthorizedException('无权限');
+    }
+    const center = await this.authService.getCuserCenter(req.user.id);
+    return {
+      code: 200,
+      message: 'success',
+      data: center,
     };
   }
 } 

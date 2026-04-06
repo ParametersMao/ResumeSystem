@@ -66,7 +66,7 @@
           <el-table :data="userRanking" style="width: 100%">
             <el-table-column prop="rank" label="排名" width="80" />
             <el-table-column prop="username" label="用户名" width="120" />
-            <el-table-column prop="resumeCount" label="简历数量" width="100" />
+          <el-table-column prop="resumeCount" label="AI调用次数" width="120" />
             <el-table-column prop="lastActive" label="最后活跃" />
           </el-table>
         </el-card>
@@ -136,8 +136,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getStatisticsOverview, getStatisticsTrend, getPopularTemplates, getUserActivity } from '@/api/statistics'
 
 // 时间范围
 const timeRange = ref('7')
@@ -146,35 +147,35 @@ const timeRange = ref('7')
 const stats = ref([
   {
     title: '总用户数',
-    value: '1,234',
+    value: '-',
     icon: 'User',
     color: '#409EFF',
     trend: 'up',
-    trendValue: '+12.5%'
+    trendValue: ''
   },
   {
-    title: '今日简历生成',
-    value: '89',
+    title: '今日新增用户',
+    value: '-',
     icon: 'Document',
     color: '#67C23A',
     trend: 'up',
-    trendValue: '+8.2%'
+    trendValue: ''
   },
   {
-    title: '活跃模板',
-    value: '45',
+    title: '模板总数',
+    value: '-',
     icon: 'Files',
     color: '#E6A23C',
     trend: 'down',
-    trendValue: '-2.1%'
+    trendValue: ''
   },
   {
     title: 'AI调用次数',
-    value: '2,567',
+    value: '-',
     icon: 'Cpu',
     color: '#F56C6C',
     trend: 'up',
-    trendValue: '+15.3%'
+    trendValue: ''
   }
 ])
 
@@ -183,20 +184,20 @@ const userRanking = ref([
   {
     rank: 1,
     username: '张三',
-    resumeCount: 15,
-    lastActive: '2024-01-15 14:30'
+    resumeCount: 0,
+    lastActive: '-'
   },
   {
     rank: 2,
     username: '李四',
-    resumeCount: 12,
-    lastActive: '2024-01-15 13:45'
+    resumeCount: 0,
+    lastActive: '-'
   },
   {
     rank: 3,
     username: '王五',
-    resumeCount: 10,
-    lastActive: '2024-01-15 12:20'
+    resumeCount: 0,
+    lastActive: '-'
   }
 ])
 
@@ -205,20 +206,20 @@ const templateRanking = ref([
   {
     rank: 1,
     name: '经典模板',
-    usageCount: 156,
-    percentage: '35.2%'
+    usageCount: 0,
+    percentage: '-'
   },
   {
     rank: 2,
     name: '现代模板',
-    usageCount: 134,
-    percentage: '30.1%'
+    usageCount: 0,
+    percentage: '-'
   },
   {
     rank: 3,
     name: '创意模板',
-    usageCount: 89,
-    percentage: '20.0%'
+    usageCount: 0,
+    percentage: '-'
   }
 ])
 
@@ -235,8 +236,64 @@ const handleExport = () => {
 }
 
 onMounted(() => {
-  // 初始化数据
+  init()
 })
+
+watch(timeRange, () => {
+  init()
+})
+
+const toPeriod = (range: string): 'day' | 'week' | 'month' => {
+  const days = Number(range || 7)
+  if (days <= 1) return 'day'
+  if (days <= 7) return 'week'
+  return 'month'
+}
+
+const init = async () => {
+  try {
+    const [overviewRes, trendRes, templatesRes, userActivityRes] = await Promise.all([
+      getStatisticsOverview(),
+      getStatisticsTrend({ period: toPeriod(timeRange.value) }),
+      getPopularTemplates({ limit: 10 }),
+      getUserActivity({ limit: 10 })
+    ])
+
+    const overview = overviewRes.data.data
+    const trend = trendRes.data.data
+    const today = new Date().toISOString().slice(0, 10)
+
+    const todayNewUsers = (trend.user_trend || []).reduce((sum: number, item: any) => {
+      return item.date === today ? sum + Number(item.count || 0) : sum
+    }, 0)
+
+    stats.value[0].value = String(overview.total_users ?? 0)
+    stats.value[1].value = String(todayNewUsers)
+    stats.value[2].value = String(overview.total_templates ?? 0)
+    stats.value[3].value = String(overview.total_ai_operations ?? 0)
+
+    // 用户活跃度排行（后端口径：按 ai_operation_count 排序）
+    const users = userActivityRes.data.data || []
+    userRanking.value = users.map((u: any, idx: number) => ({
+      rank: idx + 1,
+      username: u.username,
+      resumeCount: u.aiOperationCount ?? u.ai_operation_count ?? 0,
+      lastActive: '-'
+    }))
+
+    // 模板排行（口径：useCount/downloadCount）
+    const templates = templatesRes.data.data || []
+    const totalUse = templates.reduce((sum: number, t: any) => sum + Number(t.useCount ?? 0), 0) || 0
+    templateRanking.value = templates.map((t: any, idx: number) => ({
+      rank: idx + 1,
+      name: t.templateName ?? t.template_name ?? `#${t.id}`,
+      usageCount: t.useCount ?? t.use_count ?? 0,
+      percentage: totalUse ? `${((Number(t.useCount ?? 0) / totalUse) * 100).toFixed(1)}%` : '0.0%'
+    }))
+  } catch (e) {
+    ElMessage.error('统计数据加载失败')
+  }
+}
 </script>
 
 <style scoped>

@@ -20,17 +20,31 @@
       
       <!-- 搜索区域 -->
       <div class="search-section">
-        <el-input
-          v-model="keyword"
-          placeholder="搜索项目名称、描述或技术栈..."
-          class="search-input"
-          clearable
-          @keyup.enter="load"
-        >
-          <template #prefix>
-            <el-icon class="search-icon"><Search /></el-icon>
-          </template>
-        </el-input>
+        <div class="search-row">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索模板名称..."
+            class="search-input"
+            clearable
+            @keyup.enter="load"
+          >
+            <template #prefix>
+              <el-icon class="search-icon"><Search /></el-icon>
+            </template>
+          </el-input>
+          <el-select
+            v-model="selectedTags"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            placeholder="行业标签筛选"
+            class="tag-select"
+            @change="load"
+          >
+            <el-option v-for="t in tagOptions" :key="t" :label="t" :value="t" />
+          </el-select>
+        </div>
       </div>
 
       <input
@@ -221,8 +235,11 @@ const router = useRouter()
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)))
 
+const tagOptions = ['互联网', '金融', '制造', '教育', '医疗', '设计', '运营', '产品', '测试', '数据']
+const selectedTags = ref<string[]>([])
+
 async function load() {
-  const data = await fetchTemplates(page.value, limit.value, keyword.value)
+  const data = await fetchTemplates(page.value, limit.value, keyword.value, selectedTags.value)
   list.value = data.list
   total.value = data.total
 }
@@ -452,9 +469,21 @@ onMounted(load)
   margin-bottom: 32px;
 }
 
+.search-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .search-input {
   width: 100%;
   max-width: 500px;
+}
+
+.tag-select {
+  width: 100%;
+  max-width: 320px;
 }
 
 .search-icon {

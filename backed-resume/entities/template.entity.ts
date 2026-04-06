@@ -17,6 +17,9 @@ export class Template {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'industry_tags' })
+  industryTags: string | null;
+
   @Column({ default: true })
   status: boolean;
 
