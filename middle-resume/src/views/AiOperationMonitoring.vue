@@ -69,8 +69,8 @@
         </el-table-column>
         <el-table-column prop="inputData" label="输入数据" width="200">
           <template #default="{ row }">
-            <el-tooltip :content="row.inputData" placement="top">
-              <span class="text-truncate">{{ truncateText(row.inputData, 30) }}</span>
+            <el-tooltip :content="formatOperationText(row.inputData)" placement="top">
+              <span class="text-truncate">{{ truncateText(formatOperationText(row.inputData), 30) }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
@@ -149,17 +149,17 @@
             {{ formatDate(currentOperation.createdAt) }}
           </el-descriptions-item>
         </el-descriptions>
-        
+
         <div class="data-section">
           <h4>输入数据</h4>
           <el-input
-            v-model="currentOperation.inputData"
+            :model-value="formatOperationText(currentOperation.inputData)"
             type="textarea"
             :rows="4"
             readonly
           />
         </div>
-        
+
         <div class="data-section">
           <h4>输出数据</h4>
           <el-input
@@ -213,18 +213,18 @@ const getOperationList = async () => {
       operationType: searchForm.operationType || undefined
     })
 
-    const { list, total } = res.data.data
+    // 响应拦截器已解包，res.data 就是 { list, total, page, limit }
+    const { list, total } = res.data || {}
     let mapped: AiOperation[] = (list || []).map((item: any) => ({
       id: item.id,
       userId: item.userId,
       username: item.username || '',
       operationType: item.operationType,
-      inputData: item.inputData || '',
-      outputData: item.outputData || '',
-      // 后端当前不提供 status/processingTime，这里用真实记录“存在即成功”做展示兜底
-      status: 'success',
-      createdAt: item.createTime,
-      processingTime: undefined
+      inputData: item.inputData || item.input_text || '',
+      outputData: item.outputData || item.output_text || '',
+      status: item.status || 'success',
+      createdAt: item.createTime || item.create_time,
+      processingTime: item.processingTime || item.tokens_used
     }))
 
     // username/dateRange/status 目前后端不支持筛选，这里先做轻量的前端过滤（不改变后端分页）
@@ -273,17 +273,17 @@ const handleExport = () => {
 const handleView = async (row: AiOperation) => {
   try {
     const res = await getAiOperationDetail(row.id)
-    const data = res.data.data
+    const data = res.data
     currentOperation.value = {
       id: data.id,
       userId: data.userId,
       username: data.username || row.username,
       operationType: data.operationType,
-      inputData: data.inputData || '',
-      outputData: data.outputData || '',
-      status: 'success',
-      createdAt: data.createTime,
-      processingTime: undefined
+      inputData: data.inputData || data.input_text || '',
+      outputData: data.outputData || data.output_text || '',
+      status: data.status || 'success',
+      createdAt: data.createTime || data.create_time,
+      processingTime: data.processingTime || data.tokens_used
     }
     detailVisible.value = true
   } catch (e) {
@@ -351,6 +351,23 @@ const getStatusLabel = (status: string) => {
     processing: '处理中'
   }
   return labels[status as keyof typeof labels] || status
+}
+
+const HISTORICAL_ENCODING_PLACEHOLDER = '历史记录字符集异常，原文不可恢复'
+
+const isCorruptedQuestionMarks = (text?: string) => {
+  if (!text) return false
+  return /^\?+$/.test(text.trim())
+}
+
+const formatOperationText = (text?: string) => {
+  if (!text) {
+    return '-'
+  }
+  if (isCorruptedQuestionMarks(text)) {
+    return HISTORICAL_ENCODING_PLACEHOLDER
+  }
+  return text
 }
 
 const truncateText = (text: string, length: number) => {
@@ -428,16 +445,16 @@ onMounted(() => {
   .ai-operation-monitoring {
     padding: 10px;
   }
-  
+
   .card-header {
     flex-direction: column;
     gap: 10px;
     align-items: flex-start;
   }
-  
+
   .header-actions {
     width: 100%;
     justify-content: flex-end;
   }
 }
-</style> 
+</style>

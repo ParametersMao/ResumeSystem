@@ -8,29 +8,29 @@ export class SystemLog {
   @Column({ type: 'int', name: 'user_id', nullable: true })
   userId: number | null;
 
-  @Column({ type: 'varchar', length: 16, name: 'user_type', nullable: true })
-  userType: string | null;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  action: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
-  route: string;
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  method: string | null;
 
-  @Column({ type: 'varchar', length: 12 })
-  method: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  path: string | null;
 
-  @Column({ type: 'varchar', length: 64, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   ip: string | null;
 
-  @Column({ type: 'varchar', length: 512, name: 'user_agent', nullable: true })
+  @Column({ type: 'text', name: 'user_agent', nullable: true })
   userAgent: string | null;
 
-  @Column({ type: 'int', name: 'status_code', nullable: true })
-  statusCode: number | null;
+  @Column({ type: 'text', name: 'request_body', nullable: true })
+  requestBody: string | null;
 
-  @Column({ type: 'int', name: 'duration_ms', nullable: true })
-  durationMs: number | null;
+  @Column({ type: 'int', name: 'response_status', nullable: true })
+  responseStatus: number | null;
 
-  @Column({ type: 'text', name: 'params_json', nullable: true })
-  paramsJson: string | null;
+  @Column({ type: 'text', name: 'error_message', nullable: true })
+  errorMessage: string | null;
 
   @CreateDateColumn({ type: 'datetime', name: 'create_time' })
   createTime: Date;

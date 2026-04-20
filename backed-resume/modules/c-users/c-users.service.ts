@@ -123,6 +123,12 @@ export class CUsersService {
     return this.cUserRepository.save(user);
   }
 
+  async resetPassword(id: number, password: string): Promise<CUser> {
+    const user = await this.findOne(id);
+    user.password = await bcrypt.hash(password, 10);
+    return this.cUserRepository.save(user);
+  }
+
   async remove(id: number): Promise<void> {
     const user = await this.findOne(id);
     await this.cUserRepository.remove(user);
@@ -136,8 +142,61 @@ export class CUsersService {
     return this.cUserRepository.findOne({ where: { phone } });
   }
 
+  async verifyPassword(user: CUser | null, password: string): Promise<boolean> {
+    if (!user?.password) {
+      return false;
+    }
+
+    if (this.isBcryptHash(user.password)) {
+      try {
+        return await bcrypt.compare(password, user.password);
+      } catch (error) {
+        console.error('cuser bcrypt compare failed:', error);
+        return false;
+      }
+    }
+
+    if (user.password === password) {
+      user.password = await bcrypt.hash(password, 10);
+      await this.cUserRepository.save(user);
+      return true;
+    }
+
+    return false;
+  }
+
+  async ensureDevTestUser(): Promise<CUser> {
+    const defaultPassword = '123456';
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    const existing = await this.findByUsername('testuser');
+
+    if (!existing) {
+      const user = this.cUserRepository.create({
+        username: 'testuser',
+        password: hashedPassword,
+        email: 'testuser@example.com',
+        status: 1,
+      });
+      return this.cUserRepository.save(user);
+    }
+
+    existing.status = 1;
+    existing.email = existing.email || 'testuser@example.com';
+
+    const canUseDefaultPassword = await this.verifyPassword(existing, defaultPassword);
+    if (!canUseDefaultPassword) {
+      existing.password = hashedPassword;
+    }
+
+    return this.cUserRepository.save(existing);
+  }
+
   async incrementAiOperationCount(id: number): Promise<void> {
     await this.cUserRepository.increment({ id }, 'aiOperationCount', 1);
+  }
+
+  private isBcryptHash(value: string): boolean {
+    return /^\$2[aby]\$\d{2}\$.{53}$/.test(value);
   }
 
   private mapToResponseDto(user: CUser): CUserResponseDto {

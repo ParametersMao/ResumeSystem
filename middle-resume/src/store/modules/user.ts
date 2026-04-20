@@ -17,8 +17,8 @@ export const useUserStore = defineStore('user', () => {
     loading.value = true
     try {
       const response = await apiLogin(loginForm)
-      // response.data.data 才是真正的业务数据
-      const { access_token, user: userInfo } = response.data.data
+      // 响应拦截器已解包，response 就是 ApiResponse，data 字段在 response.data 中
+      const { access_token, user: userInfo } = response.data
       token.value = access_token
       user.value = userInfo
       localStorage.setItem('token', access_token)
@@ -43,8 +43,9 @@ export const useUserStore = defineStore('user', () => {
       // 尝试获取用户信息
       try {
         const res = await getProfile()
-        user.value = res.data.data // 只取 data 字段
-        localStorage.setItem('user', JSON.stringify(res.data.data))
+        // 响应拦截器已解包，res.data 就是用户数据
+        user.value = res.data
+        localStorage.setItem('user', JSON.stringify(res.data))
       } catch {
         logout()
       }

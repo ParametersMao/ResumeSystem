@@ -44,6 +44,28 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html')
       },
       output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('zrender')) {
+            return 'vendor-zrender'
+          }
+          if (id.includes('vue-echarts')) {
+            return 'vendor-vue-echarts'
+          }
+          if (id.includes('echarts')) {
+            return 'vendor-echarts'
+          }
+          if (id.includes('element-plus') || id.includes('@element-plus')) {
+            return 'vendor-element-plus'
+          }
+          if (id.includes('vue') || id.includes('pinia')) {
+            return 'vendor-vue'
+          }
+          if (id.includes('lodash-es') || id.includes('dayjs') || id.includes('@vueuse')) {
+            return 'vendor-utils'
+          }
+          return 'vendor'
+        },
         chunkFileNames: 'js/[name]-[hash].js',
         entryFileNames: 'js/[name]-[hash].js',
         assetFileNames: '[ext]/[name]-[hash].[ext]'

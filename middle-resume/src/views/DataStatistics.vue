@@ -34,8 +34,8 @@
               </el-select>
             </div>
           </template>
-          <div class="chart-container">
-            <div class="chart-placeholder">简历生成趋势图表</div>
+          <div class="chart-container" v-loading="chartLoading">
+            <VChart class="chart" :option="lineChartOption" autoresize />
           </div>
         </el-card>
       </el-col>
@@ -47,8 +47,8 @@
               <span>热门模板使用情况</span>
             </div>
           </template>
-          <div class="chart-container">
-            <div class="chart-placeholder">模板使用情况饼图</div>
+          <div class="chart-container" v-loading="chartLoading">
+            <VChart class="chart" :option="pieChartOption" autoresize />
           </div>
         </el-card>
       </el-col>
@@ -137,11 +137,20 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
+import VChart from 'vue-echarts'
 import { ElMessage } from 'element-plus'
 import { getStatisticsOverview, getStatisticsTrend, getPopularTemplates, getUserActivity } from '@/api/statistics'
+import '@/plugins/echarts'
 
 // 时间范围
 const timeRange = ref('7')
+
+// 图表选项配置
+const lineChartOption = ref({})
+const pieChartOption = ref({})
+
+// 图表加载状态
+const chartLoading = ref(false)
 
 // 统计数据
 const stats = ref([
@@ -251,6 +260,7 @@ const toPeriod = (range: string): 'day' | 'week' | 'month' => {
 }
 
 const init = async () => {
+  chartLoading.value = true
   try {
     const [overviewRes, trendRes, templatesRes, userActivityRes] = await Promise.all([
       getStatisticsOverview(),
@@ -259,8 +269,9 @@ const init = async () => {
       getUserActivity({ limit: 10 })
     ])
 
-    const overview = overviewRes.data.data
-    const trend = trendRes.data.data
+    // 响应拦截器已解包，直接使用 .data
+    const overview = overviewRes.data
+    const trend = trendRes.data
     const today = new Date().toISOString().slice(0, 10)
 
     const todayNewUsers = (trend.user_trend || []).reduce((sum: number, item: any) => {
@@ -273,7 +284,7 @@ const init = async () => {
     stats.value[3].value = String(overview.total_ai_operations ?? 0)
 
     // 用户活跃度排行（后端口径：按 ai_operation_count 排序）
-    const users = userActivityRes.data.data || []
+    const users = userActivityRes.data || []
     userRanking.value = users.map((u: any, idx: number) => ({
       rank: idx + 1,
       username: u.username,
@@ -282,7 +293,7 @@ const init = async () => {
     }))
 
     // 模板排行（口径：useCount/downloadCount）
-    const templates = templatesRes.data.data || []
+    const templates = templatesRes.data || []
     const totalUse = templates.reduce((sum: number, t: any) => sum + Number(t.useCount ?? 0), 0) || 0
     templateRanking.value = templates.map((t: any, idx: number) => ({
       rank: idx + 1,
@@ -290,8 +301,76 @@ const init = async () => {
       usageCount: t.useCount ?? t.use_count ?? 0,
       percentage: totalUse ? `${((Number(t.useCount ?? 0) / totalUse) * 100).toFixed(1)}%` : '0.0%'
     }))
+
+    // 更新折线图 - 简历生成趋势
+    const resumeTrend = trend.resume_trend || []
+    lineChartOption.value = {
+      tooltip: {
+        trigger: 'axis'
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: resumeTrend.map((item: any) => item.date)
+      },
+      yAxis: {
+        type: 'value'
+      },
+      series: [
+        {
+          name: '简历生成数',
+          type: 'line',
+          smooth: true,
+          data: resumeTrend.map((item: any) => item.count),
+          areaStyle: {
+            color: 'rgba(64, 158, 255, 0.2)'
+          },
+          itemStyle: {
+            color: '#409EFF'
+          }
+        }
+      ]
+    }
+
+    // 更新饼图 - 模板使用情况
+    const pieData = templates.slice(0, 5).map((t: any) => ({
+      name: t.templateName ?? t.template_name ?? `#${t.id}`,
+      value: t.useCount ?? t.use_count ?? 0
+    }))
+    pieChartOption.value = {
+      tooltip: {
+        trigger: 'item'
+      },
+      legend: {
+        orient: 'vertical',
+        left: 'left'
+      },
+      series: [
+        {
+          name: '模板使用',
+          type: 'pie',
+          radius: '50%',
+          data: pieData,
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          }
+        }
+      ]
+    }
   } catch (e) {
     ElMessage.error('统计数据加载失败')
+  } finally {
+    chartLoading.value = false
   }
 }
 </script>
@@ -373,6 +452,11 @@ const init = async () => {
 .chart-container {
   width: 100%;
   height: 300px;
+}
+
+.chart {
+  width: 100%;
+  height: 100%;
 }
 
 .chart-placeholder {

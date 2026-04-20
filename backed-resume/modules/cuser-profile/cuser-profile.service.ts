@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CUserProfile } from '../../entities/c-user-profile.entity';
-import { UpdateCUserProfileDto } from '../../dto/c-user-profile.dto';
+import { CUserProfileResponseDto, UpdateCUserProfileDto } from '../../dto/c-user-profile.dto';
 
 @Injectable()
 export class CuserProfileService {
@@ -19,12 +19,27 @@ export class CuserProfileService {
     return profile;
   }
 
-  async update(userId: number, dto: UpdateCUserProfileDto): Promise<CUserProfile> {
+  async getProfile(userId: number): Promise<CUserProfileResponseDto> {
+    return this.toResponse(await this.getOrCreate(userId));
+  }
+
+  async update(userId: number, dto: UpdateCUserProfileDto): Promise<CUserProfileResponseDto> {
     const profile = await this.getOrCreate(userId);
-    if (dto.nickname !== undefined) profile.nickname = dto.nickname ?? null;
+    if (dto.nickname !== undefined) profile.realName = dto.nickname ?? null;
     if (dto.bio !== undefined) profile.bio = dto.bio ?? null;
-    if (dto.avatarUrl !== undefined) profile.avatarUrl = dto.avatarUrl ?? null;
-    return await this.profileRepo.save(profile);
+    if (dto.avatarUrl !== undefined) profile.avatar = dto.avatarUrl ?? null;
+    return this.toResponse(await this.profileRepo.save(profile));
+  }
+
+  private toResponse(profile: CUserProfile): CUserProfileResponseDto {
+    return {
+      userId: profile.userId,
+      nickname: profile.realName ?? null,
+      bio: profile.bio ?? null,
+      avatarUrl: profile.avatar ?? null,
+      createTime: profile.createTime,
+      updateTime: profile.updateTime,
+    };
   }
 }
 

@@ -15,23 +15,29 @@ export class SystemLogsService {
     return await this.repo.save(entity);
   }
 
-  async findAll(params: { page?: number; limit?: number; userId?: number; route?: string; method?: string }) {
+  async findAll(params: { page?: number; limit?: number; userId?: number; path?: string; method?: string }) {
     const page = Number.isFinite(params.page) && (params.page as number) > 0 ? Math.floor(params.page as number) : 1;
     const limitRaw = Number.isFinite(params.limit) && (params.limit as number) > 0 ? Math.floor(params.limit as number) : 20;
     const limit = Math.min(limitRaw, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (params.userId) where.userId = params.userId;
-    if (params.method) where.method = params.method.toUpperCase();
-    if (params.route) where.route = params.route;
+    const qb = this.repo.createQueryBuilder('log');
 
-    const [list, total] = await this.repo.findAndCount({
-      where,
-      order: { createTime: 'DESC' },
-      skip,
-      take: limit,
-    });
+    if (params.userId) {
+      qb.andWhere('log.userId = :userId', { userId: params.userId });
+    }
+    if (params.method) {
+      qb.andWhere('log.method = :method', { method: params.method.toUpperCase() });
+    }
+    if (params.path) {
+      qb.andWhere('log.path LIKE :path', { path: `%${params.path}%` });
+    }
+
+    qb.orderBy('log.createTime', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [list, total] = await qb.getManyAndCount();
 
     return { list, total, page, limit };
   }

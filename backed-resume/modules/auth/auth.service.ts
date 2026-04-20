@@ -1,10 +1,9 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AdminUsersService } from '../admin-users/admin-users.service';
 import { CUsersService } from '../c-users/c-users.service';
 import { LoginDto } from '../../dto/admin-user.dto';
 import { CreateCUserDto } from '../../dto/c-user.dto';
-import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Resume } from '../../entities/resume.entity';
@@ -12,23 +11,97 @@ import { CUserProfile } from '../../entities/c-user-profile.entity';
 import { CUserEntitlement } from '../../entities/c-user-entitlement.entity';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
+  // 独立的 refresh token service，在类内部创建
+  private refreshJwtService: JwtService;
+
   constructor(
     private adminUsersService: AdminUsersService,
     private cUsersService: CUsersService,
-    private jwtService: JwtService,
+    private jwtService: JwtService, // access token service (injected by Nest)
     @InjectRepository(Resume)
     private resumeRepository: Repository<Resume>,
     @InjectRepository(CUserProfile)
     private cUserProfileRepository: Repository<CUserProfile>,
     @InjectRepository(CUserEntitlement)
     private cUserEntitlementRepository: Repository<CUserEntitlement>,
-  ) {}
+  ) {
+    // 在构造函数中初始化 refresh token service
+    this.refreshJwtService = new JwtService({
+      secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-fallback',
+      signOptions: { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' },
+    });
+  }
+
+  private getJwtConfig() {
+    return {
+      accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-fallback',
+      refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-fallback',
+      accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '1h',
+      refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    };
+  }
+
+  private buildAccessToken(payload: any): string {
+    const cfg = this.getJwtConfig();
+    return this.jwtService.sign(payload, {
+      secret: cfg.accessSecret,
+      expiresIn: cfg.accessExpiresIn,
+    });
+  }
+
+  private buildRefreshToken(payload: any): string {
+    const cfg = this.getJwtConfig();
+    return this.refreshJwtService.sign(payload, {
+      secret: cfg.refreshSecret,
+      expiresIn: cfg.refreshExpiresIn,
+    });
+  }
+
+  private issueTokens(payload: any, userId: number, type: 'admin' | 'cuser') {
+    const access_token = this.buildAccessToken(payload);
+    const refresh_token = this.buildRefreshToken({ sub: userId, type });
+    return { access_token, refresh_token };
+  }
+
+  async onModuleInit() {
+    if (process.env.NODE_ENV === 'production') {
+      return;
+    }
+
+    try {
+      await this.adminUsersService.ensureDevAdminAccount();
+      const cuser = await this.cUsersService.ensureDevTestUser();
+
+      const [profile, entitlement] = await Promise.all([
+        this.cUserProfileRepository.findOne({ where: { userId: cuser.id } }),
+        this.cUserEntitlementRepository.findOne({ where: { userId: cuser.id } }),
+      ]);
+
+      if (!profile) {
+        await this.cUserProfileRepository.save({ userId: cuser.id });
+      }
+
+      if (!entitlement) {
+        await this.cUserEntitlementRepository.save({
+          userId: cuser.id,
+          planCode: 'free',
+          accountWeight: 0,
+          aiFreeTotal: 20,
+          aiFreeUsed: 0,
+          aiFreeResetPolicy: 'never',
+          expireAt: null,
+        });
+      }
+    } catch (error) {
+      console.error('ensure dev auth accounts failed:', error);
+    }
+  }
 
   async validateUser(username: string, password: string): Promise<any> {
     console.log('validateUser called', username);
     const user = await this.adminUsersService.findByUsername(username);
-    if (user && await bcrypt.compare(password, user.password)) {
+    if (user && await this.adminUsersService.verifyPassword(user, password)) {
       const { password, ...result } = user;
       return result;
     }
@@ -48,8 +121,11 @@ export class AuthService {
       }
 
       const payload = { username: user.username, sub: user.id, role: user.role, type: 'admin' };
+      const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'admin');
+
       return {
-        access_token: this.jwtService.sign(payload),
+        access_token,
+        refresh_token,
         user: {
           id: user.id,
           username: user.username,
@@ -62,6 +138,38 @@ export class AuthService {
     }
   }
 
+  async refresh(refreshToken: string) {
+    const cfg = this.getJwtConfig();
+    let payload: any;
+    try {
+      payload = this.refreshJwtService.verify(refreshToken, {
+        secret: cfg.refreshSecret,
+      });
+    } catch (e) {
+      throw new UnauthorizedException('refresh_token 无效或已过期');
+    }
+
+    if (payload.type === 'admin') {
+      const user = await this.adminUsersService.findOne(payload.sub);
+      if (!user || user.status === 0) {
+        throw new UnauthorizedException('用户不存在或已被禁用');
+      }
+      const newPayload = { username: user.username, sub: user.id, role: user.role, type: 'admin' };
+      const { access_token, refresh_token } = this.issueTokens(newPayload, user.id, 'admin');
+      return { access_token, refresh_token };
+    } else if (payload.type === 'cuser') {
+      const user = await this.cUsersService.findOne(payload.sub);
+      if (!user || user.status === 0) {
+        throw new UnauthorizedException('用户不存在或已被禁用');
+      }
+      const newPayload = { username: user.username, sub: user.id, type: 'cuser' };
+      const { access_token, refresh_token } = this.issueTokens(newPayload, user.id, 'cuser');
+      return { access_token, refresh_token };
+    } else {
+      throw new UnauthorizedException('无效的 token 类型');
+    }
+  }
+
   async getProfile(userId: number) {
     const user = await this.adminUsersService.findOne(userId);
     const { password, ...result } = user;
@@ -71,13 +179,11 @@ export class AuthService {
   // C端用户注册
   async register(createCUserDto: CreateCUserDto) {
     try {
-      // 检查用户名是否已存在
       const existingUser = await this.cUsersService.findByUsername(createCUserDto.username);
       if (existingUser) {
         throw new ConflictException('用户名已存在');
       }
 
-      // 检查手机号是否已存在（如果提供了手机号）
       if (createCUserDto.phone) {
         const existingPhone = await this.cUsersService.findByPhone(createCUserDto.phone);
         if (existingPhone) {
@@ -85,10 +191,8 @@ export class AuthService {
         }
       }
 
-      // 创建用户
       const user = await this.cUsersService.create(createCUserDto);
 
-      // 初始化 1:1 资料/权益记录（即使迁移回填遗漏，也保证新用户有默认值）
       await Promise.all([
         this.cUserProfileRepository.save({ userId: user.id }),
         this.cUserEntitlementRepository.save({
@@ -102,10 +206,12 @@ export class AuthService {
         }),
       ]);
 
-      // 生成JWT token
       const payload = { username: user.username, sub: user.id, type: 'cuser' };
+      const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'cuser');
+
       return {
-        access_token: this.jwtService.sign(payload),
+        access_token,
+        refresh_token,
         user: {
           id: user.id,
           username: user.username,
@@ -132,8 +238,11 @@ export class AuthService {
       }
 
       const payload = { username: user.username, sub: user.id, type: 'cuser' };
+      const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'cuser');
+
       return {
-        access_token: this.jwtService.sign(payload),
+        access_token,
+        refresh_token,
         user: {
           id: user.id,
           username: user.username,
@@ -147,17 +256,15 @@ export class AuthService {
     }
   }
 
-  // 验证C端用户
   async validateCUser(username: string, password: string): Promise<any> {
     const user = await this.cUsersService.findByUsername(username);
-    if (user && await bcrypt.compare(password, user.password)) {
+    if (user && await this.cUsersService.verifyPassword(user, password)) {
       const { password, ...result } = user;
       return result;
     }
     return null;
   }
 
-  // 获取C端用户信息
   async getCuserProfile(userId: number) {
     const user = await this.cUsersService.findOne(userId);
     const { password, ...result } = user;
@@ -178,7 +285,6 @@ export class AuthService {
       }),
     ]);
 
-    // 兜底：如果缺少 1:1 记录，则补齐默认值（避免历史环境未执行回填迁移）
     if (!profile) {
       profile = await this.cUserProfileRepository.save({ userId });
     }
@@ -216,4 +322,4 @@ export class AuthService {
         : null,
     };
   }
-} 
+}

@@ -8,6 +8,7 @@ import { CUser } from '../../entities/c-user.entity';
 import { AiOperation } from '../../entities/ai-operation.entity';
 import { TemplateUsage } from '../../entities/template-usage.entity';
 import { ResumeDownload } from '../../entities/resume-download.entity';
+import { Resume } from '../../entities/resume.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ResumeDownload } from '../../entities/resume-download.entity';
       AiOperation,
       TemplateUsage,
       ResumeDownload,
+      Resume,
     ]),
   ],
   controllers: [StatisticsController],

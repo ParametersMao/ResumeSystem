@@ -1,11 +1,11 @@
 <template>
-  <div id="app">
+  <el-config-provider :locale="zhCn">
     <router-view />
-  </div>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
-// 根组件逻辑
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 </script>
 
 <style>
@@ -13,4 +13,4 @@
   height: 100vh;
   width: 100vw;
 }
-</style> 
+</style>

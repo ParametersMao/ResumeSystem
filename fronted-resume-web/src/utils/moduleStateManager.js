@@ -181,8 +181,9 @@ export class ModuleStateManager {
         }
         // 根据模板数据初始化状态
         const layout = this.templateData.value.layout || [];
+        const layoutArray = Array.isArray(layout) ? layout : [];
         this.moduleStates.value = DEFAULT_MODULES.map(defaultModule => {
-            const templateModule = layout.find(m => getCanonicalSectionType(m.type) === defaultModule.type);
+            const templateModule = layoutArray.find((m) => getCanonicalSectionType(m.type) === defaultModule.type);
             if (templateModule) {
                 // 使用模板配置
                 return {

@@ -10,9 +10,21 @@ import * as OSS from 'ali-oss';
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync } from 'fs';
 
+interface ResumeVersionSchema {
+  hasUserId: boolean;
+  hasSourceVersion: boolean;
+  hasSourceType: boolean;
+  hasRemark: boolean;
+  hasLegacyVersion: boolean;
+  hasHtmlContent: boolean;
+}
+
+type ResumeVersionSourceType = 'save' | 'manual' | 'rollback';
+
 @Injectable()
 export class ResumesService {
   private ossClient: OSS | null = null;
+  private resumeVersionSchemaPromise: Promise<ResumeVersionSchema> | null = null;
 
   constructor(
     @InjectRepository(Resume)
@@ -97,12 +109,7 @@ export class ResumesService {
     }
 
     // 写入历史快照（更新前的 content）
-    await this.resumeVersionRepository.save({
-      resumeId: resume.id,
-      userId: resume.userId,
-      sourceVersion: resume.version,
-      content: resume.content ?? '',
-    });
+    await this.saveVersionSnapshot(resume, 'save');
 
     // Update fields
     Object.assign(resume, updateResumeDto);
@@ -113,13 +120,56 @@ export class ResumesService {
   }
 
   async listVersions(resumeId: number, userId?: number): Promise<ResumeVersion[]> {
-    const where: any = { resumeId };
-    if (userId) where.userId = userId;
-    return this.resumeVersionRepository.find({
-      where,
-      order: { createTime: 'DESC' },
-      take: 50,
-    });
+    const schema = await this.getResumeVersionSchema();
+    const conditions = ['resume_id = ?'];
+    const params: Array<number> = [resumeId];
+
+    if (userId && schema.hasUserId) {
+      conditions.push('user_id = ?');
+      params.push(userId);
+    }
+
+    const versionColumn = schema.hasSourceVersion ? 'source_version' : 'version';
+    const rows = await this.resumeVersionRepository.query(
+      `
+        SELECT
+          id,
+          resume_id AS resumeId,
+          ${schema.hasUserId ? 'user_id' : 'NULL'} AS userId,
+          ${versionColumn} AS sourceVersion,
+          ${schema.hasSourceType ? 'source_type' : "'save'"} AS sourceType,
+          ${schema.hasRemark ? 'remark' : 'NULL'} AS remark,
+          content,
+          create_time AS createTime
+        FROM resume_versions
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY create_time DESC
+        LIMIT 50
+      `,
+      params,
+    );
+
+    return rows as ResumeVersion[];
+  }
+
+  async createVersionSnapshot(resumeId: number, userId?: number, remark?: string): Promise<ResumeVersion> {
+    const whereResume: any = { id: resumeId, status: 1 };
+    if (userId) whereResume.userId = userId;
+
+    const resume = await this.resumeRepository.findOne({ where: whereResume });
+    if (!resume) {
+      throw new NotFoundException('绠€鍘嗕笉瀛樺湪');
+    }
+
+    await this.saveVersionSnapshot(resume, 'manual', remark);
+
+    const versions = await this.listVersions(resumeId, userId);
+    const latest = versions[0];
+    if (!latest) {
+      throw new NotFoundException('鍒涘缓鐗堟湰澶辫触');
+    }
+
+    return latest;
   }
 
   async rollback(resumeId: number, versionId: number, userId?: number): Promise<ResumeResponseDto> {
@@ -128,18 +178,11 @@ export class ResumesService {
     const resume = await this.resumeRepository.findOne({ where: whereResume });
     if (!resume) throw new NotFoundException('简历不存在');
 
-    const whereVersion: any = { id: versionId, resumeId };
-    if (userId) whereVersion.userId = userId;
-    const version = await this.resumeVersionRepository.findOne({ where: whereVersion });
+    const version = await this.findVersionSnapshot(resumeId, versionId, userId);
     if (!version) throw new NotFoundException('历史版本不存在');
 
     // 回滚前也记录一次当前快照，避免“回滚即丢失当前”
-    await this.resumeVersionRepository.save({
-      resumeId: resume.id,
-      userId: resume.userId,
-      sourceVersion: resume.version,
-      content: resume.content ?? '',
-    });
+    await this.saveVersionSnapshot(resume, 'rollback');
 
     resume.content = version.content;
     resume.version += 1;
@@ -220,7 +263,7 @@ export class ResumesService {
         format: 'A4',
         printBackground: true,
         preferCSSPageSize: true,
-        margin: { top: '12mm', right: '12mm', bottom: '12mm', left: '12mm' },
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
       })) as unknown as Buffer;
 
       if (this.ossClient) {
@@ -278,6 +321,123 @@ export class ResumesService {
       createTime: resume.createTime,
       updateTime: resume.updateTime,
     };
+  }
+
+  private async getResumeVersionSchema(): Promise<ResumeVersionSchema> {
+    if (!this.resumeVersionSchemaPromise) {
+      this.resumeVersionSchemaPromise = this.resumeVersionRepository
+        .query('SHOW COLUMNS FROM resume_versions')
+        .then(async (rows: Array<{ Field: string }>) => {
+          const fields = new Set(rows.map((row) => row.Field));
+
+          if (!fields.has('source_type')) {
+            const sourceTypeAnchor = fields.has('source_version')
+              ? 'source_version'
+              : (fields.has('version') ? 'version' : 'resume_id');
+            await this.resumeVersionRepository.query(
+              `ALTER TABLE resume_versions ADD COLUMN source_type VARCHAR(24) NOT NULL DEFAULT 'save' AFTER ${sourceTypeAnchor}`,
+            );
+            fields.add('source_type');
+          }
+
+          if (!fields.has('remark')) {
+            await this.resumeVersionRepository.query(
+              'ALTER TABLE resume_versions ADD COLUMN remark VARCHAR(120) NULL AFTER source_type',
+            );
+            fields.add('remark');
+          }
+
+          return {
+            hasUserId: fields.has('user_id'),
+            hasSourceVersion: fields.has('source_version'),
+            hasSourceType: fields.has('source_type'),
+            hasRemark: fields.has('remark'),
+            hasLegacyVersion: fields.has('version'),
+            hasHtmlContent: fields.has('html_content'),
+          };
+        });
+    }
+
+    return this.resumeVersionSchemaPromise;
+  }
+
+  private async saveVersionSnapshot(
+    resume: Resume,
+    sourceType: ResumeVersionSourceType,
+    remark?: string,
+  ): Promise<void> {
+    const schema = await this.getResumeVersionSchema();
+    const columns = ['resume_id'];
+    const params: Array<number | string | null> = [resume.id];
+
+    if (schema.hasUserId) {
+      columns.push('user_id');
+      params.push(resume.userId);
+    }
+
+    if (schema.hasSourceVersion) {
+      columns.push('source_version');
+      params.push(resume.version);
+    } else if (schema.hasLegacyVersion) {
+      columns.push('version');
+      params.push(resume.version);
+    }
+
+    columns.push('content');
+    params.push(resume.content ?? '');
+
+    if (schema.hasSourceType) {
+      columns.push('source_type');
+      params.push(sourceType);
+    }
+
+    if (schema.hasRemark) {
+      columns.push('remark');
+      params.push(remark ? remark.slice(0, 120) : null);
+    }
+
+    if (schema.hasHtmlContent) {
+      columns.push('html_content');
+      params.push(null);
+    }
+
+    const placeholders = columns.map(() => '?').join(', ');
+    await this.resumeVersionRepository.query(
+      `INSERT INTO resume_versions (${columns.join(', ')}) VALUES (${placeholders})`,
+      params,
+    );
+  }
+
+  private async findVersionSnapshot(resumeId: number, versionId: number, userId?: number): Promise<ResumeVersion | null> {
+    const schema = await this.getResumeVersionSchema();
+    const conditions = ['id = ?', 'resume_id = ?'];
+    const params: Array<number> = [versionId, resumeId];
+
+    if (userId && schema.hasUserId) {
+      conditions.push('user_id = ?');
+      params.push(userId);
+    }
+
+    const versionColumn = schema.hasSourceVersion ? 'source_version' : 'version';
+    const rows = await this.resumeVersionRepository.query(
+      `
+        SELECT
+          id,
+          resume_id AS resumeId,
+          ${schema.hasUserId ? 'user_id' : 'NULL'} AS userId,
+          ${versionColumn} AS sourceVersion,
+          ${schema.hasSourceType ? 'source_type' : "'save'"} AS sourceType,
+          ${schema.hasRemark ? 'remark' : 'NULL'} AS remark,
+          content,
+          create_time AS createTime
+        FROM resume_versions
+        WHERE ${conditions.join(' AND ')}
+        LIMIT 1
+      `,
+      params,
+    );
+
+    return (rows[0] as ResumeVersion | undefined) ?? null;
   }
 }
 

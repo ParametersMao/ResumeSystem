@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useUserStore } from '@/store/user';
 import { getCuserProfile, updateCuserProfile, uploadCuserAvatar } from '@/api/profile';
@@ -14,6 +14,9 @@ const form = ref({
 });
 const pickedFile = ref(null);
 const pickedPreviewUrl = ref('');
+const avatarFallback = computed(() => {
+    return (form.value.nickname || userStore.user?.username || 'U').slice(0, 1).toUpperCase();
+});
 const avatarPreview = computed(() => {
     return pickedPreviewUrl.value || form.value.avatarUrl || '/mock/avatar/default.svg';
 });
@@ -21,14 +24,15 @@ async function load() {
     loading.value = true;
     try {
         const res = await getCuserProfile();
-        if (res.code !== 200)
+        if (res.code !== 200) {
             throw new Error(res.message || '加载失败');
+        }
         form.value.nickname = res.data.nickname || '';
         form.value.bio = res.data.bio || '';
         form.value.avatarUrl = res.data.avatarUrl || '';
     }
-    catch (e) {
-        ElMessage.error(e?.message || '加载失败');
+    catch (error) {
+        ElMessage.error(error?.message || '加载个人资料失败');
     }
     finally {
         loading.value = false;
@@ -38,17 +42,20 @@ async function save() {
     saving.value = true;
     try {
         const res = await updateCuserProfile({
-            nickname: form.value.nickname || undefined,
-            bio: form.value.bio || undefined,
-            avatarUrl: form.value.avatarUrl || undefined,
+            nickname: normalizeOptionalText(form.value.nickname),
+            bio: normalizeOptionalText(form.value.bio),
+            avatarUrl: normalizeOptionalText(form.value.avatarUrl),
         });
-        if (res.code !== 200)
+        if (res.code !== 200) {
             throw new Error(res.message || '保存失败');
-        ElMessage.success('保存成功');
-        await load();
+        }
+        form.value.nickname = res.data.nickname || '';
+        form.value.bio = res.data.bio || '';
+        form.value.avatarUrl = res.data.avatarUrl || '';
+        ElMessage.success('个人资料已保存');
     }
-    catch (e) {
-        ElMessage.error(e?.message || '保存失败');
+    catch (error) {
+        ElMessage.error(error?.message || '保存个人资料失败');
     }
     finally {
         saving.value = false;
@@ -56,48 +63,79 @@ async function save() {
 }
 function handlePick(file) {
     const raw = file?.raw;
-    if (!raw)
+    if (!raw) {
         return;
+    }
+    if (!raw.type.startsWith('image/')) {
+        ElMessage.warning('请选择图片文件');
+        return;
+    }
+    if (raw.size > 5 * 1024 * 1024) {
+        ElMessage.warning('头像文件不能超过 5MB');
+        return;
+    }
+    revokePickedPreview();
     pickedFile.value = raw;
     pickedPreviewUrl.value = URL.createObjectURL(raw);
 }
 async function uploadAvatar() {
+    if (!pickedFile.value) {
+        ElMessage.warning('请先选择头像文件');
+        return;
+    }
     uploading.value = true;
     try {
-        const res = await uploadCuserAvatar(pickedFile.value || undefined);
-        if (res.code !== 200)
+        const res = await uploadCuserAvatar(pickedFile.value);
+        if (res.code !== 200) {
             throw new Error(res.message || '上传失败');
+        }
         form.value.avatarUrl = res.data.avatarUrl;
         pickedFile.value = null;
-        pickedPreviewUrl.value = '';
-        ElMessage.success('头像已应用');
+        revokePickedPreview();
+        ElMessage.success('头像已上传并应用');
     }
-    catch (e) {
-        ElMessage.error(e?.message || '上传失败');
+    catch (error) {
+        ElMessage.error(error?.message || '上传头像失败');
     }
     finally {
         uploading.value = false;
     }
 }
-async function useMockAvatar() {
+async function useDefaultAvatar() {
     uploading.value = true;
     try {
-        const res = await uploadCuserAvatar(undefined);
-        if (res.code !== 200)
+        const res = await uploadCuserAvatar();
+        if (res.code !== 200) {
             throw new Error(res.message || '操作失败');
+        }
         form.value.avatarUrl = res.data.avatarUrl;
-        ElMessage.success('已切换为 Mock 头像');
+        pickedFile.value = null;
+        revokePickedPreview();
+        ElMessage.success('已切换为默认头像');
     }
-    catch (e) {
-        ElMessage.error(e?.message || '操作失败');
+    catch (error) {
+        ElMessage.error(error?.message || '切换默认头像失败');
     }
     finally {
         uploading.value = false;
+    }
+}
+function normalizeOptionalText(value) {
+    const text = value.trim();
+    return text || undefined;
+}
+function revokePickedPreview() {
+    if (pickedPreviewUrl.value) {
+        URL.revokeObjectURL(pickedPreviewUrl.value);
+        pickedPreviewUrl.value = '';
     }
 }
 onMounted(async () => {
     await userStore.initUserState();
     await load();
+});
+onBeforeUnmount(() => {
+    revokePickedPreview();
 });
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
@@ -107,6 +145,7 @@ let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['info']} */ ;
 /** @type {__VLS_StyleScopedClasses['info']} */ ;
 /** @type {__VLS_StyleScopedClasses['content']} */ ;
+/** @type {__VLS_StyleScopedClasses['card-header']} */ ;
 // CSS variable injection 
 // CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -208,7 +247,7 @@ const __VLS_22 = __VLS_21({
     ...{ class: "avatar" },
 }, ...__VLS_functionalComponentArgsRest(__VLS_21));
 __VLS_23.slots.default;
-((__VLS_ctx.userStore.user?.username || 'U').slice(0, 1).toUpperCase());
+(__VLS_ctx.avatarFallback);
 var __VLS_23;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "avatar-meta" },
@@ -282,7 +321,7 @@ let __VLS_44;
 let __VLS_45;
 let __VLS_46;
 const __VLS_47 = {
-    onClick: (__VLS_ctx.useMockAvatar)
+    onClick: (__VLS_ctx.useDefaultAvatar)
 };
 __VLS_43.slots.default;
 var __VLS_43;
@@ -376,7 +415,7 @@ const __VLS_71 = __VLS_asFunctionalComponent(__VLS_70, new __VLS_70({
     rows: (6),
     maxlength: "500",
     showWordLimit: true,
-    placeholder: "一句话介绍你自己（可选）",
+    placeholder: "一句话介绍你自己，可选。",
 }));
 const __VLS_72 = __VLS_71({
     modelValue: (__VLS_ctx.form.bio),
@@ -384,18 +423,18 @@ const __VLS_72 = __VLS_71({
     rows: (6),
     maxlength: "500",
     showWordLimit: true,
-    placeholder: "一句话介绍你自己（可选）",
+    placeholder: "一句话介绍你自己，可选。",
 }, ...__VLS_functionalComponentArgsRest(__VLS_71));
 var __VLS_69;
 const __VLS_74 = {}.ElFormItem;
 /** @type {[typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, typeof __VLS_components.ElFormItem, typeof __VLS_components.elFormItem, ]} */ ;
 // @ts-ignore
 const __VLS_75 = __VLS_asFunctionalComponent(__VLS_74, new __VLS_74({
-    label: "头像URL",
+    label: "头像 URL",
     prop: "avatarUrl",
 }));
 const __VLS_76 = __VLS_75({
-    label: "头像URL",
+    label: "头像 URL",
     prop: "avatarUrl",
 }, ...__VLS_functionalComponentArgsRest(__VLS_75));
 __VLS_77.slots.default;
@@ -405,12 +444,12 @@ const __VLS_78 = {}.ElInput;
 const __VLS_79 = __VLS_asFunctionalComponent(__VLS_78, new __VLS_78({
     modelValue: (__VLS_ctx.form.avatarUrl),
     maxlength: "512",
-    placeholder: "例如：/uploads/avatars/xxx.png 或 /mock/avatar/default.svg",
+    placeholder: "上传头像后会自动生成，也可以粘贴外部图片地址。",
 }));
 const __VLS_80 = __VLS_79({
     modelValue: (__VLS_ctx.form.avatarUrl),
     maxlength: "512",
-    placeholder: "例如：/uploads/avatars/xxx.png 或 /mock/avatar/default.svg",
+    placeholder: "上传头像后会自动生成，也可以粘贴外部图片地址。",
 }, ...__VLS_functionalComponentArgsRest(__VLS_79));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "hint" },
@@ -452,12 +491,13 @@ const __VLS_self = (await import('vue')).defineComponent({
             formRef: formRef,
             form: form,
             pickedFile: pickedFile,
+            avatarFallback: avatarFallback,
             avatarPreview: avatarPreview,
             load: load,
             save: save,
             handlePick: handlePick,
             uploadAvatar: uploadAvatar,
-            useMockAvatar: useMockAvatar,
+            useDefaultAvatar: useDefaultAvatar,
         };
     },
 });

@@ -59,7 +59,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CUser } from '@/types'
-import { getCUserList, updateCUser, deleteCUser } from '@/api/cuser'
+import { getCUserList, updateCUser, deleteCUser, updateCUserStatus } from '@/api/cuser'
 
 const cUserList = ref<CUser[]>([])
 const pagination = reactive({
@@ -74,11 +74,11 @@ const searchForm = reactive({
 const fetchList = async () => {
   const res = await getCUserList({
     page: pagination.page,
-    pageSize: pagination.pageSize,
-    keyword: searchForm.keyword
+    limit: pagination.pageSize,
+    search: searchForm.keyword
   })
-  cUserList.value = res.data.data.list
-  pagination.total = res.data.data.total
+  cUserList.value = res.data.list || []
+  pagination.total = res.data.total || 0
 }
 
 const handleSearch = () => {
@@ -96,7 +96,7 @@ const handleToggleStatus = async (row: CUser) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await updateCUser({ ...row, status: row.status === 'active' ? 'inactive' : 'active' })
+    await updateCUserStatus(row.id, row.status === 'active' ? 0 : 1)
     ElMessage.success('操作成功')
     fetchList()
   } catch {}

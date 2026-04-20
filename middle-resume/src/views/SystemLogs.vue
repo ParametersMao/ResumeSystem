@@ -94,7 +94,8 @@ async function load() {
       method: form.method || undefined,
       route: form.route || undefined,
     })
-    const data = res.data.data
+    // 响应拦截器已解包，res.data 就是 { list, total, page, limit }
+    const data = res.data || {}
     list.value = data.list || []
     total.value = data.total || 0
   } catch (e) {

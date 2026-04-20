@@ -8,7 +8,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: 'your-secret-key', // 应该与JwtModule中的secret一致
+      secretOrKey: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-fallback',
     });
   }
 
@@ -21,4 +21,4 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role,
     };
   }
-} 
+}

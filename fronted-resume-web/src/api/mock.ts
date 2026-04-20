@@ -256,7 +256,7 @@ function paginate<T>(arr: T[], page = 1, limit = 10) {
 }
 
 export function setupMock(instance: AxiosInstance) {
-  const handler = async (config: AxiosRequestConfig): Promise<AxiosResponse<any>> => {
+  const handler = async (config: any): Promise<AxiosResponse<any>> => {
     const rawUrl = (config.url || '')
     const method = (config.method || 'get').toLowerCase()
     const params = (config.params || {}) as Record<string, any>

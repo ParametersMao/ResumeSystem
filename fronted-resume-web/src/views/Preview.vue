@@ -1,85 +1,128 @@
 <template>
-  <div>
-    <div class="topbar">
-      <div>预览</div>
+  <div class="preview-page">
+    <div class="preview-toolbar">
       <div>
-        <button class="btn" @click="goBack">返回编辑</button>
-        <button class="btn primary" @click="exportPdfClick">导出 PDF</button>
+        <h1>{{ title }}</h1>
+        <p>只读预览页，基于同一份核心文档渲染。</p>
+      </div>
+      <div class="toolbar-actions">
+        <el-button @click="goBack">返回</el-button>
+        <el-button type="primary" @click="exportPdf" :loading="exporting">导出 PDF</el-button>
       </div>
     </div>
-    <div class="canvas">
-      <div ref="pageRef" class="page">
-        <h1 style="margin:0 0 8px">{{ resume?.meta.title }}</h1>
-        <div v-for="s in resume?.sections" :key="s.id" style="margin-top:16px">
-          <h3 v-if="s.visible">{{ s.title }}</h3>
-          <ul v-if="s.visible" style="margin:0;padding-left:18px">
-            <li v-for="(it, idx) in s.items" :key="idx">{{ formatItem(it) }}</li>
-          </ul>
-        </div>
-      </div>
-    </div>
+
+    <CoreResumePreview ref="previewRef" :document="documentState" />
   </div>
-  
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import CoreResumePreview from '@/components/core-resume/CoreResumePreview.vue'
+import { buildResumeTitle, createEmptyDocument, ensureAllSections, parseResumeContent } from '@/core-resume/model'
 import { getResume } from '@/api/resume'
-import type { Resume, SectionItem } from '@/store/resume'
-import html2canvas from 'html2canvas'
-import jsPDF from 'jspdf'
-import { exportResumePdfByHtml } from '@/api/resume'
+import { useUserStore } from '@/store/user'
 
 const route = useRoute()
 const router = useRouter()
-const resume = ref<Resume | null>(null)
-const pageRef = ref<HTMLElement | null>(null)
+const userStore = useUserStore()
 
-function goBack() { router.back() }
+const previewRef = ref<InstanceType<typeof CoreResumePreview> | null>(null)
+const documentState = ref(createEmptyDocument())
+const exporting = ref(false)
 
-function formatItem(it: SectionItem) {
-  if ((it as any).company) return `${(it as any).company} - ${(it as any).role}`
-  if ((it as any).name) return `${(it as any).name}`
-  return JSON.stringify(it)
-}
+const title = computed(() => buildResumeTitle(documentState.value.profile))
 
-async function exportPdfClick() {
-  if (!pageRef.value) return
-  // 方案A：本地导出（保留）
-  const canvas = await html2canvas(pageRef.value, { scale: 2, useCORS: true })
-  const img = canvas.toDataURL('image/jpeg', 0.92)
-  const pdf = new jsPDF('p', 'mm', 'a4')
-  const w = 210
-  const h = 297
-  const imgW = w
-  const imgH = (canvas.height * imgW) / canvas.width
-  let left = imgH
-  let pos = 0
-  pdf.addImage(img, 'JPEG', 0, pos, imgW, imgH)
-  left -= h
-  while (left > 0) {
-    pos = left - imgH
-    pdf.addPage()
-    pdf.addImage(img, 'JPEG', 0, pos, imgW, imgH)
-    left -= h
-  }
-  pdf.save('resume.pdf')
+onMounted(loadResume)
 
-  // 方案B：服务端导出（对接后端）
-  const html = pageRef.value.outerHTML
+async function loadResume() {
   try {
-    const { url } = await exportResumePdfByHtml(html)
-    if (url) window.open(url, '_blank')
-  } catch (e) {
-    // 忽略失败，仍保留本地导出结果
+    await userStore.initUserState()
+    const resume = await getResume(String(route.params.resumeId), userStore.user?.id)
+    const parsed = parseResumeContent(resume.content)
+    if (parsed) {
+      documentState.value = ensureAllSections(parsed)
+    }
+  } catch (error) {
+    console.error('加载预览失败:', error)
+    ElMessage.error('加载预览失败')
   }
 }
 
-onMounted(async () => {
-  const id = String(route.params.resumeId)
-  resume.value = await getResume(id)
-})
+function goBack() {
+  router.back()
+}
+
+async function exportPdf() {
+  const sheet = previewRef.value?.sheetRef
+  if (!sheet) {
+    return
+  }
+  exporting.value = true
+  try {
+    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ])
+    const canvas = await html2canvas(sheet, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+    const imgData = canvas.toDataURL('image/jpeg', 0.95)
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = 210
+    const pageHeight = 297
+    const imageHeight = (canvas.height * pageWidth) / canvas.width
+    let remaining = imageHeight
+    let y = 0
+
+    pdf.addImage(imgData, 'JPEG', 0, y, pageWidth, imageHeight)
+    remaining -= pageHeight
+
+    while (remaining > 0) {
+      y = remaining - imageHeight
+      pdf.addPage()
+      pdf.addImage(imgData, 'JPEG', 0, y, pageWidth, imageHeight)
+      remaining -= pageHeight
+    }
+
+    pdf.save(`${title.value}.pdf`)
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
+<style scoped>
+.preview-page {
+  min-height: 100vh;
+  background: #f8fafc;
+}
 
+.preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 20px 24px 0;
+}
+
+.preview-toolbar h1 {
+  margin: 0;
+}
+
+.preview-toolbar p {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .preview-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+</style>

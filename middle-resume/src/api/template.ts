@@ -1,11 +1,13 @@
 import { request } from '@/utils/request'
 import type { PaginationParams } from '@/types'
 
+export type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
+
 /**
  * 获取模板列表
  * GET /api/templates
  */
-export const getTemplateList = (params: PaginationParams & { templateName?: string; description?: string; status?: boolean | null }) => {
+export const getTemplateList = (params: PaginationParams & { templateName?: string; description?: string; status?: boolean | null; industryTags?: string; templateVariant?: TemplateVariant | '' }) => {
   return request.get('/templates', { params })
 }
 
@@ -21,7 +23,14 @@ export const getTemplateDetail = (id: number) => {
  * 新增模板
  * POST /api/templates
  */
-export const createTemplate = (data: { templateName: string; templateData: string; previewImage?: string }) => {
+export const createTemplate = (data: {
+  templateName: string
+  templateData: string
+  previewImage?: string
+  industryTags?: string
+  templateVariant?: TemplateVariant
+  recommendWeight?: number
+}) => {
   return request.post('/templates', data)
 }
 
@@ -29,7 +38,16 @@ export const createTemplate = (data: { templateName: string; templateData: strin
  * 编辑模板
  * PUT /api/templates/{id}
  */
-export const updateTemplate = (id: number, data: { templateName?: string, description?: string; templateData?: string; previewImage?: string, status?: boolean }) => {
+export const updateTemplate = (id: number, data: {
+  templateName?: string
+  description?: string
+  templateData?: string
+  previewImage?: string
+  industryTags?: string
+  status?: boolean
+  templateVariant?: TemplateVariant
+  recommendWeight?: number
+}) => {
   return request.put(`/templates/${id}`, data)
 }
 

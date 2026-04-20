@@ -1,12 +1,11 @@
 <template>
   <el-container class="layout-container">
-    <!-- 侧边栏 -->
     <el-aside :width="isCollapse ? '64px' : '200px'" class="aside">
       <div class="logo">
-        <img src="@/assets/logo.svg" alt="Logo" v-if="!isCollapse" />
+        <img v-if="!isCollapse" src="@/assets/logo.svg" alt="Logo" />
         <el-icon v-else><Document /></el-icon>
       </div>
-      
+
       <el-menu
         :default-active="activeMenu"
         :collapse="isCollapse"
@@ -25,13 +24,11 @@
       </el-menu>
     </el-aside>
 
-    <!-- 主内容区 -->
     <el-container>
-      <!-- 顶部导航 -->
       <el-header class="header">
         <div class="header-left">
           <el-button
-            type="text"
+            text
             @click="toggleCollapse"
             class="collapse-btn"
           >
@@ -43,7 +40,7 @@
             </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
-        
+
         <div class="header-right">
           <el-dropdown @command="handleCommand">
             <span class="user-info">
@@ -63,7 +60,6 @@
         </div>
       </el-header>
 
-      <!-- 主内容 -->
       <el-main class="main">
         <router-view />
       </el-main>
@@ -83,31 +79,25 @@ const userStore = useUserStore()
 
 const isCollapse = ref(false)
 
-// 菜单路由
 const menuRoutes = computed(() => {
-  return router.getRoutes().filter(route => 
-    route.meta?.title && route.path !== '/login'
-  )
+  return router.getRoutes().filter((item) => item.meta?.title && item.path !== '/login')
 })
 
-// 当前激活的菜单
 const activeMenu = computed(() => route.path)
 
-// 面包屑导航
 const breadcrumbs = computed(() => {
-  const matched = route.matched.filter(item => item.meta?.title)
-  return matched.map(item => ({
-    title: item.meta?.title,
-    path: item.path
-  }))
+  return route.matched
+    .filter((item) => item.meta?.title)
+    .map((item) => ({
+      title: item.meta?.title,
+      path: item.path
+    }))
 })
 
-// 切换侧边栏
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-// 处理用户下拉菜单命令
 const handleCommand = async (command: string) => {
   switch (command) {
     case 'logout':
@@ -124,10 +114,9 @@ const handleCommand = async (command: string) => {
       }
       break
     case 'profile':
-      // 跳转到个人资料页面
       break
     case 'settings':
-      // 跳转到设置页面
+      router.push('/system-config')
       break
   }
 }
@@ -213,4 +202,4 @@ onMounted(() => {
   background-color: var(--el-bg-color-page);
   padding: 20px;
 }
-</style> 
+</style>

@@ -68,7 +68,7 @@
             {{ formatDate(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">
               编辑
@@ -79,6 +79,9 @@
               @click="handleToggleStatus(row)"
             >
               {{ row.status === 'active' ? '禁用' : '启用' }}
+            </el-button>
+            <el-button type="info" size="small" @click="handleResetPassword(row)">
+              重置密码
             </el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">
               删除
@@ -144,6 +147,22 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 密码重置对话框 -->
+    <el-dialog v-model="resetPasswordVisible" title="重置密码" width="400px">
+      <el-form :model="resetPasswordForm" label-width="80px">
+        <el-form-item label="用户名">
+          <el-input :model-value="resetPasswordForm.username" disabled />
+        </el-form-item>
+        <el-form-item label="新密码" required>
+          <el-input v-model="resetPasswordForm.password" type="password" placeholder="请输入新密码" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="resetPasswordVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitResetPassword">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -152,7 +171,36 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import type { User } from '@/types'
-import { getUserList, createUser, updateUser, deleteUser, updateUserStatus } from '@/api/user'
+import { getUserList, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword } from '@/api/user'
+
+// 密码重置
+const resetPasswordVisible = ref(false)
+const resetPasswordForm = reactive({
+  id: 0,
+  username: '',
+  password: ''
+})
+
+const handleResetPassword = (row: User) => {
+  resetPasswordForm.id = row.id
+  resetPasswordForm.username = row.username
+  resetPasswordForm.password = ''
+  resetPasswordVisible.value = true
+}
+
+const submitResetPassword = async () => {
+  if (!resetPasswordForm.password) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  try {
+    await resetUserPassword(resetPasswordForm.id, resetPasswordForm.password)
+    ElMessage.success('密码重置成功')
+    resetPasswordVisible.value = false
+  } catch (error) {
+    ElMessage.error('密码重置失败')
+  }
+}
 
 // 搜索表单
 const searchForm = reactive({
@@ -212,16 +260,16 @@ const getUserListData = async () => {
       page: pagination.page,
       limit: pagination.pageSize,
       search: searchForm.username || '',
-      status: searchForm.status || undefined
+      status: searchForm.status ? Number(searchForm.status) : undefined
     }
     const res = await getUserList(params)
-    userList.value = res.data.data.list.map(item => ({
+    userList.value = (res.data.list || []).map((item: any) => ({
       ...item,
       status: item.status === 1 ? 'active' : 'inactive',
       createdAt: item.createTime,
       updatedAt: item.updateTime
     }))
-    pagination.total = res.data.data.total
+    pagination.total = res.data.total || 0
   } catch (error) {
     ElMessage.error('获取用户列表失败')
   } finally {

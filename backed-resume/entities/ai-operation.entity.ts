@@ -13,18 +13,21 @@ export class AiOperation {
   @JoinColumn({ name: 'user_id' })
   user: CUser;
 
-  @Column({ type: 'varchar', length: 20, name: 'operation_type' })
-  operationType: string; // 'polish', 'generate'
+  @Column({ type: 'varchar', length: 50, name: 'operation_type' })
+  operationType: string; // 'polish', 'generate', 'format', 'translate', 'suggest'
 
-  @Column({ type: 'text', nullable: true, name: 'input_data' })
+  @Column({ type: 'text', nullable: true, name: 'input_text' })
   inputData: string;
 
-  @Column({ type: 'text', nullable: true, name: 'output_data' })
+  @Column({ type: 'text', nullable: true, name: 'output_text' })
   outputData: string;
 
   @CreateDateColumn({ type: 'datetime', name: 'create_time' })
   createTime: Date;
 
-  @Column({ type: 'int', default: 0, name: 'token_used' })
+  @Column({ type: 'int', default: 0, name: 'tokens_used' })
   tokenUsed: number;
+
+  @Column({ type: 'enum', enum: ['processing', 'success', 'failed'], default: 'success' })
+  status: string;
 } 

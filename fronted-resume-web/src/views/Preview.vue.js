@@ -1,124 +1,157 @@
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import CoreResumePreview from '@/components/core-resume/CoreResumePreview.vue';
+import { buildResumeTitle, createEmptyDocument, ensureAllSections, parseResumeContent } from '@/core-resume/model';
 import { getResume } from '@/api/resume';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import { exportResumePdfByHtml } from '@/api/resume';
+import { useUserStore } from '@/store/user';
 const route = useRoute();
 const router = useRouter();
-const resume = ref(null);
-const pageRef = ref(null);
-function goBack() { router.back(); }
-function formatItem(it) {
-    if (it.company)
-        return `${it.company} - ${it.role}`;
-    if (it.name)
-        return `${it.name}`;
-    return JSON.stringify(it);
-}
-async function exportPdfClick() {
-    if (!pageRef.value)
-        return;
-    // 方案A：本地导出（保留）
-    const canvas = await html2canvas(pageRef.value, { scale: 2, useCORS: true });
-    const img = canvas.toDataURL('image/jpeg', 0.92);
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const w = 210;
-    const h = 297;
-    const imgW = w;
-    const imgH = (canvas.height * imgW) / canvas.width;
-    let left = imgH;
-    let pos = 0;
-    pdf.addImage(img, 'JPEG', 0, pos, imgW, imgH);
-    left -= h;
-    while (left > 0) {
-        pos = left - imgH;
-        pdf.addPage();
-        pdf.addImage(img, 'JPEG', 0, pos, imgW, imgH);
-        left -= h;
-    }
-    pdf.save('resume.pdf');
-    // 方案B：服务端导出（对接后端）
-    const html = pageRef.value.outerHTML;
+const userStore = useUserStore();
+const previewRef = ref(null);
+const documentState = ref(createEmptyDocument());
+const exporting = ref(false);
+const title = computed(() => buildResumeTitle(documentState.value.profile));
+onMounted(loadResume);
+async function loadResume() {
     try {
-        const { url } = await exportResumePdfByHtml(html);
-        if (url)
-            window.open(url, '_blank');
+        await userStore.initUserState();
+        const resume = await getResume(String(route.params.resumeId), userStore.user?.id);
+        const parsed = parseResumeContent(resume.content);
+        if (parsed) {
+            documentState.value = ensureAllSections(parsed);
+        }
     }
-    catch (e) {
-        // 忽略失败，仍保留本地导出结果
+    catch (error) {
+        console.error('加载预览失败:', error);
+        ElMessage.error('加载预览失败');
     }
 }
-onMounted(async () => {
-    const id = String(route.params.resumeId);
-    resume.value = await getResume(id);
-});
+function goBack() {
+    router.back();
+}
+async function exportPdf() {
+    const sheet = previewRef.value?.sheetRef;
+    if (!sheet) {
+        return;
+    }
+    exporting.value = true;
+    try {
+        const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+            import('html2canvas'),
+            import('jspdf'),
+        ]);
+        const canvas = await html2canvas(sheet, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const imageHeight = (canvas.height * pageWidth) / canvas.width;
+        let remaining = imageHeight;
+        let y = 0;
+        pdf.addImage(imgData, 'JPEG', 0, y, pageWidth, imageHeight);
+        remaining -= pageHeight;
+        while (remaining > 0) {
+            y = remaining - imageHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, y, pageWidth, imageHeight);
+            remaining -= pageHeight;
+        }
+        pdf.save(`${title.value}.pdf`);
+    }
+    finally {
+        exporting.value = false;
+    }
+}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+/** @type {__VLS_StyleScopedClasses['preview-toolbar']} */ ;
+/** @type {__VLS_StyleScopedClasses['preview-toolbar']} */ ;
+/** @type {__VLS_StyleScopedClasses['preview-toolbar']} */ ;
+// CSS variable injection 
+// CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "topbar" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-    ...{ onClick: (__VLS_ctx.goBack) },
-    ...{ class: "btn" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-    ...{ onClick: (__VLS_ctx.exportPdfClick) },
-    ...{ class: "btn primary" },
+    ...{ class: "preview-page" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "canvas" },
+    ...{ class: "preview-toolbar" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({});
+(__VLS_ctx.title);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ref: "pageRef",
-    ...{ class: "page" },
+    ...{ class: "toolbar-actions" },
 });
-/** @type {typeof __VLS_ctx.pageRef} */ ;
-__VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
-    ...{ style: {} },
-});
-(__VLS_ctx.resume?.meta.title);
-for (const [s] of __VLS_getVForSourceType((__VLS_ctx.resume?.sections))) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        key: (s.id),
-        ...{ style: {} },
-    });
-    if (s.visible) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({});
-        (s.title);
-    }
-    if (s.visible) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.ul, __VLS_intrinsicElements.ul)({
-            ...{ style: {} },
-        });
-        for (const [it, idx] of __VLS_getVForSourceType((s.items))) {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.li, __VLS_intrinsicElements.li)({
-                key: (idx),
-            });
-            (__VLS_ctx.formatItem(it));
-        }
-    }
-}
-/** @type {__VLS_StyleScopedClasses['topbar']} */ ;
-/** @type {__VLS_StyleScopedClasses['btn']} */ ;
-/** @type {__VLS_StyleScopedClasses['btn']} */ ;
-/** @type {__VLS_StyleScopedClasses['primary']} */ ;
-/** @type {__VLS_StyleScopedClasses['canvas']} */ ;
-/** @type {__VLS_StyleScopedClasses['page']} */ ;
+const __VLS_0 = {}.ElButton;
+/** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+// @ts-ignore
+const __VLS_1 = __VLS_asFunctionalComponent(__VLS_0, new __VLS_0({
+    ...{ 'onClick': {} },
+}));
+const __VLS_2 = __VLS_1({
+    ...{ 'onClick': {} },
+}, ...__VLS_functionalComponentArgsRest(__VLS_1));
+let __VLS_4;
+let __VLS_5;
+let __VLS_6;
+const __VLS_7 = {
+    onClick: (__VLS_ctx.goBack)
+};
+__VLS_3.slots.default;
+var __VLS_3;
+const __VLS_8 = {}.ElButton;
+/** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+// @ts-ignore
+const __VLS_9 = __VLS_asFunctionalComponent(__VLS_8, new __VLS_8({
+    ...{ 'onClick': {} },
+    type: "primary",
+    loading: (__VLS_ctx.exporting),
+}));
+const __VLS_10 = __VLS_9({
+    ...{ 'onClick': {} },
+    type: "primary",
+    loading: (__VLS_ctx.exporting),
+}, ...__VLS_functionalComponentArgsRest(__VLS_9));
+let __VLS_12;
+let __VLS_13;
+let __VLS_14;
+const __VLS_15 = {
+    onClick: (__VLS_ctx.exportPdf)
+};
+__VLS_11.slots.default;
+var __VLS_11;
+/** @type {[typeof CoreResumePreview, ]} */ ;
+// @ts-ignore
+const __VLS_16 = __VLS_asFunctionalComponent(CoreResumePreview, new CoreResumePreview({
+    ref: "previewRef",
+    document: (__VLS_ctx.documentState),
+}));
+const __VLS_17 = __VLS_16({
+    ref: "previewRef",
+    document: (__VLS_ctx.documentState),
+}, ...__VLS_functionalComponentArgsRest(__VLS_16));
+/** @type {typeof __VLS_ctx.previewRef} */ ;
+var __VLS_19 = {};
+var __VLS_18;
+/** @type {__VLS_StyleScopedClasses['preview-page']} */ ;
+/** @type {__VLS_StyleScopedClasses['preview-toolbar']} */ ;
+/** @type {__VLS_StyleScopedClasses['toolbar-actions']} */ ;
+// @ts-ignore
+var __VLS_20 = __VLS_19;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
-            resume: resume,
-            pageRef: pageRef,
+            CoreResumePreview: CoreResumePreview,
+            previewRef: previewRef,
+            documentState: documentState,
+            exporting: exporting,
+            title: title,
             goBack: goBack,
-            formatItem: formatItem,
-            exportPdfClick: exportPdfClick,
+            exportPdf: exportPdf,
         };
     },
 });
