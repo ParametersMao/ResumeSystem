@@ -1,11 +1,17 @@
 import http from './request';
 export async function createResume(templateId, title, userId, content) {
-    const { data } = await http.post('/api/resumes', {
-        templateId: parseInt(templateId),
+    const payload = {
         title,
         userId,
-        content
-    });
+        content,
+    };
+    if (templateId) {
+        const parsedTemplateId = parseInt(templateId, 10);
+        if (!Number.isNaN(parsedTemplateId)) {
+            payload.templateId = parsedTemplateId;
+        }
+    }
+    const { data } = await http.post('/api/resumes', payload);
     return { resumeId: data.data.id.toString() };
 }
 export async function getResume(resumeId, userId) {
@@ -31,6 +37,11 @@ export async function exportResumePdfByHtml(html) {
 export async function listResumeVersions(resumeId, userId) {
     const params = userId ? { userId } : {};
     const { data } = await http.get(`/api/resumes/${resumeId}/versions`, { params });
+    return data.data;
+}
+export async function createResumeVersionSnapshot(resumeId, userId, remark) {
+    const params = userId ? { userId } : {};
+    const { data } = await http.post(`/api/resumes/${resumeId}/versions`, { remark }, { params });
     return data.data;
 }
 export async function rollbackResumeVersion(resumeId, versionId, userId) {

@@ -17,13 +17,14 @@ import { CUserEntitlement } from '../../entities/c-user-entitlement.entity';
     CUsersModule,
     TypeOrmModule.forFeature([Resume, CUserProfile, CUserEntitlement]),
     PassportModule,
+    // Access token JwtService
     JwtModule.register({
-      secret: 'your-secret-key', // 在生产环境中应该使用环境变量
-      signOptions: { expiresIn: '1h' },
+      secret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-fallback',
+      signOptions: { expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '1h' },
     }),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule {} 
+export class AuthModule {}

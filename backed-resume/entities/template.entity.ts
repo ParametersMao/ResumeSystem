@@ -5,33 +5,36 @@ export class Template {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ name: 'name' })
   templateName: string;
 
-  @Column({ type: 'text' })
-  templateData: string;
-
-  @Column({ type: 'longtext', nullable: true })
+  @Column({ name: 'thumbnail', type: 'varchar', length: 500, nullable: true })
   previewImage: string;
 
-  @Column({ nullable: true })
-  description: string;
+  @Column({ name: 'html_content', type: 'text', nullable: true })
+  templateData: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'industry_tags' })
+  @Column({ name: 'css_content', type: 'text', nullable: true })
+  cssContent: string;
+
+  @Column({ nullable: true })
+  category: string;
+
+  @Column({ name: 'tags', type: 'varchar', length: 500, nullable: true })
   industryTags: string | null;
 
-  @Column({ default: true })
+  @Column({ name: 'is_premium', default: false })
+  isPremium: boolean;
+
+  @Column({ name: 'is_active', default: true })
   status: boolean;
 
-  @CreateDateColumn()
-  createTime: Date;
-
-  @UpdateDateColumn({ type: 'datetime', name: 'update_time' })
-  updateTime: Date;
-
-  @Column({ type: 'int', default: 0, name: 'use_count' })
+  @Column({ name: 'use_count', type: 'int', default: 0 })
   useCount: number;
 
-  @Column({ type: 'int', default: 0, name: 'download_count' })
-  downloadCount: number;
+  @CreateDateColumn({ name: 'create_time' })
+  createTime: Date;
+
+  @UpdateDateColumn({ name: 'update_time' })
+  updateTime: Date;
 } 

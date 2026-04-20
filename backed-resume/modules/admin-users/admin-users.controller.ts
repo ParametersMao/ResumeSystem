@@ -82,6 +82,28 @@ export class AdminUsersController {
     };
   }
 
+  @Patch(':id/reset-password')
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() body: { password: string },
+  ): Promise<ApiResponse<AdminUserResponseDto>> {
+    const user = await this.adminUsersService.resetPassword(+id, body.password);
+    return {
+      code: 200,
+      message: '密码重置成功',
+      data: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        createTime: user.createTime,
+        updateTime: user.updateTime,
+      },
+    };
+  }
+
   @Delete(':id')
   async remove(@Param('id') id: string): Promise<ApiResponse<null>> {
     await this.adminUsersService.remove(+id);

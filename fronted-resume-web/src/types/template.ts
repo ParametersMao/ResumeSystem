@@ -9,7 +9,6 @@ export interface ThemeDefinition {
     primary: string;
     secondary?: string;
     accent?: string;
-    background?: string;
     text?: {
       primary: string;
       secondary?: string;

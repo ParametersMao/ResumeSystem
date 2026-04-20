@@ -4,9 +4,7 @@ import { useUserStore } from '@/store/user'
 const Login = () => import('@/views/Login.vue')
 const Home = () => import('@/views/Home.vue')
 const Templates = () => import('@/views/Templates.vue')
-const Editor = () => import('@/views/Editor.vue')
-// const ResumeEditor = () => import('@/views/ResumeEditor.vue')
-const ResumeEditor = () => import('@/views/ResumeEditorNew.vue')
+const ResumeEditor = () => import('@/views/CoreResumeEditor.vue')
 const Preview = () => import('@/views/Preview.vue')
 const Resumes = () => import('@/views/Resumes.vue')
 const Contact = () => import('@/views/Contact.vue')
@@ -17,6 +15,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', component: Login, meta: { requiresAuth: false } },
   // 独立的简历编辑器页面（全屏）
   { path: '/resume-editor', component: ResumeEditor, meta: { requiresAuth: true } },
+  { path: '/resume-editor/:resumeId', component: ResumeEditor, meta: { requiresAuth: true } },
   { path: '/profile', redirect: '/account' },
   {
     path: '/',
@@ -31,7 +30,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'positions', component: Resumes, meta: { requiresAuth: true } },
       { path: 'mock', component: Resumes, meta: { requiresAuth: true } },
       { path: 'account', component: Profile, meta: { requiresAuth: true } },
-      { path: 'editor/:resumeId', component: Editor, props: true, meta: { requiresAuth: true } },
+      { path: 'editor/:resumeId', component: ResumeEditor, props: true, meta: { requiresAuth: true } },
       { path: 'preview/:resumeId', component: Preview, props: true, meta: { requiresAuth: true } }
     ]
   }

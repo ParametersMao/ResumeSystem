@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -17,6 +19,8 @@ import { CUserProfile } from '../entities/c-user-profile.entity';
 import { CUserEntitlement } from '../entities/c-user-entitlement.entity';
 import { ResumeVersion } from '../entities/resume-version.entity';
 import { SystemLog } from '../entities/system-log.entity';
+import { TemplateFavorite } from '../entities/template-favorite.entity';
+import { SystemConfig } from '../entities/system-config.entity';
 
 // 导入功能模块
 import { AdminUsersModule } from '../modules/admin-users/admin-users.module';
@@ -29,6 +33,7 @@ import { ResumesModule } from '../modules/resumes/resumes.module';
 import { CuserProfileModule } from '../modules/cuser-profile/cuser-profile.module';
 import { SystemLogsModule } from '../modules/system-logs/system-logs.module';
 import { AiModule } from '../modules/ai/ai.module';
+import { SystemConfigModule } from '../modules/system-config/system-config.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 
@@ -36,7 +41,23 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'production'
+        ? 'config.production.env'
+        : 'config.env',
     }),
+    // API 限流：登录接口 20次/分钟，其他接口 100次/分钟
+    ThrottlerModule.forRoot([
+      {
+        name: 'login',
+        ttl: 60000,
+        limit: 20,
+      },
+      {
+        name: 'default',
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST || 'localhost',
@@ -57,12 +78,12 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
         CUserProfile,
         CUserEntitlement,
         SystemLog,
+        TemplateFavorite,
+        SystemConfig,
       ],
-      synchronize: false, // 关闭自动同步，避免每次启动都操作数据库。临时设置synchronize: true可同步数据表结构
+      synchronize: false,
+      // 生产环境禁用日志记录
       logging: process.env.NODE_ENV !== 'production',
-      // 可选：添加migrations配置
-      // migrations: ['dist/migrations/*.js'],
-      // migrationsRun: true,
     }),
     AdminUsersModule,
     AuthModule,
@@ -74,14 +95,20 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
     CuserProfileModule,
     SystemLogsModule,
     AiModule,
+    SystemConfigModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    // 全局限流守卫
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditLogInterceptor,
     },
   ],
 })
-export class AppModule {} 
+export class AppModule {}

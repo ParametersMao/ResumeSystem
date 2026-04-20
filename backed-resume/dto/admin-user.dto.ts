@@ -1,10 +1,16 @@
-import { IsString, IsEmail, IsOptional, IsInt, Min, Max, IsIn } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsInt, Min, Max, IsIn, Matches } from 'class-validator';
+
+// 密码强度：最少8位，必须包含大小写字母和数字
+export const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 export class CreateAdminUserDto {
   @IsString()
   username: string;
 
   @IsString()
+  @Matches(PASSWORD_REGEX, {
+    message: '密码至少8位，必须包含大小写字母和数字',
+  })
   password: string;
 
   @IsOptional()
@@ -33,6 +39,9 @@ export class UpdateAdminUserDto {
 
   @IsOptional()
   @IsString()
+  @Matches(PASSWORD_REGEX, {
+    message: '密码至少8位，必须包含大小写字母和数字',
+  })
   password?: string;
 
   @IsOptional()
@@ -55,12 +64,25 @@ export class UpdateAdminUserStatusDto {
   status: number;
 }
 
+export class ResetAdminUserPasswordDto {
+  @IsString()
+  @Matches(PASSWORD_REGEX, {
+    message: '密码至少8位，必须包含大小写字母和数字',
+  })
+  password: string;
+}
+
 export class LoginDto {
   @IsString()
   username: string;
 
   @IsString()
   password: string;
+}
+
+export class RefreshTokenDto {
+  @IsString()
+  refresh_token: string;
 }
 
 // 响应数据DTO
@@ -73,4 +95,4 @@ export class AdminUserResponseDto {
   status: number;
   createTime: Date;
   updateTime: Date;
-} 
+}

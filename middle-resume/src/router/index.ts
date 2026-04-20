@@ -30,7 +30,7 @@ const routes: RouteRecordRaw[] = [
         path: 'cuser-management',
         name: 'CUserManagement',
         component: () => import('@/views/CUserManagement.vue'),
-        meta: { title: 'C端用户管理', icon: 'UserFilled' }
+        meta: { title: 'C 端用户管理', icon: 'UserFilled' }
       },
       {
         path: 'template-management',
@@ -48,13 +48,19 @@ const routes: RouteRecordRaw[] = [
         path: 'ai-operations',
         name: 'AiOperations',
         component: () => import('@/views/AiOperationMonitoring.vue'),
-        meta: { title: 'AI操作监控', icon: 'Monitor' }
+        meta: { title: 'AI 操作监控', icon: 'Monitor' }
       },
       {
         path: 'system-logs',
         name: 'SystemLogs',
         component: () => import('@/views/SystemLogs.vue'),
         meta: { title: '审计日志', icon: 'Tickets' }
+      },
+      {
+        path: 'system-config',
+        name: 'SystemConfig',
+        component: () => import('@/views/SystemConfig.vue'),
+        meta: { title: 'AI 配置', icon: 'Setting' }
       }
     ]
   }
@@ -65,10 +71,9 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
-  
+
   if (to.meta.requiresAuth !== false && !userStore.isLoggedIn) {
     next('/login')
   } else {
@@ -76,4 +81,4 @@ router.beforeEach((to, from, next) => {
   }
 })
 
-export default router 
+export default router

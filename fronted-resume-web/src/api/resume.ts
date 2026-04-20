@@ -1,13 +1,21 @@
 import http, { ApiResponse, PageResult } from './request'
 import type { Resume } from '@/store/resume'
 
-export async function createResume(templateId: string, title: string, userId: number, content: string) {
-  const { data } = await http.post<ApiResponse<{ id: number }>>('/api/resumes', { 
-    templateId: parseInt(templateId), 
-    title, 
+export async function createResume(templateId: string | undefined, title: string, userId: number, content: string) {
+  const payload: Record<string, unknown> = {
+    title,
     userId,
-    content 
-  })
+    content,
+  }
+
+  if (templateId) {
+    const parsedTemplateId = parseInt(templateId, 10)
+    if (!Number.isNaN(parsedTemplateId)) {
+      payload.templateId = parsedTemplateId
+    }
+  }
+
+  const { data } = await http.post<ApiResponse<{ id: number }>>('/api/resumes', payload)
   return { resumeId: data.data.id.toString() }
 }
 
@@ -38,6 +46,12 @@ export async function exportResumePdfByHtml(html: string) {
 export async function listResumeVersions(resumeId: string, userId?: number) {
   const params = userId ? { userId } : {}
   const { data } = await http.get<ApiResponse<any[]>>(`/api/resumes/${resumeId}/versions`, { params })
+  return data.data
+}
+
+export async function createResumeVersionSnapshot(resumeId: string, userId?: number, remark?: string) {
+  const params = userId ? { userId } : {}
+  const { data } = await http.post<ApiResponse<any>>(`/api/resumes/${resumeId}/versions`, { remark }, { params })
   return data.data
 }
 

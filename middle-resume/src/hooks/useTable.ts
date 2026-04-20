@@ -37,8 +37,10 @@ export function useTable<T>(options: UseTableOptions<T>) {
       
       console.log('发送的请求参数:', params);
       const response = await fetchData(params)
-      dataList.value = response.data.data.list
-      pagination.total = response.data.data.total
+      // 响应拦截器已解包，response 就是 ApiResponse<T>
+      const data = response.data as any
+      dataList.value = data?.list || data || []
+      pagination.total = data?.total || 0
     } catch (error) {
       console.error('获取数据失败:', error)
     } finally {

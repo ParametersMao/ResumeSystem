@@ -19,7 +19,7 @@ export class Resume {
   @Column({ name: 'user_id' })
   userId: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'preview_image', type: 'text', nullable: true })
   previewImage: string; // Base64 or URL
 
   @Column({ default: 1 })

@@ -19,4 +19,12 @@ export class TemplateSearchDto extends PaginationDto {
   @IsOptional()
   @IsString()
   industryTags?: string;
+
+  @IsOptional()
+  @IsString()
+  templateVariant?: string;
+
+  @IsOptional()
+  @IsString()
+  sortBy?: 'recommended' | 'latest' | 'popular';
 }

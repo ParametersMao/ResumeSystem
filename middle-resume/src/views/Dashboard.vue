@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="dashboard">
     <!-- 统计卡片 -->
     <el-row :gutter="20" class="stats-row">
@@ -24,11 +24,11 @@
           <template #header>
             <div class="card-header">
               <span>简历生成趋势</span>
-              <el-button type="text" @click="refreshResumeChart">刷新</el-button>
+              <el-button text @click="refreshResumeChart">刷新</el-button>
             </div>
           </template>
-          <div class="chart-container">
-            <div class="chart-placeholder">图表区域</div>
+          <div class="chart-container" v-loading="chartLoading">
+            <VChart class="chart" :option="resumeChartOption" autoresize />
           </div>
         </el-card>
       </el-col>
@@ -38,11 +38,11 @@
           <template #header>
             <div class="card-header">
               <span>热门模板使用情况</span>
-              <el-button type="text" @click="refreshTemplateChart">刷新</el-button>
+              <el-button text @click="refreshTemplateChart">刷新</el-button>
             </div>
           </template>
-          <div class="chart-container">
-            <div class="chart-placeholder">图表区域</div>
+          <div class="chart-container" v-loading="chartLoading">
+            <VChart class="chart" :option="templateChartOption" autoresize />
           </div>
         </el-card>
       </el-col>
@@ -77,7 +77,7 @@
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :xs="24" :lg="12">
         <el-card class="activity-card">
           <template #header>
@@ -111,7 +111,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getStatisticsOverview, getStatisticsTrend, getUserActivity } from '@/api/statistics'
+import VChart from 'vue-echarts'
+import { getStatisticsOverview, getStatisticsTrend, getPopularTemplates, getUserActivity } from '@/api/statistics'
+import '@/plugins/echarts'
+
+// 图表选项配置
+const resumeChartOption = ref({})
+const templateChartOption = ref({})
+const chartLoading = ref(false)
 
 // 统计数据
 const stats = ref([
@@ -171,13 +178,13 @@ const formatTime = (time: Date) => {
   const now = new Date()
   const diff = now.getTime() - time.getTime()
   const minutes = Math.floor(diff / (1000 * 60))
-  
+
   if (minutes < 1) return '刚刚'
   if (minutes < 60) return `${minutes}分钟前`
-  
+
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}小时前`
-  
+
   const days = Math.floor(hours / 24)
   return `${days}天前`
 }
@@ -192,15 +199,19 @@ const refreshTemplateChart = () => {
 }
 
 const init = async () => {
+  chartLoading.value = true
   try {
-    const [overviewRes, trendRes, userActivityRes] = await Promise.all([
+    const [overviewRes, trendRes, templatesRes, userActivityRes] = await Promise.all([
       getStatisticsOverview(),
-      getStatisticsTrend({ period: 'day' }),
+      getStatisticsTrend({ period: 'week' }),
+      getPopularTemplates({ limit: 5 }),
       getUserActivity({ limit: 3 })
     ])
 
-    const overview = overviewRes.data.data
-    const trend = trendRes.data.data
+    // 响应拦截器已解包，直接使用 .data
+    const overview = overviewRes.data
+    const trend = trendRes.data
+    const templates = templatesRes.data || []
     const today = new Date().toISOString().slice(0, 10)
     const todayNewUsers = (trend.user_trend || []).reduce((sum: number, item: any) => {
       return item.date === today ? sum + Number(item.count || 0) : sum
@@ -211,8 +222,51 @@ const init = async () => {
     stats.value[2].value = String(overview.total_templates ?? 0)
     stats.value[3].value = String(overview.total_ai_operations ?? 0)
 
-    const users = userActivityRes.data.data || []
-    // “最近活动”当前用真实数据做替代：展示活跃用户排行
+    // 更新简历生成趋势图
+    const resumeTrend = trend.resume_trend || []
+    resumeChartOption.value = {
+      tooltip: { trigger: 'axis' },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: resumeTrend.map((item: any) => item.date)
+      },
+      yAxis: { type: 'value' },
+      series: [{
+        name: '简历生成数',
+        type: 'line',
+        smooth: true,
+        data: resumeTrend.map((item: any) => item.count),
+        areaStyle: { color: 'rgba(64, 158, 255, 0.2)' },
+        itemStyle: { color: '#409EFF' }
+      }]
+    }
+
+    // 更新模板使用饼图
+    const pieData = templates.map((t: any) => ({
+      name: t.templateName ?? t.template_name ?? `#${t.id}`,
+      value: t.useCount ?? t.use_count ?? 0
+    }))
+    templateChartOption.value = {
+      tooltip: { trigger: 'item' },
+      legend: { orient: 'vertical', left: 'left' },
+      series: [{
+        name: '模板使用',
+        type: 'pie',
+        radius: '50%',
+        data: pieData,
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
+          }
+        }
+      }]
+    }
+
+    const users = userActivityRes.data || []
     recentActivities.value = users.map((u: any, idx: number) => ({
       id: u.id ?? idx + 1,
       username: u.username,
@@ -222,6 +276,9 @@ const init = async () => {
     }))
   } catch (e) {
     // 页面可渲染，失败时保留占位值
+    console.error('Dashboard 数据加载失败:', e)
+  } finally {
+    chartLoading.value = false
   }
 }
 
@@ -293,6 +350,11 @@ onMounted(() => {
 .chart-container {
   width: 100%;
   height: 300px;
+}
+
+.chart {
+  width: 100%;
+  height: 100%;
 }
 
 .chart-placeholder {
@@ -367,10 +429,10 @@ onMounted(() => {
   .dashboard {
     padding: 10px;
   }
-  
+
   .stat-content {
     flex-direction: column;
     text-align: center;
   }
 }
-</style> 
+</style>

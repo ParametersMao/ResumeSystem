@@ -1,6 +1,7 @@
-import { Controller, Post, Get, Body, UseGuards, Request, HttpCode, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Request, HttpCode, UnauthorizedException, Headers } from '@nestjs/common';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { LoginDto } from '../../dto/admin-user.dto';
+import { LoginDto, RefreshTokenDto } from '../../dto/admin-user.dto';
 import { CreateCUserDto } from '../../dto/c-user.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ApiResponse } from '../../common/interfaces/pagination.interface';
@@ -10,6 +11,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async login(@Body() loginDto: LoginDto): Promise<ApiResponse<any>> {
     console.log('login called', loginDto);
@@ -17,6 +20,17 @@ export class AuthController {
     return {
       code: 200,
       message: '登录成功',
+      data: result,
+    };
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  async refresh(@Body() dto: RefreshTokenDto): Promise<ApiResponse<any>> {
+    const result = await this.authService.refresh(dto.refresh_token);
+    return {
+      code: 200,
+      message: '刷新成功',
       data: result,
     };
   }
@@ -52,6 +66,8 @@ export class AuthController {
 
   // C端用户登录
   @Post('cuser/login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async cuserLogin(@Body() loginDto: LoginDto): Promise<ApiResponse<any>> {
     const result = await this.authService.cuserLogin(loginDto);
@@ -97,4 +113,4 @@ export class AuthController {
       data: center,
     };
   }
-} 
+}

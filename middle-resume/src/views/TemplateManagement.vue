@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="template-management">
     <!-- 搜索和操作栏 -->
     <el-card class="search-card">
@@ -25,9 +25,24 @@
             <el-option label="禁用" :value="false" />
           </el-select>
         </el-form-item>
+        <el-form-item label="版式">
+          <el-select v-model="searchForm.templateVariant" placeholder="请选择版式" clearable style="width: 160px">
+            <el-option label="经典单栏" value="classic" />
+            <el-option label="侧栏双栏" value="sidebar" />
+            <el-option label="时间轴版" value="timeline" />
+            <el-option label="聚焦封面" value="spotlight" />
+            <el-option label="ATS 极简" value="ats" />
+            <el-option label="高管黑金" value="executive" />
+            <el-option label="紧凑信息流" value="compact" />
+            <el-option label="编辑创意" value="editorial" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch(getSearchParams())">搜索</el-button>
           <el-button @click="resetSearchForm">重置</el-button>
+        </el-form-item>
+        <el-form-item label="场景标签">
+          <el-input v-model="searchForm.industryTags" placeholder="例如：校招,技术" clearable style="width: 220px" />
         </el-form-item>
       </el-form>
     </el-card>
@@ -49,6 +64,14 @@
       >
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="templateName" label="模板名称" width="150" />
+        <el-table-column prop="templateVariant" label="版式" width="120">
+          <template #default="{ row }">
+            <el-tag type="primary">
+              {{ getTemplateVariantLabel(row.templateVariant) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="recommendWeight" label="推荐权重" width="110" />
         <el-table-column prop="description" label="描述" />
         <el-table-column label="预览图" width="120">
           <template #default="{ row }">
@@ -131,21 +154,48 @@
             placeholder="请输入模板描述"
           />
         </el-form-item>
+        <el-form-item label="模板版式" prop="templateVariant">
+          <el-select v-model="form.templateVariant" placeholder="请选择模板版式">
+            <el-option label="经典单栏" value="classic" />
+            <el-option label="侧栏双栏" value="sidebar" />
+            <el-option label="时间轴版" value="timeline" />
+            <el-option label="聚焦封面" value="spotlight" />
+            <el-option label="ATS 极简" value="ats" />
+            <el-option label="高管黑金" value="executive" />
+            <el-option label="紧凑信息流" value="compact" />
+            <el-option label="编辑创意" value="editorial" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="场景标签">
+          <el-input
+            v-model="form.industryTags"
+            placeholder="多个标签用英文逗号分隔，例如：校招,前端,产品"
+          />
+        </el-form-item>
+        <el-form-item label="推荐权重">
+          <el-input-number v-model="form.recommendWeight" :min="0" :step="10" />
+        </el-form-item>
         <el-form-item label="预览图" prop="previewImage">
-          <el-upload
-            class="upload-demo"
-            action="#"
-            :auto-upload="false"
-            :on-change="handleImageChange"
-            :show-file-list="false"
-          >
-            <el-button type="primary">选择图片</el-button>
-            <template #tip>
-              <div class="el-upload__tip">
-                只能上传jpg/png文件，且不超过2MB
-              </div>
-            </template>
-          </el-upload>
+          <div class="asset-tools">
+            <el-upload
+              class="upload-demo"
+              action="#"
+              :auto-upload="false"
+              :on-change="handleImageChange"
+              :show-file-list="false"
+            >
+              <el-button type="primary">选择图片</el-button>
+              <template #tip>
+                <div class="el-upload__tip">
+                  只能上传 jpg/png 文件，且不超过 5MB
+                </div>
+              </template>
+            </el-upload>
+            <div class="spec-actions">
+              <el-button plain @click="openTemplateSpecDialog">查看 JSON 规范</el-button>
+              <el-button @click="applyTemplateSpec(form.templateVariant)">套用当前版式示例</el-button>
+            </div>
+          </div>
           <div v-if="form.previewImage" class="preview-image">
             <el-image
               :src="form.previewImage"
@@ -212,11 +262,43 @@
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog
+      v-model="specDialogVisible"
+      title="模板 JSON 规范"
+      width="820px"
+      top="6vh"
+    >
+      <div class="spec-dialog">
+        <div class="spec-toolbar">
+          <el-radio-group v-model="specVariant">
+            <el-radio-button label="classic">经典单栏</el-radio-button>
+            <el-radio-button label="sidebar">侧栏双栏</el-radio-button>
+            <el-radio-button label="timeline">时间轴版</el-radio-button>
+            <el-radio-button label="spotlight">聚焦封面</el-radio-button>
+            <el-radio-button label="ats">ATS 极简</el-radio-button>
+            <el-radio-button label="executive">高管黑金</el-radio-button>
+            <el-radio-button label="compact">紧凑信息流</el-radio-button>
+            <el-radio-button label="editorial">编辑创意</el-radio-button>
+          </el-radio-group>
+          <div class="spec-toolbar-actions">
+            <el-tooltip content="示例会自动写入 variant、layout.variant 和 theme.variant；可继续补充颜色、字体、区块配置和封面图。" placement="bottom">
+              <span class="help-link">规范说明</span>
+            </el-tooltip>
+            <el-button @click="copyCurrentSpec">复制示例</el-button>
+            <el-button type="primary" @click="applyTemplateSpec(specVariant)">套用到编辑表单</el-button>
+          </div>
+        </div>
+        <el-card class="template-data-card">
+          <pre>{{ currentSpecJson }}</pre>
+        </el-card>
+      </div>
+    </el-dialog>
     
-    <!-- 预览图对话框 -->
+    <!-- 预览图片对话框 -->
     <el-dialog
       v-model="imagePreviewVisible"
-      title="预览图"
+      title="预览图片"
       width="50%"
       top="10vh"
     >
@@ -233,7 +315,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, UploadFile } from 'element-plus'
 import type { Template } from '@/types'
@@ -241,11 +323,15 @@ import { getTemplateList, getTemplateDetail, createTemplate, updateTemplate, del
 import { useTable } from '@/hooks/useTable'
 import { formatDate } from '@/utils/common'
 
+type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
+
 // 搜索表单
 const searchForm = reactive({
   templateName: '',
   description: '',
-  status: null as boolean | null
+  status: null as boolean | null,
+  industryTags: '',
+  templateVariant: '' as TemplateVariant | ''
 })
 
 const {
@@ -260,28 +346,204 @@ const {
   fetchData: getTemplateList
 })
 
-// 对话框
+// 瀵硅瘽妗?
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const previewVisible = ref(false)
 const imagePreviewVisible = ref(false)
+const specDialogVisible = ref(false)
 const currentPreviewImage = ref('')
 const formRef = ref<FormInstance>()
+const specVariant = ref<TemplateVariant>('classic')
 
 // 表单
 const form = reactive({
   id: 0,
   templateName: '',
   description: '',
+  industryTags: '',
+  templateVariant: 'classic' as TemplateVariant,
+  recommendWeight: 0,
   previewImage: '',
   templateData: '' as any,
   status: 'active' as 'active' | 'inactive'
 })
 
+function resolveTemplateVariantFromData(templateData: unknown): TemplateVariant {
+  let parsed = templateData
+  if (typeof templateData === 'string') {
+    try {
+      parsed = templateData.trim() ? JSON.parse(templateData) : {}
+    } catch {
+      parsed = {}
+    }
+  }
+  const variant = [
+    (parsed as any)?.layout?.variant,
+    (parsed as any)?.theme?.variant,
+    (parsed as any)?.variant,
+  ].find(isTemplateVariant)
+
+  if (isTemplateVariant(variant)) {
+    return variant
+  }
+
+  return 'classic'
+}
+
+const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
+  classic: {
+    variant: 'classic',
+    recommendWeight: 0,
+    meta: {
+      recommendWeight: 0,
+    },
+    layout: {
+      variant: 'classic',
+    },
+    theme: {
+      variant: 'classic',
+      colors: {
+        primary: '#2563eb',
+      },
+      typography: {
+        fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif",
+      },
+      spacing: {
+        sectionSpacing: 24,
+        itemSpacing: 14,
+      },
+    },
+  },
+  sidebar: {
+    variant: 'sidebar',
+    recommendWeight: 0,
+    meta: {
+      recommendWeight: 0,
+    },
+    layout: {
+      variant: 'sidebar',
+      sidebarWidth: 250,
+    },
+    theme: {
+      variant: 'sidebar',
+      colors: {
+        primary: '#0f4c81',
+      },
+      typography: {
+        fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif",
+      },
+      spacing: {
+        sectionSpacing: 24,
+        itemSpacing: 14,
+      },
+    },
+  },
+  timeline: {
+    variant: 'timeline',
+    recommendWeight: 0,
+    meta: {
+      recommendWeight: 0,
+    },
+    layout: {
+      variant: 'timeline',
+      emphasis: 'experience',
+    },
+    theme: {
+      variant: 'timeline',
+      colors: {
+        primary: '#0f766e',
+      },
+      typography: {
+        fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif",
+      },
+      spacing: {
+        sectionSpacing: 28,
+        itemSpacing: 16,
+      },
+    },
+  },
+  spotlight: {
+    variant: 'spotlight',
+    recommendWeight: 0,
+    meta: {
+      recommendWeight: 0,
+    },
+    layout: {
+      variant: 'spotlight',
+      emphasis: 'brand',
+    },
+    theme: {
+      variant: 'spotlight',
+      colors: {
+        primary: '#7c3aed',
+      },
+      typography: {
+        fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif",
+      },
+      spacing: {
+        sectionSpacing: 24,
+        itemSpacing: 14,
+      },
+    },
+  },
+  ats: {
+    variant: 'ats',
+    recommendWeight: 0,
+    meta: { recommendWeight: 0 },
+    layout: { variant: 'ats', emphasis: 'readability' },
+    theme: {
+      variant: 'ats',
+      colors: { primary: '#111827' },
+      typography: { fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif" },
+      spacing: { sectionSpacing: 18, itemSpacing: 10 },
+    },
+  },
+  executive: {
+    variant: 'executive',
+    recommendWeight: 0,
+    meta: { recommendWeight: 0 },
+    layout: { variant: 'executive', emphasis: 'leadership' },
+    theme: {
+      variant: 'executive',
+      colors: { primary: '#92400e' },
+      typography: { fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif" },
+      spacing: { sectionSpacing: 26, itemSpacing: 14 },
+    },
+  },
+  compact: {
+    variant: 'compact',
+    recommendWeight: 0,
+    meta: { recommendWeight: 0 },
+    layout: { variant: 'compact', emphasis: 'dense' },
+    theme: {
+      variant: 'compact',
+      colors: { primary: '#334155' },
+      typography: { fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif" },
+      spacing: { sectionSpacing: 14, itemSpacing: 8 },
+    },
+  },
+  editorial: {
+    variant: 'editorial',
+    recommendWeight: 0,
+    meta: { recommendWeight: 0 },
+    layout: { variant: 'editorial', emphasis: 'creative' },
+    theme: {
+      variant: 'editorial',
+      colors: { primary: '#e11d48' },
+      typography: { fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif" },
+      spacing: { sectionSpacing: 28, itemSpacing: 16 },
+    },
+  },
+}
+
 // 表单验证规则
 const rules = {
   templateName: [
     { required: true, message: '请输入模板名称', trigger: 'blur' }
+  ],
+  templateVariant: [
+    { required: true, message: '请选择模板版式', trigger: 'change' }
   ],
   templateData: [
     { required: true, message: '请输入模板数据', trigger: 'blur' }
@@ -294,8 +556,11 @@ const handleAdd = () => {
   form.id = 0
   form.templateName = ''
   form.description = ''
+  form.industryTags = ''
+  form.templateVariant = 'classic'
+  form.recommendWeight = 0
   form.previewImage = ''
-  form.templateData = '{}'
+  form.templateData = JSON.stringify(TEMPLATE_SPEC_MAP.classic, null, 2)
   form.status = 'active'
   dialogVisible.value = true
 }
@@ -306,21 +571,25 @@ const handleEdit = (row: Template) => {
   form.id = row.id
   form.templateName = row.templateName ?? ''
   form.description = row.description ?? ''
+  form.industryTags = row.industryTags ?? ''
+  form.templateVariant = row.templateVariant ?? resolveTemplateVariantFromData(row.templateData)
+  form.recommendWeight = row.recommendWeight ?? readRecommendWeight(row.templateData)
   form.previewImage = row.previewImage ?? ''
   form.templateData = JSON.stringify(row.templateData, null, 2)
   form.status = row.status ? 'active' : 'inactive'
   dialogVisible.value = true
 }
 
-// 当前预览的模板数据
+// 褰撳墠棰勮鐨勬ā鏉挎暟鎹?
 const currentTemplateData = ref({})
-// 生成的 HTML 内容
+// 鐢熸垚鐨?HTML 鍐呭
 const generatedHtml = ref('')
+const currentSpecJson = computed(() => JSON.stringify(TEMPLATE_SPEC_MAP[specVariant.value], null, 2))
 
-// 预览模板
+// 棰勮妯℃澘
 const handlePreview = async (row: Template) => {
   try {
-    // 通过API获取完整的模板详情数据
+    // 通过API鑾峰彇瀹屾暣鐨勬ā鏉胯鎯呮暟鎹?
     const response = await getTemplateDetail(row.id)
     console.log('API响应数据:', response) // 调试日志
     
@@ -331,50 +600,50 @@ const handlePreview = async (row: Template) => {
     // 解析模板数据
     let templateDataObj
     if (templateDetail.templateData) {
-      console.log('原始templateData:', templateDetail.templateData) // 调试日志
+      console.log('鍘熷templateData:', templateDetail.templateData) // 调试日志
       console.log('templateData类型:', typeof templateDetail.templateData) // 调试日志
       console.log('templateData长度:', templateDetail.templateData.length) // 调试日志
       
       if (typeof templateDetail.templateData === 'string') {
         try {
-          // 先尝试直接解析
+          // 鍏堝皾璇曠洿鎺ヨВ鏋?
           templateDataObj = JSON.parse(templateDetail.templateData)
-          console.log('第一次解析成功:', templateDataObj) // 调试日志
+          console.log('绗竴娆¤В鏋愭垚鍔?', templateDataObj) // 调试日志
         } catch (parseError) {
-          console.error('第一次JSON解析失败:', parseError)
-          console.error('解析失败的字符串前100个字符:', templateDetail.templateData.substring(0, 100)) // 调试日志
+          console.error('绗竴娆SON解析失败:', parseError)
+          console.error('瑙ｆ瀽澶辫触鐨勫瓧绗︿覆鍓?00涓瓧绗?', templateDetail.templateData.substring(0, 100)) // 调试日志
           
-          // 尝试清理字符串后再解析
+          // 灏濊瘯娓呯悊瀛楃涓插悗鍐嶈В鏋?
           try {
             let cleanedString = templateDetail.templateData
-              .replace(/^\s+/, '') // 移除开头的所有空白字符
-              .replace(/\s+$/, '') // 移除结尾的所有空白字符
-              .replace(/[\u200B-\u200D\uFEFF]/g, '') // 移除零宽字符
-              .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000\ufeff]/g, ' ') // 移除各种空格字符
-              .trim() // 再次移除首尾空格
+              .replace(/^\s+/, '') // 绉婚櫎寮€澶寸殑鎵€鏈夌┖鐧藉瓧绗?
+              .replace(/\s+$/, '') // 绉婚櫎缁撳熬鐨勬墍鏈夌┖鐧藉瓧绗?
+              .replace(/[\u200B-\u200D\uFEFF]/g, '') // 绉婚櫎闆跺瀛楃
+              .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000\ufeff]/g, ' ') // 绉婚櫎鍚勭绌烘牸瀛楃
+              .trim() // 鍐嶆绉婚櫎棣栧熬绌烘牸
             
-            console.log('清理后的字符串前100个字符:', cleanedString.substring(0, 100)) // 调试日志
-            console.log('清理后的字符串前10个字符的ASCII码:', Array.from(cleanedString.substring(0, 10)).map((c: string) => c.charCodeAt(0))) // 调试日志
+            console.log('娓呯悊鍚庣殑瀛楃涓插墠100涓瓧绗?', cleanedString.substring(0, 100)) // 调试日志
+            console.log('娓呯悊鍚庣殑瀛楃涓插墠10涓瓧绗︾殑ASCII鐮?', Array.from(cleanedString.substring(0, 10)).map((c: any) => (c as string).charCodeAt(0))) // 调试日志
             
             templateDataObj = JSON.parse(cleanedString)
-            console.log('清理后解析成功:', templateDataObj) // 调试日志
+            console.log('娓呯悊鍚庤В鏋愭垚鍔?', templateDataObj) // 调试日志
           } catch (cleanParseError) {
             console.error('清理后JSON解析仍然失败:', cleanParseError)
             
-            // 最后尝试：找到第一个 { 字符，从那里开始截取
+            // 鏈€鍚庡皾璇曪細鎵惧埌绗竴涓?{ 瀛楃锛屼粠閭ｉ噷寮€濮嬫埅鍙?
             try {
               const firstBraceIndex = templateDetail.templateData.indexOf('{')
               if (firstBraceIndex > 0) {
-                console.log('找到第一个{字符位置:', firstBraceIndex) // 调试日志
+                console.log('鎵惧埌绗竴涓獅瀛楃浣嶇疆:', firstBraceIndex) // 调试日志
                 const truncatedString = templateDetail.templateData.substring(firstBraceIndex)
-                console.log('截取后的字符串前100个字符:', truncatedString.substring(0, 100)) // 调试日志
+                console.log('鎴彇鍚庣殑瀛楃涓插墠100涓瓧绗?', truncatedString.substring(0, 100)) // 调试日志
                 templateDataObj = JSON.parse(truncatedString)
-                console.log('截取后解析成功:', templateDataObj) // 调试日志
+                console.log('鎴彇鍚庤В鏋愭垚鍔?', templateDataObj) // 调试日志
               } else {
                 templateDataObj = {}
               }
             } catch (truncateParseError) {
-              console.error('截取后JSON解析仍然失败:', truncateParseError)
+              console.error('鎴彇鍚嶫SON解析仍然失败:', truncateParseError)
               templateDataObj = {}
             }
           }
@@ -391,7 +660,7 @@ const handlePreview = async (row: Template) => {
     console.log('模板数据keys:', Object.keys(templateDataObj)) // 调试日志
     currentTemplateData.value = templateDataObj
     
-    // 生成预览 HTML - 传递解析后的templateData，而不是整个模板对象
+    // 鐢熸垚棰勮 HTML - 浼犻€掕В鏋愬悗鐨則emplateData锛岃€屼笉鏄暣涓ā鏉垮璞?
     generatePreviewHtml(templateDataObj)
     
     console.log('生成的HTML长度:', generatedHtml.value.length) // 调试日志
@@ -404,11 +673,11 @@ const handlePreview = async (row: Template) => {
   }
 }
 
-// 生成预览 HTML
+// 鐢熸垚棰勮 HTML
 const generatePreviewHtml = (templateData: any) => {
   try {
-    // 支持新旧两种数据结构
-    let profile, sections, globalStyles, colors, fonts, spacing;
+    // 鏀寔鏂版棫涓ょ鏁版嵁缁撴瀯
+    let profile: any, sections, globalStyles, colors: { primary: string; text: string; secondary: string; background: string }, fonts, spacing: any;
     
     console.log('generatePreviewHtml 接收到的数据:', templateData) // 调试日志
     console.log('profile 存在:', !!templateData?.profile) // 调试日志
@@ -416,20 +685,22 @@ const generatePreviewHtml = (templateData: any) => {
     console.log('sections 类型:', Array.isArray(templateData?.sections)) // 调试日志
     
     if (templateData?.profile && Array.isArray(templateData?.sections)) {
-      // 新数据结构：profile + sections数组
+      // 鏂版暟鎹粨鏋勶細profile + sections数组
       profile = templateData.profile;
       sections = templateData.sections;
       globalStyles = templateData.globalStyles || {};
-      colors = globalStyles.themeColor ? { primary: globalStyles.themeColor } : { primary: '#3498db' };
+      colors = globalStyles.themeColor 
+        ? { primary: globalStyles.themeColor, text: '#2c3e50', secondary: '#f0f8ff', background: '#ffffff' } 
+        : { primary: '#3498db', text: '#2c3e50', secondary: '#f0f8ff', background: '#ffffff' };
       fonts = globalStyles.fontFamily ? { body: globalStyles.fontFamily } : { body: 'Arial, sans-serif' };
       spacing = globalStyles.paragraphSpacing ? { sectionMargin: globalStyles.paragraphSpacing, elementMargin: globalStyles.elementSpacing || '10px' } : { sectionMargin: '25px', elementMargin: '15px' };
       
-      console.log('使用新数据结构') // 调试日志
+      console.log('using new template schema') // 调试日志
       console.log('profile:', profile) // 调试日志
       console.log('sections:', sections) // 调试日志
       console.log('globalStyles:', globalStyles) // 调试日志
     } else {
-      // 旧数据结构：styles + sections对象
+      // 鏃ф暟鎹粨鏋勶細styles + sections对象
       const styles = templateData?.styles || {};
       sections = templateData?.sections || {};
       colors = styles.colors || { primary: '#3498db', secondary: '#f0f8ff', text: '#2c3e50', background: '#ffffff' };
@@ -440,40 +711,40 @@ const generatePreviewHtml = (templateData: any) => {
       profile = {
         basic: {
           name: '张三',
-          title: '高级前端工程师', 
+          title: '高级前端工程师',
           contacts: {
             email: 'zhangsan@example.com',
             phone: '13800138000',
             site: 'https://zhangsan.dev'
           }
         },
-        summary: '拥有5年前端开发经验，专注于React和Vue框架，擅长构建高性能、可扩展的Web应用。热衷于用户体验设计和前端性能优化。',
+        summary: '拥有5年前端开发经验，专注 React 和 Vue，擅长构建高性能、可扩展的 Web 应用。',
         experience: [
           {
-            company: 'ABC科技有限公司',
+            company: 'ABC绉戞妧鏈夐檺鍏徃',
             role: '高级前端工程师',
             start: '2020-06',
             end: '至今',
-            desc: '负责公司核心产品的前端架构设计和开发，优化前端性能使页面加载速度提升40%，带领5人前端团队完成多个关键项目。'
+            desc: '负责核心产品前端架构与开发，优化性能并推动关键项目交付。'
           },
           {
             company: 'XYZ互联网公司',
             role: '前端工程师',
             start: '2018-03',
             end: '2020-05',
-            desc: '参与电商平台的前端开发，实现响应式设计，确保在各种设备上的良好体验，开发了多个可复用的UI组件。'
+            desc: '参与电商平台前端开发，完成响应式设计和可复用组件建设。'
           }
         ],
         education: [
           {
-            school: '北京大学',
-            degree: '计算机科学 硕士',
+            school: '鍖椾含澶у',
+            degree: '璁＄畻鏈虹瀛?˶ʿ',
             start: '2015-09',
             end: '2018-06'
           },
           {
-            school: '南京大学',
-            degree: '软件工程 学士',
+            school: '鍗椾含澶у',
+            degree: '杞欢宸ョ▼ ѧʿ',
             start: '2011-09',
             end: '2015-06'
           }
@@ -484,19 +755,19 @@ const generatePreviewHtml = (templateData: any) => {
             name: '企业资源管理系统',
             role: '前端负责人',
             date: '2021-01 - 2021-06',
-            desc: '设计并实现了基于React的企业资源管理系统前端，包括数据可视化、实时通知等功能，提高了企业运营效率20%。'
+            desc: '设计并实现基于 React 的企业管理系统前端，包含数据可视化和实时通知能力。'
           },
           {
             name: '移动端电商平台',
             role: '前端开发',
             date: '2019-05 - 2019-12',
-            desc: '使用Vue开发移动端电商平台，实现了购物车、支付流程、商品搜索等核心功能，月活用户超过10万。'
+            desc: '使用 Vue 开发移动电商平台，完成购物车、支付流程和商品搜索等核心功能。'
           }
         ]
       };
     }
 
-    // 从profile中提取数据
+    // 从profile涓彁鍙栨暟鎹?
     const basic = profile?.basic || {};
     const contacts = basic.contacts || {};
     const summary = profile?.summary || '';
@@ -505,21 +776,21 @@ const generatePreviewHtml = (templateData: any) => {
     const skills = Array.isArray(profile?.skills) ? profile.skills : [];
     const projects = Array.isArray(profile?.projects) ? profile.projects : [];
     
-    // 处理新数据结构的sections数组
+    // 澶勭悊鏂版暟鎹粨鏋勭殑sections数组
     let sectionsConfig: Record<string, any> = {};
     if (Array.isArray(sections)) {
-      // 新结构：sections是数组，转换为配置对象
+      // 新结构：sections鏄暟缁勶紝杞崲涓洪厤缃璞?
       sections.forEach(section => {
         if (section.type && section.config) {
           sectionsConfig[section.type] = section.config;
         }
       });
     } else {
-      // 旧结构：sections是对象
+      // 旧结构：sections鏄璞?
       sectionsConfig = sections as Record<string, any>;
     }
     
-    // 获取各部分配置
+    // 鑾峰彇鍚勯儴鍒嗛厤缃?
     const headerConfig = sectionsConfig.header || {};
     const summaryConfig = sectionsConfig.summary || {};
     const skillsConfig = sectionsConfig.skills || {};
@@ -540,7 +811,7 @@ const generatePreviewHtml = (templateData: any) => {
        color: ${headerConfig.elements[1].color || colors.text};` :
       `font-size: 18px; font-weight: 400; color: ${colors.text};`;
 
-    // 生成标题样式函数
+    // 鐢熸垚鏍囬鏍峰紡鍑芥暟
     const getSectionTitleStyle = (sectionConfig: any) => {
       const titleStyle = sectionConfig.titleStyle || {};
       return `font-size: ${titleStyle.fontSize || '22px'}; 
@@ -551,20 +822,20 @@ const generatePreviewHtml = (templateData: any) => {
               margin-bottom: ${spacing.elementMargin || '15px'};`;
     };
     
-        // 生成HTML内容
+        // 生成HTML鍐呭
     let htmlContent = '';
     
-    // 处理新数据结构：遍历sections数组，按order排序
+    // 澶勭悊鏂版暟鎹粨鏋勶細閬嶅巻sections数组，按order排序
     if (Array.isArray(sections)) {
       const sortedSections = [...sections].sort((a, b) => (a.order || 0) - (b.order || 0));
       
       sortedSections.forEach(section => {
-        if (section.visible === false) return; // 跳过隐藏的模块
+        if (section.visible === false) return; // 璺宠繃闅愯棌鐨勬ā鍧?
         
         const sectionStyle = section.style || {};
         const sectionConfig = section.config || {};
         
-        // 根据模块类型生成内容
+        // 鏍规嵁妯″潡绫诲瀷鐢熸垚鍐呭
         switch (section.type) {
           case 'basic':
             if (profile?.basic) {
@@ -572,11 +843,11 @@ const generatePreviewHtml = (templateData: any) => {
               const contacts = basic.contacts || {};
               htmlContent += `
                 <div style="margin: ${spacing.sectionMargin || '25px'} 0; ${sectionStyle.gridColumn ? `grid-column: ${sectionStyle.gridColumn};` : ''}">
-                  <div style="${getSectionTitleStyle(sectionConfig)}">${sectionConfig.title || '个人信息'}</div>
+                  <div style="${getSectionTitleStyle(sectionConfig)}">${sectionConfig.title || '涓汉淇℃伅'}</div>
                   <div style="padding: ${sectionStyle.padding || '0'};">
                     <div style="text-align: center; margin-bottom: 15px;">
                       <div style="font-size: 24px; font-weight: 600; color: ${colors.primary}; margin-bottom: 8px;">${basic.name || '姓名'}</div>
-                      <div style="font-size: 18px; color: ${colors.text || '#333'}; margin-bottom: 8px;">${basic.title || '职位'}</div>
+                      <div style="font-size: 18px; color: ${colors.text || '#333'}; margin-bottom: 8px;">${basic.title || 'ְλ'}</div>
                     </div>
                     <div style="text-align: center; font-size: 14px; color: ${colors.text || '#333'}; opacity: 0.8;">
                       ${contacts.email || ''} ${contacts.phone ? '· ' + contacts.phone : ''} ${contacts.site ? '· ' + contacts.site : ''}
@@ -584,11 +855,11 @@ const generatePreviewHtml = (templateData: any) => {
                   </div>
                 </div>`;
               
-              // 如果有summary，也在basic模块中显示
+              // 如果有summary，也在basic妯″潡涓樉绀?
               if (profile.summary) {
                 htmlContent += `
                   <div style="margin: ${spacing.sectionMargin || '25px'} 0; ${sectionStyle.gridColumn ? `grid-column: ${sectionStyle.gridColumn};` : ''}">
-                    <div style="${getSectionTitleStyle({ title: '个人概述' })}">个人概述</div>
+                    <div style="${getSectionTitleStyle({ title: '涓汉姒傝堪' })}">涓汉姒傝堪</div>
                     <div style="padding: ${sectionStyle.padding || '0'}; font-size: 15px; line-height: 1.6; color: ${colors.text || '#333'};">
                       ${profile.summary}
                     </div>
@@ -644,7 +915,7 @@ const generatePreviewHtml = (templateData: any) => {
                           ${edu.school || '学校名称'}
                         </div>
                         <div style="font-size: 16px; color: ${colors.text || '#333'}; margin: 5px 0;">
-                          ${edu.degree || '学位专业'}
+                          ${edu.degree || 'ѧλרҵ'}
                         </div>
                         <div style="font-size: 14px; color: ${colors.text || '#333'}; opacity: 0.7;">
                           ${edu.duration?.start || ''} - ${edu.duration?.end || ''}
@@ -665,10 +936,10 @@ const generatePreviewHtml = (templateData: any) => {
                     ${section.items.map((exp: any) => `
                       <div style="margin: ${spacing.elementMargin || '15px'} 0;">
                         <div style="font-size: 18px; font-weight: 600; color: ${colors.text || '#333'};">
-                          ${exp.company || '公司名称'}
+                          ${exp.company || '鍏徃鍚嶇О'}
                         </div>
                         <div style="font-size: 16px; color: ${colors.primary}; margin: 5px 0;">
-                          ${exp.role || '职位'}
+                          ${exp.role || 'ְλ'}
                         </div>
                         <div style="font-size: 14px; color: ${colors.text || '#333'}; opacity: 0.7; margin: 5px 0;">
                           ${exp.duration?.start || ''} - ${exp.duration?.end || ''}
@@ -712,7 +983,7 @@ const generatePreviewHtml = (templateData: any) => {
             
           case 'awards':
             if (section.items && section.items.length > 0) {
-              // 检查是否配置了网格列数
+              // 妫€鏌ユ槸鍚﹂厤缃簡缃戞牸鍒楁暟
               const gridCols = sectionConfig.gridTemplateColumns || 'repeat(2, 1fr)';
               htmlContent += `
                 <div style="margin: ${spacing.sectionMargin || '25px'} 0; ${sectionStyle.gridColumn ? `grid-column: ${sectionStyle.gridColumn};` : ''}">
@@ -765,7 +1036,7 @@ const generatePreviewHtml = (templateData: any) => {
       });
     }
     
-    // 如果没有新数据结构，使用旧的HTML生成逻辑
+    // 濡傛灉娌℃湁鏂版暟鎹粨鏋勶紝浣跨敤鏃х殑HTML生成逻辑
     if (!htmlContent) {
       htmlContent = `
         <!-- 头部信息 -->
@@ -778,10 +1049,10 @@ const generatePreviewHtml = (templateData: any) => {
             </div>
         </div>` : ''}
 
-        <!-- 个人概述 -->
+        <!-- 涓汉姒傝堪 -->
         ${summaryConfig.enabled !== false && summary ? `
         <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-          <div style="${getSectionTitleStyle(summaryConfig)}">${summaryConfig.title || '个人概述'}</div>
+          <div style="${getSectionTitleStyle(summaryConfig)}">${summaryConfig.title || '涓汉姒傝堪'}</div>
           <div style="font-size: ${summaryConfig.contentStyle?.fontSize || '15px'}; 
                       line-height: ${summaryConfig.contentStyle?.lineHeight || '1.6'}; 
                       color: ${colors.text};">
@@ -789,7 +1060,7 @@ const generatePreviewHtml = (templateData: any) => {
           </div>
         </div>` : ''}
 
-        <!-- 专业技能 -->
+        <!-- 涓撲笟鎶€鑳?-->
         ${skillsConfig.enabled !== false && skills.length ? `
         <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
           <div style="${getSectionTitleStyle(skillsConfig)}">${skillsConfig.title || '专业技能'}</div>
@@ -817,7 +1088,7 @@ const generatePreviewHtml = (templateData: any) => {
               <div style="font-size: ${experienceConfig.itemStyle?.company?.fontSize || '18px'}; 
                           font-weight: ${experienceConfig.itemStyle?.company?.fontWeight || '600'}; 
                           color: ${experienceConfig.itemStyle?.company?.color || colors.text};">
-                ${e.company || '示例公司A'}
+                ${e.company || '绀轰緥鍏徃A'}
               </div>
               <div style="font-size: ${experienceConfig.itemStyle?.position?.fontSize || '16px'}; 
                           font-weight: ${experienceConfig.itemStyle?.position?.fontWeight || '500'}; 
@@ -877,12 +1148,12 @@ const generatePreviewHtml = (templateData: any) => {
               <div style="font-size: ${educationConfig.itemStyle?.institution?.fontSize || '18px'}; 
                           font-weight: ${educationConfig.itemStyle?.institution?.fontWeight || '600'}; 
                           color: ${educationConfig.itemStyle?.institution?.color || colors.text};">
-                ${ed.school || '北京大学'}
+                ${ed.school || '鍖椾含澶у'}
               </div>
               <div style="font-size: ${educationConfig.itemStyle?.degree?.fontSize || '16px'}; 
                           font-weight: ${educationConfig.itemStyle?.degree?.fontWeight || '500'}; 
                           color: ${educationConfig.itemStyle?.degree?.color || colors.primary};">
-                ${ed.degree || '计算机科学 本科'}
+                ${ed.degree || '璁＄畻鏈虹瀛?鏈'}
             </div>
               <div style="font-size: ${educationConfig.itemStyle?.date?.fontSize || '14px'}; 
                           color: ${educationConfig.itemStyle?.date?.color || colors.text}; 
@@ -895,7 +1166,7 @@ const generatePreviewHtml = (templateData: any) => {
       `;
     }
     
-    // 判断是否使用网格布局（只有新数据结构且明确设置了gridColumn的模块才使用）
+    // 鍒ゆ柇鏄惁浣跨敤缃戞牸甯冨眬锛堝彧鏈夋柊鏁版嵁缁撴瀯涓旀槑纭缃簡gridColumn鐨勬ā鍧楁墠浣跨敤锛?
     const useGridLayout = Array.isArray(sections) && sections.some(section => section.style?.gridColumn);
     
     const html = `
@@ -907,18 +1178,18 @@ const generatePreviewHtml = (templateData: any) => {
 
     generatedHtml.value = html;
   } catch (error) {
-    console.error('生成预览 HTML 失败:', error);
-    // 生成失败时使用默认模板
+    console.error('鐢熸垚棰勮 HTML 失败:', error);
+    // 鐢熸垚澶辫触鏃朵娇鐢ㄩ粯璁ゆā鏉?
     const defaultHtml = `<div style="padding: 20px; text-align: center; background-color: #1e1e20; color: #E5EAF3;">
       <h2 style="color: #F56C6C;">模板数据解析失败</h2>
-      <p>无法根据提供的模板数据生成预览。请检查模板数据格式是否正确。</p>
+      <p>鏃犳硶鏍规嵁鎻愪緵鐨勬ā鏉挎暟鎹敓鎴愰瑙堛€傝妫€鏌ユā鏉挎暟鎹牸寮忔槸鍚︽纭€?/p>
       <pre style="text-align: left; background: #2b2b2b; padding: 10px; border-radius: 5px; color: #E5EAF3;">${JSON.stringify(error, null, 2)}</pre>
     </div>`;
     generatedHtml.value = defaultHtml;
   }
 }
 
-// 显示预览图
+// 鏄剧ず棰勮鍥?
 const showPreviewImage = (row: Template) => {
   if (row.previewImage) {
     currentPreviewImage.value = row.previewImage
@@ -926,7 +1197,7 @@ const showPreviewImage = (row: Template) => {
   }
 }
 
-// 切换状态
+// 鍒囨崲鐘舵€?
 const handleToggleStatus = async (row: Template) => {
   try {
     await ElMessageBox.confirm(
@@ -975,17 +1246,43 @@ const handleImageChange = (file: UploadFile) => {
   }
 }
 
+const openTemplateSpecDialog = () => {
+  specVariant.value = form.templateVariant
+  specDialogVisible.value = true
+}
+
+const applyTemplateSpec = (variant: TemplateVariant) => {
+  form.templateVariant = variant
+  form.recommendWeight = readRecommendWeight(TEMPLATE_SPEC_MAP[variant])
+  form.templateData = JSON.stringify(TEMPLATE_SPEC_MAP[variant], null, 2)
+  ElMessage.success('已将示例模板 JSON 写入编辑表单')
+}
+
+const copyCurrentSpec = async () => {
+  try {
+    await navigator.clipboard.writeText(currentSpecJson.value)
+    ElMessage.success('模板规范示例已复制')
+  } catch (error) {
+    console.error('复制模板规范失败:', error)
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
 // 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
   
   try {
     await formRef.value.validate()
-    
+    const normalizedTemplateData = normalizeTemplateDataWithVariant(form.templateData, form.templateVariant)
+
     const data = {
       templateName: form.templateName,
       description: form.description,
-      templateData: form.templateData,
+      industryTags: sanitizeIndustryTags(form.industryTags),
+      templateVariant: form.templateVariant,
+      recommendWeight: Math.max(0, Number(form.recommendWeight) || 0),
+      templateData: JSON.stringify(normalizedTemplateData, null, 2),
       previewImage: form.previewImage,
       status: form.status === 'active'
     }
@@ -1005,7 +1302,7 @@ const handleSubmit = async () => {
   }
 }
 
-// 对话框关闭
+// 瀵硅瘽妗嗗叧闂?
 const handleDialogClose = () => {
   formRef.value?.resetFields()
 }
@@ -1036,6 +1333,14 @@ const getSearchParams = () => {
   if (searchForm.status !== null) {
     params.status = searchForm.status
   }
+
+  if (searchForm.industryTags.trim()) {
+    params.industryTags = sanitizeIndustryTags(searchForm.industryTags)
+  }
+
+  if (searchForm.templateVariant) {
+    params.templateVariant = searchForm.templateVariant
+  }
   
   return params
 }
@@ -1045,7 +1350,119 @@ const resetSearchForm = () => {
   searchForm.templateName = ''
   searchForm.description = ''
   searchForm.status = null
+  searchForm.industryTags = ''
+  searchForm.templateVariant = ''
   handleReset()
+}
+
+function sanitizeIndustryTags(value: string) {
+  return value
+    .replace(/，/g, ',')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .join(',')
+}
+
+function splitIndustryTags(value?: string) {
+  if (!value) {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+function normalizeTemplateDataWithVariant(templateData: string, templateVariant: TemplateVariant) {
+  const parsed = safeParseTemplateData(templateData)
+  const recommendWeight = Math.max(0, Number(form.recommendWeight) || 0)
+  parsed.variant = templateVariant
+  parsed.recommendWeight = recommendWeight
+  parsed.meta = {
+    ...(typeof parsed.meta === 'object' && parsed.meta ? parsed.meta : {}),
+    recommendWeight,
+  }
+  parsed.layout = {
+    ...(typeof parsed.layout === 'object' && parsed.layout ? parsed.layout : {}),
+    variant: templateVariant,
+  }
+  parsed.theme = {
+    ...(typeof parsed.theme === 'object' && parsed.theme ? parsed.theme : {}),
+    variant: templateVariant,
+  }
+  return parsed
+}
+
+function safeParseTemplateData(templateData: string) {
+  if (!templateData.trim()) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(templateData)
+    return typeof parsed === 'object' && parsed ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function readTemplateVariant(templateData: unknown): TemplateVariant {
+  const parsed = typeof templateData === 'string' ? safeParseTemplateData(templateData) : templateData
+  const variant = [
+    (parsed as any)?.layout?.variant,
+    (parsed as any)?.theme?.variant,
+    (parsed as any)?.variant,
+  ].find(isTemplateVariant)
+
+  if (isTemplateVariant(variant)) {
+    return variant
+  }
+
+  return 'classic'
+}
+
+function isTemplateVariant(value: unknown): value is TemplateVariant {
+  return (
+    value === 'classic' ||
+    value === 'sidebar' ||
+    value === 'timeline' ||
+    value === 'spotlight' ||
+    value === 'ats' ||
+    value === 'executive' ||
+    value === 'compact' ||
+    value === 'editorial'
+  )
+}
+
+function getTemplateVariantLabel(value: unknown) {
+  const labels: Record<TemplateVariant, string> = {
+    classic: '经典单栏',
+    sidebar: '侧栏双栏',
+    timeline: '时间轴版',
+    spotlight: '聚焦封面',
+    ats: 'ATS 极简',
+    executive: '高管黑金',
+    compact: '紧凑信息流',
+    editorial: '编辑创意',
+  }
+  return isTemplateVariant(value) ? labels[value] : labels.classic
+}
+
+function readRecommendWeight(templateData: unknown) {
+  const parsed = typeof templateData === 'string' ? safeParseTemplateData(templateData) : templateData
+  const candidate = [
+    (parsed as any)?.meta?.recommendWeight,
+    (parsed as any)?.recommendWeight,
+  ].find((value) => value !== undefined && value !== null)
+
+  const value = Number(candidate)
+  if (!Number.isFinite(value) || value < 0) {
+    return 0
+  }
+
+  return Math.floor(value)
 }
 
 onMounted(() => {
@@ -1092,8 +1509,49 @@ onMounted(() => {
   margin-top: 10px;
 }
 
+.asset-tools {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.spec-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .preview-content {
   min-height: 400px;
+}
+
+.spec-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.spec-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.spec-toolbar-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.help-link {
+  color: var(--el-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: help;
 }
 
 .preview-placeholder {

@@ -11,14 +11,14 @@ export class SystemLogsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('userId') userId?: string,
-    @Query('route') route?: string,
+    @Query('path') path?: string,
     @Query('method') method?: string,
   ): Promise<PaginatedApiResponse<any>> {
     const data = await this.service.findAll({
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       userId: userId ? Number(userId) : undefined,
-      route: route || undefined,
+      path: path || undefined,
       method: method || undefined,
     });
     return {

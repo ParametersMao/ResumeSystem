@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsInt, Min, IsBoolean } from 'class-validator';
+﻿import { IsString, IsOptional, IsInt, Min, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateTemplateDto {
   @IsString()
@@ -13,11 +14,17 @@ export class CreateTemplateDto {
 
   @IsOptional()
   @IsString()
-  description?: string;
+  industryTags?: string;
 
   @IsOptional()
   @IsString()
-  industryTags?: string;
+  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  recommendWeight?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -39,57 +46,64 @@ export class UpdateTemplateDto {
 
   @IsOptional()
   @IsString()
-  description?: string;
+  industryTags?: string;
 
   @IsOptional()
   @IsString()
-  industryTags?: string;
+  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  recommendWeight?: number;
 
   @IsOptional()
   @IsBoolean()
   status?: boolean;
 }
 
-// 列表响应DTO - 不包含templateData以提高性能
+// 鍒楄〃鍝嶅簲DTO - 涓嶅寘鍚玹emplateData浠ユ彁楂樻€ц兘
 export class TemplateListResponseDto {
   id: number;
   templateName: string;
+  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
   previewImage?: string;
-  description?: string;
   industryTags?: string;
   status?: boolean;
   createTime: Date;
   updateTime: Date;
   useCount: number;
-  downloadCount: number;
+  recommendWeight: number;
 }
 
-// 详情响应DTO - 包含完整的templateData
+// 璇︽儏鍝嶅簲DTO - 鍖呭惈瀹屾暣鐨則emplateData
 export class TemplateDetailResponseDto {
   id: number;
   templateName: string;
   templateData: string;
+  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
   previewImage?: string;
-  description?: string;
   industryTags?: string;
   status?: boolean;
   createTime: Date;
   updateTime: Date;
   useCount: number;
-  downloadCount: number;
+  recommendWeight: number;
 }
 
-// 响应数据DTO - 保持向后兼容
+// 鍝嶅簲鏁版嵁DTO - 淇濇寔鍚戝悗鍏煎
 export class TemplateResponseDto {
   id: number;
   templateName: string;
   templateData: string;
+  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
   previewImage?: string;
-  description?: string;
   industryTags?: string;
   status?: boolean;
   createTime: Date;
   updateTime: Date;
   useCount: number;
-  downloadCount: number;
-} 
+  recommendWeight: number;
+}
+

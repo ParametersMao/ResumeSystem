@@ -15,6 +15,12 @@ export class ResumeVersion {
   @Column({ type: 'int', name: 'source_version', default: 0 })
   sourceVersion: number;
 
+  @Column({ type: 'varchar', name: 'source_type', length: 24, default: 'save' })
+  sourceType: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  remark?: string | null;
+
   @Column('longtext')
   content: string;
 

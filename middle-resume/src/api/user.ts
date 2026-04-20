@@ -29,7 +29,7 @@ export const getUserList = (params: PaginationParams & { search?: string; status
  * 新增用户
  * POST /api/admin/users
  */
-export const createUser = (data: { username: string; password: string; email: string; user_type: string }) => {
+export const createUser = (data: { username: string; password: string; email: string; phone?: string; user_type: string }) => {
   return request.post('/admin/users', data)
 }
 
@@ -37,7 +37,7 @@ export const createUser = (data: { username: string; password: string; email: st
  * 编辑用户
  * PUT /api/admin/users/{id}
  */
-export const updateUser = (id: number, data: { username?: string; email?: string; user_type?: string }) => {
+export const updateUser = (id: number, data: { username?: string; email?: string; phone?: string; user_type?: string }) => {
   return request.put(`/admin/users/${id}`, data)
 }
 
@@ -55,4 +55,8 @@ export const updateUserStatus = (id: number, status: number) => {
  */
 export const deleteUser = (id: number) => {
   return request.delete(`/admin/users/${id}`)
-} 
+}
+
+export const resetUserPassword = (id: number, password: string) => {
+  return request.patch(`/admin/users/${id}/reset-password`, { password })
+}

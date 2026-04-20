@@ -39,4 +39,8 @@ export const updateCUserStatus = (id: number, status: number) => {
  */
 export const deleteCUser = (id: number) => {
   return request.delete(`/cusers/${id}`)
-} 
+}
+
+export const resetCUserPassword = (id: number, password: string) => {
+  return request.patch(`/cusers/${id}/reset-password`, { password })
+}

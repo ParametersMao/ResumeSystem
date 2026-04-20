@@ -37,14 +37,13 @@ export class AuditLogInterceptor implements NestInterceptor {
     const req: any = http.getRequest();
     const res: any = http.getResponse();
 
-    const route = (req.originalUrl || req.url || '').slice(0, 255);
-    const method = String(req.method || '').toUpperCase().slice(0, 12);
-    const ip = (req.ip || req.headers?.['x-forwarded-for'] || '').toString().slice(0, 64) || null;
-    const userAgent = (req.headers?.['user-agent'] || '').toString().slice(0, 512) || null;
+    const path = (req.originalUrl || req.url || '').slice(0, 255);
+    const method = String(req.method || '').toUpperCase().slice(0, 10) || null;
+    const ip = (req.ip || req.headers?.['x-forwarded-for'] || '').toString().slice(0, 50) || null;
+    const userAgent = (req.headers?.['user-agent'] || '').toString().slice(0, 500) || null;
     const userId = req.user?.id ?? null;
-    const userType = req.user?.type ?? null;
 
-    const paramsJson = safeStringify(maskSensitive({ query: req.query, body: req.body }), 2000) || null;
+    const requestBody = safeStringify(maskSensitive({ query: req.query, body: req.body }), 2000) || null;
 
     let capturedError: any = null;
 
@@ -54,22 +53,22 @@ export class AuditLogInterceptor implements NestInterceptor {
         return throwError(() => err);
       }),
       finalize(() => {
-        const durationMs = Date.now() - startedAt;
-        const statusCode = Number(res?.statusCode) || (capturedError?.status ?? null);
+        const responseStatus = Number(res?.statusCode) || (capturedError?.status ?? null);
+        const errorMessage = capturedError?.message || null;
 
         // 避免日志影响主流程：异步落库，失败忽略
         Promise.resolve().then(async () => {
           try {
             await this.systemLogs.create({
               userId,
-              userType,
-              route,
+              action: method + ' ' + path,
               method,
+              path,
               ip,
               userAgent,
-              statusCode: statusCode ?? null,
-              durationMs,
-              paramsJson,
+              requestBody,
+              responseStatus: responseStatus ?? null,
+              errorMessage,
             });
           } catch {
             // ignore

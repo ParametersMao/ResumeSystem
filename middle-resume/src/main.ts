@@ -1,11 +1,22 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
+import {
+  Cpu,
+  Document,
+  Expand,
+  Files,
+  Fold,
+  Monitor,
+  Odometer,
+  Setting,
+  Tickets,
+  TrendCharts,
+  User,
+  UserFilled,
+  Warning,
+} from '@element-plus/icons-vue'
 import 'element-plus/theme-chalk/dark/css-vars.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
 import router from './router'
@@ -18,20 +29,31 @@ const app = createApp(App)
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 
-// 注册 Element Plus 图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+const icons = {
+  Cpu,
+  Document,
+  Expand,
+  Files,
+  Fold,
+  Monitor,
+  Odometer,
+  Setting,
+  Tickets,
+  TrendCharts,
+  User,
+  UserFilled,
+  Warning,
+}
+
+for (const [key, component] of Object.entries(icons)) {
   app.component(key, component)
 }
 
 app.use(pinia)
 app.use(router)
 app.use(i18n)
-app.use(ElementPlus, {
-  locale: zhCn,
-})
 
-// 初始化用户信息，确保刷新后能自动恢复登录状态
 const userStore = useUserStore()
 userStore.initUser && userStore.initUser()
 
-app.mount('#app') 
+app.mount('#app')

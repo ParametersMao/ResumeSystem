@@ -95,8 +95,34 @@ export class ResumesController {
         resumeId: v.resumeId,
         userId: v.userId,
         sourceVersion: v.sourceVersion,
+        sourceType: v.sourceType,
+        remark: v.remark,
         createTime: v.createTime,
+        content: v.content,
       })),
+    };
+  }
+
+  @Post(':id/versions')
+  async createVersionSnapshot(
+    @Param('id') id: string,
+    @Body('remark') remark?: string,
+    @Query('userId') userId?: string,
+  ): Promise<ApiResponse<any>> {
+    const version = await this.resumesService.createVersionSnapshot(+id, userId ? +userId : undefined, remark);
+    return {
+      code: 200,
+      message: '鐗堟湰淇濆瓨鎴愬姛',
+      data: {
+        id: version.id,
+        resumeId: version.resumeId,
+        userId: version.userId,
+        sourceVersion: version.sourceVersion,
+        sourceType: version.sourceType,
+        remark: version.remark,
+        createTime: version.createTime,
+        content: version.content,
+      },
     };
   }
 

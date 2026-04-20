@@ -18,6 +18,18 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "src/components/editor/**/*",
+    "src/components/resume/**/*",
+    "src/components/form/**/*",
+    "src/views/Editor.vue",
+    "src/views/ResumeEditor.vue",
+    "src/views/ResumeEditorNew.vue",
+    "src/utils/pagedExport.ts",
+    "src/utils/richText.ts",
+    "src/utils/templateAdapter.ts",
+    "src/utils/templateFile.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
 

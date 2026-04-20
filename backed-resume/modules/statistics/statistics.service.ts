@@ -7,6 +7,7 @@ import { CUser } from '../../entities/c-user.entity';
 import { AiOperation } from '../../entities/ai-operation.entity';
 import { TemplateUsage } from '../../entities/template-usage.entity';
 import { ResumeDownload } from '../../entities/resume-download.entity';
+import { Resume } from '../../entities/resume.entity';
 
 @Injectable()
 export class StatisticsService {
@@ -23,6 +24,8 @@ export class StatisticsService {
     private templateUsageRepository: Repository<TemplateUsage>,
     @InjectRepository(ResumeDownload)
     private resumeDownloadRepository: Repository<ResumeDownload>,
+    @InjectRepository(Resume)
+    private resumeRepository: Repository<Resume>,
   ) {}
 
   private async safeCount<T extends ObjectLiteral>(repo: Repository<T>, fallback = 0): Promise<number> {
@@ -74,7 +77,7 @@ export class StatisticsService {
         startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     }
 
-    const [userTrend, aiOperationTrend, downloadTrend] = await Promise.all([
+    const [userTrend, aiOperationTrend, downloadTrend, resumeTrend] = await Promise.all([
       this.safeRawMany(() =>
         this.cUserRepository
           .createQueryBuilder('user')
@@ -105,12 +108,23 @@ export class StatisticsService {
           .orderBy('date', 'ASC')
           .getRawMany(),
       ),
+      this.safeRawMany(() =>
+        this.resumeRepository
+          .createQueryBuilder('resume')
+          .select('DATE(resume.create_time)', 'date')
+          .addSelect('COUNT(*)', 'count')
+          .where('resume.create_time >= :startDate', { startDate })
+          .groupBy('DATE(resume.create_time)')
+          .orderBy('date', 'ASC')
+          .getRawMany(),
+      ),
     ]);
 
     return {
       user_trend: userTrend,
       ai_operation_trend: aiOperationTrend,
       download_trend: downloadTrend,
+      resume_trend: resumeTrend,
     };
   }
 
@@ -122,9 +136,8 @@ export class StatisticsService {
           id: true,
           templateName: true,
           useCount: true,
-          downloadCount: true,
         },
-        order: { useCount: 'DESC', downloadCount: 'DESC' },
+        order: { useCount: 'DESC' },
         take: safeLimit,
       });
     } catch (e) {
@@ -134,17 +147,42 @@ export class StatisticsService {
   }
 
   async getUserActivity(): Promise<any> {
-    const users = await this.cUserRepository
-      .createQueryBuilder('user')
-      .select([
-        'user.id',
-        'user.username',
-        'user.aiOperationCount',
-      ])
-      .orderBy('user.aiOperationCount', 'DESC')
-      .limit(10)
-      .getMany();
+    try {
+      const users = await this.cUserRepository
+        .createQueryBuilder('user')
+        .select(['user.id', 'user.username'])
+        .loadRelationCountAndMap('user.aiOperationCount', 'user.aiOperations')
+        .orderBy('user.aiOperationCount', 'DESC')
+        .limit(10)
+        .getMany();
 
-    return users;
+      return users.map(u => ({
+        id: u.id,
+        username: u.username,
+        ai_operation_count: (u as any).aiOperationCount || 0,
+      }));
+    } catch (e) {
+      // 降级：直接查询 ai_operations 表
+      const rawUsers = await this.cUserRepository
+        .createQueryBuilder('user')
+        .select(['user.id', 'user.username'])
+        .limit(10)
+        .getMany();
+
+      const counts = await this.aiOperationRepository
+        .createQueryBuilder('ao')
+        .select('ao.user_id', 'userId')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('ao.user_id')
+        .getRawMany();
+
+      const countMap = new Map(counts.map(c => [c.userId, parseInt(c.count)]));
+
+      return rawUsers.map(u => ({
+        id: u.id,
+        username: u.username,
+        ai_operation_count: countMap.get(u.id) || 0,
+      }));
+    }
   }
 } 

@@ -1,4 +1,5 @@
 import http, { ApiResponse, PageResult } from './request'
+import { resolveTemplatePreset, type CoreTemplatePreset } from '@/core-resume/templates'
 
 export interface TemplateMeta {
   templateId: string;
@@ -6,7 +7,14 @@ export interface TemplateMeta {
   coverUrl: string;
   themeColor: string;
   fontFamily: string;
+  industryTags?: string[];
+  useCount?: number;
+  recommendWeight?: number;
   status?: 'online' | 'offline';
+  presetKey?: CoreTemplatePreset['key'];
+  templateVariant?: CoreTemplatePreset['variant'];
+  variantLabel?: string;
+  variantDescription?: string;
 }
 
 export interface TemplateDetail extends TemplateMeta {
@@ -14,19 +22,28 @@ export interface TemplateDetail extends TemplateMeta {
 }
 
 // 后端字段为 id/templateName/previewImage/...，此处做一层映射到前端 TemplateMeta
-type BackendTemplateList = { id: number; templateName: string; previewImage?: string; description?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; downloadCount?: number }
-type BackendTemplateDetail = { id: number; templateName: string; templateData: string; previewImage?: string; description?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; downloadCount?: number }
+type TemplateSortBy = 'recommended' | 'latest' | 'popular'
+type BackendTemplateList = { id: number; templateName: string; templateVariant?: CoreTemplatePreset['variant']; previewImage?: string; description?: string; industryTags?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; recommendWeight?: number; downloadCount?: number }
+type BackendTemplateDetail = { id: number; templateName: string; templateVariant?: CoreTemplatePreset['variant']; templateData: string; previewImage?: string; description?: string; industryTags?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; recommendWeight?: number; downloadCount?: number }
+type FavoriteListResponse = { templateIds: number[] }
 
-export async function fetchTemplates(page = 1, limit = 20, keyword = '', industryTags: string[] = []) {
+export async function fetchTemplates(page = 1, limit = 20, keyword = '', industryTags: string[] = [], sortBy: TemplateSortBy = 'recommended') {
+  const safeLimit = Math.min(limit, 100)
   const tagParam = industryTags.length ? industryTags.join(',') : undefined
-  const { data } = await http.get<ApiResponse<PageResult<BackendTemplateList>>>('/api/templates', { params: { page, limit, templateName: keyword, status: true, industryTags: tagParam } })
+  const { data } = await http.get<ApiResponse<PageResult<BackendTemplateList>>>('/api/templates', {
+    params: { page, limit: safeLimit, templateName: keyword, status: true, industryTags: tagParam, sortBy }
+  })
   const mapped: PageResult<TemplateMeta> = {
     list: data.data.list.map((t) => ({
+      ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant }),
       templateId: String(t.id),
       name: t.templateName,
       coverUrl: t.previewImage || '',
       themeColor: '#2e6cff',
       fontFamily: 'Source Han Sans',
+      industryTags: splitIndustryTags(t.industryTags),
+      useCount: t.useCount || 0,
+      recommendWeight: t.recommendWeight || 0,
       status: t.status ? 'online' : 'offline'
     })),
     total: data.data.total,
@@ -40,11 +57,15 @@ export async function getTemplate(templateId: string) {
   const { data } = await http.get<ApiResponse<BackendTemplateList>>(`/api/templates`, { params: { id: templateId } })
   const t = Array.isArray((data as any).data?.list) ? (data as any).data.list.find((x: any) => String(x.id) === templateId) : (data as any).data
   const mapped: TemplateMeta = {
+    ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant }),
     templateId: String(t.id),
     name: t.templateName,
     coverUrl: t.previewImage || '',
     themeColor: '#2e6cff',
     fontFamily: 'Source Han Sans',
+    industryTags: splitIndustryTags(t.industryTags),
+    useCount: t.useCount || 0,
+    recommendWeight: t.recommendWeight || 0,
     status: t.status ? 'online' : 'offline'
   }
   return mapped
@@ -55,15 +76,64 @@ export async function getTemplateDetail(templateId: string): Promise<TemplateDet
   const { data } = await http.get<ApiResponse<BackendTemplateDetail>>(`/api/templates/${templateId}`)
   const t: any = (data as any).data
   const mapped: TemplateDetail = {
+    ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant }, t.templateData ? safeParseTemplateData(t.templateData) : undefined),
     templateId: String(t.id),
     name: t.templateName,
     coverUrl: t.previewImage || '',
     themeColor: '#2e6cff',
     fontFamily: 'Source Han Sans',
+    industryTags: splitIndustryTags(t.industryTags),
+    useCount: t.useCount || 0,
+    recommendWeight: t.recommendWeight || 0,
     status: t.status ? 'online' : 'offline',
     templateData: t.templateData
   }
   return mapped
+}
+
+function toTemplatePresetMeta(source: { templateName?: string; templateVariant?: CoreTemplatePreset['variant'] }, templateData?: unknown) {
+  const preset = resolveTemplatePreset(source, templateData)
+  return {
+    presetKey: preset.key,
+    templateVariant: preset.variant,
+    variantLabel: preset.label,
+    variantDescription: preset.description,
+  }
+}
+
+function safeParseTemplateData(templateData: unknown) {
+  if (typeof templateData === 'string') {
+    try {
+      return JSON.parse(templateData)
+    } catch {
+      return undefined
+    }
+  }
+  return templateData
+}
+
+function splitIndustryTags(value?: string) {
+  if (!value) {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+export async function listFavoriteTemplateIds() {
+  const { data } = await http.get<ApiResponse<FavoriteListResponse>>('/api/templates/favorites/list')
+  return (data.data.templateIds || []).map((item) => String(item))
+}
+
+export async function addFavoriteTemplate(templateId: string) {
+  await http.post(`/api/templates/${templateId}/favorite`)
+}
+
+export async function removeFavoriteTemplate(templateId: string) {
+  await http.delete(`/api/templates/${templateId}/favorite`)
 }
 
 
