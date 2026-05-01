@@ -5,7 +5,7 @@
         <RouterLink class="brand" to="/home">简历系统</RouterLink>
         <nav class="nav-links">
           <RouterLink to="/home">首页</RouterLink>
-          <RouterLink to="/templates">模板中心</RouterLink>
+          <RouterLink to="/templates">简历库</RouterLink>
           <RouterLink to="/resumes">我的简历</RouterLink>
           <RouterLink to="/account">个人中心</RouterLink>
         </nav>

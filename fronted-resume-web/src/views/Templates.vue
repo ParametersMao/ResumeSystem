@@ -2,7 +2,7 @@
   <div class="templates-page">
     <header class="page-header">
       <div>
-        <h1>模板中心</h1>
+        <h1>简历库</h1>
         <p>选择一个适合当前求职方向的版式，进入编辑器后可继续调整内容。</p>
       </div>
       <el-button type="primary" @click="openEditor()">使用默认模板</el-button>
