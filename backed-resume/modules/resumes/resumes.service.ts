@@ -1,14 +1,15 @@
 import { Injectable, NotFoundException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { existsSync } from 'fs';
+import * as OSS from 'ali-oss';
+import * as puppeteer from 'puppeteer';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Resume } from '../../entities/resume.entity';
 import { ResumeVersion } from '../../entities/resume-version.entity';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
-import * as puppeteer from 'puppeteer';
-import * as OSS from 'ali-oss';
-import { v4 as uuidv4 } from 'uuid';
-import { existsSync } from 'fs';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -21,9 +22,57 @@ interface ResumeVersionSchema {
 
 type ResumeVersionSourceType = 'save' | 'manual' | 'rollback';
 
+interface PdfStorageUploader {
+  uploadPdf(fileName: string, pdfBuffer: Buffer): Promise<string>;
+}
+
+class LegacyOssUploader implements PdfStorageUploader {
+  constructor(private readonly client: OSS) {}
+
+  async uploadPdf(fileName: string, pdfBuffer: Buffer): Promise<string> {
+    const result = await this.client.put(fileName, pdfBuffer);
+    return result.url;
+  }
+}
+
+class R2Uploader implements PdfStorageUploader {
+  private readonly client: S3Client;
+
+  constructor(
+    private readonly bucket: string,
+    private readonly publicBaseUrl: string,
+    endpoint: string,
+    accessKeyId: string,
+    secretAccessKey: string,
+    region = 'auto',
+  ) {
+    this.client = new S3Client({
+      region,
+      endpoint,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+  }
+
+  async uploadPdf(fileName: string, pdfBuffer: Buffer): Promise<string> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: fileName,
+        Body: pdfBuffer,
+        ContentType: 'application/pdf',
+      }),
+    );
+
+    return `${this.publicBaseUrl}/${fileName}`;
+  }
+}
+
 @Injectable()
 export class ResumesService {
-  private ossClient: OSS | null = null;
+  private pdfStorageUploader: PdfStorageUploader | null = null;
   private resumeVersionSchemaPromise: Promise<ResumeVersionSchema> | null = null;
 
   constructor(
@@ -32,23 +81,7 @@ export class ResumesService {
     @InjectRepository(ResumeVersion)
     private resumeVersionRepository: Repository<ResumeVersion>,
   ) {
-    // 只有在配置完整时才初始化OSS客户端
-    const ossConfig = {
-      region: process.env.OSS_REGION,
-      accessKeyId: process.env.OSS_ACCESS_KEY_ID,
-      accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
-      bucket: process.env.OSS_BUCKET,
-    };
-
-    // 检查所有必需的配置是否存在
-    if (ossConfig.region && ossConfig.accessKeyId && ossConfig.accessKeySecret && ossConfig.bucket) {
-      this.ossClient = new OSS({
-        region: ossConfig.region,
-        accessKeyId: ossConfig.accessKeyId,
-        accessKeySecret: ossConfig.accessKeySecret,
-        bucket: ossConfig.bucket,
-      });
-    }
+    this.pdfStorageUploader = createPdfStorageUploader();
   }
 
   async create(createResumeDto: CreateResumeDto): Promise<ResumeResponseDto> {
@@ -59,7 +92,7 @@ export class ResumesService {
 
   async findAllByUser(userId: number, page = 1, limit = 10): Promise<PaginationResponse<ResumeListResponseDto>> {
     const skip = (page - 1) * limit;
-    
+
     const [resumes, total] = await this.resumeRepository.findAndCount({
       where: { userId, status: 1 },
       relations: ['template', 'user'],
@@ -68,7 +101,7 @@ export class ResumesService {
       take: limit,
     });
 
-    const responseData = resumes.map(resume => this.mapToListResponseDto(resume));
+    const responseData = resumes.map((resume) => this.mapToListResponseDto(resume));
 
     return {
       list: responseData,
@@ -79,7 +112,7 @@ export class ResumesService {
   }
 
   async findOne(id: number, userId?: number): Promise<ResumeResponseDto> {
-    const where: any = { id, status: 1 };
+    const where: Record<string, number> = { id, status: 1 };
     if (userId) where.userId = userId;
 
     const resume = await this.resumeRepository.findOne({
@@ -95,7 +128,7 @@ export class ResumesService {
   }
 
   async update(id: number, updateResumeDto: UpdateResumeDto, userId?: number): Promise<ResumeResponseDto> {
-    const where: any = { id, status: 1 };
+    const where: Record<string, number> = { id, status: 1 };
     if (userId) where.userId = userId;
 
     const resume = await this.resumeRepository.findOne({ where });
@@ -103,15 +136,12 @@ export class ResumesService {
       throw new NotFoundException('简历不存在');
     }
 
-    // Version conflict check
     if (updateResumeDto.version !== undefined && resume.version !== updateResumeDto.version) {
       throw new ConflictException('简历版本冲突，请刷新后重试');
     }
 
-    // 写入历史快照（更新前的 content）
     await this.saveVersionSnapshot(resume, 'save');
 
-    // Update fields
     Object.assign(resume, updateResumeDto);
     resume.version += 1;
 
@@ -153,12 +183,12 @@ export class ResumesService {
   }
 
   async createVersionSnapshot(resumeId: number, userId?: number, remark?: string): Promise<ResumeVersion> {
-    const whereResume: any = { id: resumeId, status: 1 };
+    const whereResume: Record<string, number> = { id: resumeId, status: 1 };
     if (userId) whereResume.userId = userId;
 
     const resume = await this.resumeRepository.findOne({ where: whereResume });
     if (!resume) {
-      throw new NotFoundException('绠€鍘嗕笉瀛樺湪');
+      throw new NotFoundException('简历不存在');
     }
 
     await this.saveVersionSnapshot(resume, 'manual', remark);
@@ -166,22 +196,26 @@ export class ResumesService {
     const versions = await this.listVersions(resumeId, userId);
     const latest = versions[0];
     if (!latest) {
-      throw new NotFoundException('鍒涘缓鐗堟湰澶辫触');
+      throw new NotFoundException('未找到历史版本快照');
     }
 
     return latest;
   }
 
   async rollback(resumeId: number, versionId: number, userId?: number): Promise<ResumeResponseDto> {
-    const whereResume: any = { id: resumeId, status: 1 };
+    const whereResume: Record<string, number> = { id: resumeId, status: 1 };
     if (userId) whereResume.userId = userId;
+
     const resume = await this.resumeRepository.findOne({ where: whereResume });
-    if (!resume) throw new NotFoundException('简历不存在');
+    if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
 
     const version = await this.findVersionSnapshot(resumeId, versionId, userId);
-    if (!version) throw new NotFoundException('历史版本不存在');
+    if (!version) {
+      throw new NotFoundException('历史版本不存在');
+    }
 
-    // 回滚前也记录一次当前快照，避免“回滚即丢失当前”
     await this.saveVersionSnapshot(resume, 'rollback');
 
     resume.content = version.content;
@@ -191,7 +225,7 @@ export class ResumesService {
   }
 
   async remove(id: number, userId?: number): Promise<void> {
-    const where: any = { id, status: 1 };
+    const where: Record<string, number> = { id, status: 1 };
     if (userId) where.userId = userId;
 
     const resume = await this.resumeRepository.findOne({ where });
@@ -199,20 +233,19 @@ export class ResumesService {
       throw new NotFoundException('简历不存在');
     }
 
-    // Soft delete
     resume.status = 0;
     await this.resumeRepository.save(resume);
   }
 
   async exportPdf(html: string): Promise<string> {
     if (!html?.trim()) {
-      throw new ServiceUnavailableException('PDF导出失败：未提供有效HTML内容');
+      throw new ServiceUnavailableException('PDF 导出失败：未提供有效 HTML 内容');
     }
 
     const executablePath = resolveBrowserExecutablePath();
     if (!executablePath) {
       throw new ServiceUnavailableException(
-        'PDF导出失败：未找到 Chrome/Edge 浏览器，请配置 PUPPETEER_EXECUTABLE_PATH 或使用打印方式导出',
+        'PDF 导出失败：未找到 Chrome/Edge 浏览器，请配置 PUPPETEER_EXECUTABLE_PATH 或使用打印方式导出',
       );
     }
 
@@ -233,16 +266,16 @@ export class ResumesService {
       await page.evaluate(async () => {
         const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
         const waitFonts = async () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const fonts = (document as any).fonts;
+          const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
           if (fonts?.ready) {
             try {
               await fonts.ready;
             } catch {
-              // ignore
+              // ignore font loading errors
             }
           }
         };
+
         const waitImages = async () => {
           const images = Array.from(document.images || []);
           await Promise.all(
@@ -256,6 +289,7 @@ export class ResumesService {
             }),
           );
         };
+
         await Promise.race([Promise.all([waitFonts(), waitImages()]), sleep(15_000)]);
       });
 
@@ -266,22 +300,22 @@ export class ResumesService {
         margin: { top: '0', right: '0', bottom: '0', left: '0' },
       })) as unknown as Buffer;
 
-      if (this.ossClient) {
-        const fileName = `resume-${uuidv4()}.pdf`;
-        const result = await this.ossClient.put(fileName, pdfBuffer);
-        return result.url;
+      if (this.pdfStorageUploader) {
+        const fileName = `resume-${randomUUID()}.pdf`;
+        return await this.pdfStorageUploader.uploadPdf(fileName, pdfBuffer);
       }
+
       return `data:application/pdf;base64,${Buffer.from(pdfBuffer).toString('base64')}`;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('timeout') || msg.includes('Timeout')) {
-        throw new ServiceUnavailableException('PDF导出超时，请稍后重试或使用打印方式导出');
+        throw new ServiceUnavailableException('PDF 导出超时，请稍后重试或使用打印方式导出');
       }
       if (err instanceof ServiceUnavailableException) {
         throw err;
       }
       throw new ServiceUnavailableException(
-        `PDF导出失败：${msg.slice(0, 100)}。请尝试使用打印方式导出。`,
+        `PDF 导出失败：${msg.slice(0, 100)}。请尝试使用打印方式导出。`,
       );
     } finally {
       if (browser) {
@@ -441,6 +475,58 @@ export class ResumesService {
   }
 }
 
+function createPdfStorageUploader(): PdfStorageUploader | null {
+  const r2Config = {
+    endpoint: process.env.R2_ENDPOINT,
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    bucket: process.env.R2_BUCKET,
+    publicBaseUrl: process.env.R2_PUBLIC_BASE_URL,
+    region: process.env.R2_REGION || 'auto',
+  };
+
+  if (
+    r2Config.endpoint &&
+    r2Config.accessKeyId &&
+    r2Config.secretAccessKey &&
+    r2Config.bucket &&
+    r2Config.publicBaseUrl
+  ) {
+    return new R2Uploader(
+      r2Config.bucket,
+      normalizePublicBaseUrl(r2Config.publicBaseUrl),
+      r2Config.endpoint,
+      r2Config.accessKeyId,
+      r2Config.secretAccessKey,
+      r2Config.region,
+    );
+  }
+
+  const ossConfig = {
+    region: process.env.OSS_REGION,
+    accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+    accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+    bucket: process.env.OSS_BUCKET,
+  };
+
+  if (ossConfig.region && ossConfig.accessKeyId && ossConfig.accessKeySecret && ossConfig.bucket) {
+    return new LegacyOssUploader(
+      new OSS({
+        region: ossConfig.region,
+        accessKeyId: ossConfig.accessKeyId,
+        accessKeySecret: ossConfig.accessKeySecret,
+        bucket: ossConfig.bucket,
+      }),
+    );
+  }
+
+  return null;
+}
+
+function normalizePublicBaseUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
 function resolveBrowserExecutablePath(): string | undefined {
   const envPath = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH;
   if (envPath && existsSync(envPath)) return envPath;
@@ -465,7 +551,6 @@ function resolveBrowserExecutablePath(): string | undefined {
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     );
   } else {
-    // linux
     candidates.push(
       '/usr/bin/google-chrome',
       '/usr/bin/google-chrome-stable',
