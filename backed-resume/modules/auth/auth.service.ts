@@ -28,15 +28,28 @@ export class AuthService implements OnModuleInit {
   ) {
     // 在构造函数中初始化 refresh token service
     this.refreshJwtService = new JwtService({
-      secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-fallback',
+      secret: this.resolveJwtSecret('JWT_REFRESH_SECRET', 'dev-refresh-secret-fallback'),
       signOptions: { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' },
     });
   }
 
+  private resolveJwtSecret(envName: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET', devFallback: string): string {
+    const secret = process.env[envName];
+    if (secret && secret.trim() !== '') {
+      return secret;
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`${envName} is required in production`);
+    }
+
+    return devFallback;
+  }
+
   private getJwtConfig() {
     return {
-      accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-fallback',
-      refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-fallback',
+      accessSecret: this.resolveJwtSecret('JWT_ACCESS_SECRET', 'dev-access-secret-fallback'),
+      refreshSecret: this.resolveJwtSecret('JWT_REFRESH_SECRET', 'dev-refresh-secret-fallback'),
       accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '1h',
       refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
     };
@@ -99,7 +112,6 @@ export class AuthService implements OnModuleInit {
   }
 
   async validateUser(username: string, password: string): Promise<any> {
-    console.log('validateUser called', username);
     const user = await this.adminUsersService.findByUsername(username);
     if (user && await this.adminUsersService.verifyPassword(user, password)) {
       const { password, ...result } = user;
@@ -109,7 +121,6 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(loginDto: LoginDto) {
-    console.log('authService.login called', loginDto);
     try {
       const user = await this.validateUser(loginDto.username, loginDto.password);
       if (!user) {
@@ -133,7 +144,6 @@ export class AuthService implements OnModuleInit {
         },
       };
     } catch (e) {
-      console.error('login error', e);
       throw e;
     }
   }
@@ -220,7 +230,6 @@ export class AuthService implements OnModuleInit {
         },
       };
     } catch (e) {
-      console.error('register error', e);
       throw e;
     }
   }
@@ -251,7 +260,6 @@ export class AuthService implements OnModuleInit {
         },
       };
     } catch (e) {
-      console.error('cuserLogin error', e);
       throw e;
     }
   }
