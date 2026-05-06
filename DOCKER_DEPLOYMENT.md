@@ -27,6 +27,16 @@ docker compose up -d --build
 - 中台管理端：`http://localhost:3030`
 - 后端健康检查：`http://localhost:3000/api/health`
 
+如果本机已经启动了 MySQL、后端或前端服务，可能会出现端口占用。可以临时换一组端口启动：
+
+```powershell
+$env:MYSQL_PORT='3307'
+$env:BACKEND_PORT='13000'
+$env:WEB_PORT='15173'
+$env:ADMIN_PORT='13030'
+docker compose --env-file .env.docker.example up -d --build
+```
+
 默认测试账号：
 
 - 中台：`admin / admin123`

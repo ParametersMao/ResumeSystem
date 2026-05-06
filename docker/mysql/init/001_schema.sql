@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS c_user_entitlements (
 CREATE TABLE IF NOT EXISTS templates (
   id INT NOT NULL AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
-  thumbnail VARCHAR(500) NULL,
+  thumbnail LONGTEXT NULL,
   html_content LONGTEXT NULL,
   css_content LONGTEXT NULL,
   category VARCHAR(255) NULL,
@@ -209,4 +209,3 @@ ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);
 INSERT INTO c_user_entitlements (user_id, plan_code, account_weight, ai_free_total, ai_free_used, ai_free_reset_policy)
 VALUES (1, 'free', 0, 20, 0, 'never')
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);
-
