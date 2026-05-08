@@ -63,7 +63,7 @@ export class UpdateTemplateDto {
   status?: boolean;
 }
 
-// 鍒楄〃鍝嶅簲DTO - 涓嶅寘鍚玹emplateData浠ユ彁楂樻€ц兘
+// 列表响应 DTO：不包含 templateData，以提升列表性能。
 export class TemplateListResponseDto {
   id: number;
   templateName: string;
@@ -77,7 +77,7 @@ export class TemplateListResponseDto {
   recommendWeight: number;
 }
 
-// 璇︽儏鍝嶅簲DTO - 鍖呭惈瀹屾暣鐨則emplateData
+// 详情响应 DTO：包含完整 templateData。
 export class TemplateDetailResponseDto {
   id: number;
   templateName: string;
@@ -92,7 +92,7 @@ export class TemplateDetailResponseDto {
   recommendWeight: number;
 }
 
-// 鍝嶅簲鏁版嵁DTO - 淇濇寔鍚戝悗鍏煎
+// 响应数据 DTO：保持向后兼容。
 export class TemplateResponseDto {
   id: number;
   templateName: string;

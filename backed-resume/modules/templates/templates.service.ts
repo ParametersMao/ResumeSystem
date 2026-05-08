@@ -39,8 +39,6 @@ export class TemplatesService {
     } = searchDto;
     const skip = (page - 1) * limit;
 
-    console.log('Template search params:', { page, limit, templateName, status, industryTags, templateVariant, sortBy });
-
     try {
       const queryBuilder = this.templateRepository.createQueryBuilder('template');
 
@@ -62,7 +60,7 @@ export class TemplatesService {
           .slice(0, 10);
 
         for (const tag of tags) {
-          queryBuilder.andWhere('FIND_IN_SET(:tag, template.industry_tags) > 0', { tag });
+          queryBuilder.andWhere('FIND_IN_SET(:tag, template.tags) > 0', { tag });
         }
       }
 
@@ -190,7 +188,7 @@ export class TemplatesService {
 
     const template = await this.templateRepository.findOne({ where: { id: templateId, status: true } });
     if (!template) {
-      throw new NotFoundException('模板不存在');
+      throw new NotFoundException('模板不存在或已下架');
     }
 
     await this.templateFavoriteRepository.query(

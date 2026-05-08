@@ -775,7 +775,7 @@ async function saveResumeInternal(notify) {
     }
 }
 async function refreshVersions() {
-    if (!currentResume.value || !userStore.user?.id) {
+    if (!currentResume.value?.id || !userStore.user?.id) {
         versionRecords.value = [];
         return;
     }
@@ -785,9 +785,9 @@ async function refreshVersions() {
         versionRecords.value = versions.map(buildVersionRecord);
     }
     catch (error) {
-        console.error('鍔犺浇鐗堟湰璁板綍澶辫触:', error);
+        console.error('获取版本记录失败:', error);
         if (versionDrawerVisible.value) {
-            ElMessage.error('鐗堟湰璁板綍鍔犺浇澶辫触');
+            ElMessage.error('版本记录加载失败');
         }
     }
     finally {
@@ -796,14 +796,14 @@ async function refreshVersions() {
 }
 async function createManualVersion() {
     if (!userStore.user?.id) {
-        ElMessage.warning('璇峰厛鐧诲綍鍚庡啀淇濆瓨鐗堟湰');
+        ElMessage.warning('请先登录后再保存版本');
         return;
     }
     if (!currentResume.value || hasUnsavedChanges.value) {
         await saveResumeInternal(false);
     }
     if (!currentResume.value) {
-        ElMessage.warning('璇峰厛淇濆瓨绠€鍘嗗悗鍐嶅垱寤虹増鏈?');
+        ElMessage.warning('请先保存简历内容后再创建版本');
         return;
     }
     creatingVersion.value = true;
@@ -813,7 +813,7 @@ async function createManualVersion() {
             const result = await ElMessageBox.prompt('给这个版本留一句备注，后面会更容易识别。', '保存为版本', {
                 confirmButtonText: '保存版本',
                 cancelButtonText: '跳过备注',
-                inputPlaceholder: '例如：投递前调整项目经历 / 保留时间轴版文案',
+                inputPlaceholder: '例如：投递前调整项目经历 / 保留时间轴版本文案',
                 inputValue: '',
             });
             remark = result.value?.trim() || '';
@@ -827,11 +827,11 @@ async function createManualVersion() {
         await createResumeVersionSnapshot(String(currentResume.value.id), userStore.user.id, remark || undefined);
         await refreshVersions();
         versionDrawerVisible.value = true;
-        ElMessage.success('宸蹭负褰撳墠绠€鍘嗗垱寤虹増鏈?');
+        ElMessage.success('已创建一个新的简历版本');
     }
     catch (error) {
-        console.error('鍒涘缓鐗堟湰澶辫触:', error);
-        ElMessage.error('鍒涘缓鐗堟湰澶辫触锛岃绋嶅悗閲嶈瘯');
+        console.error('创建版本失败:', error);
+        ElMessage.error('创建版本失败，请稍后重试');
     }
     finally {
         creatingVersion.value = false;
@@ -863,11 +863,11 @@ async function rollbackToVersion(versionId) {
         lastSavedSnapshot.value = serializeDocument();
         persistDraft();
         await refreshVersions();
-        ElMessage.success('宸插洖婊氬埌鎸囧畾鐗堟湰');
+        ElMessage.success('已回滚到所选版本');
     }
     catch (error) {
-        console.error('鍥炴粴鐗堟湰澶辫触:', error);
-        ElMessage.error('鍥炴粴澶辫触锛岃绋嶅悗閲嶈瘯');
+        console.error('回滚版本失败:', error);
+        ElMessage.error('回滚版本失败，请稍后重试');
     }
     finally {
         rollingBackVersionId.value = null;

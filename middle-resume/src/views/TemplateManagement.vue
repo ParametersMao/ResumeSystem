@@ -737,14 +737,14 @@ const generatePreviewHtml = (templateData: any) => {
         ],
         education: [
           {
-            school: '鍖椾含澶у',
-            degree: '璁＄畻鏈虹瀛?˶ʿ',
+            school: '北京大学',
+            degree: '计算机科学 硕士',
             start: '2015-09',
             end: '2018-06'
           },
           {
-            school: '鍗椾含澶у',
-            degree: '杞欢宸ョ▼ ѧʿ',
+            school: '南京大学',
+            degree: '软件工程 学士',
             start: '2011-09',
             end: '2015-06'
           }
@@ -1178,11 +1178,11 @@ const generatePreviewHtml = (templateData: any) => {
 
     generatedHtml.value = html;
   } catch (error) {
-    console.error('鐢熸垚棰勮 HTML 失败:', error);
-    // 鐢熸垚澶辫触鏃朵娇鐢ㄩ粯璁ゆā鏉?
+    console.error('生成预览 HTML 失败:', error);
+    // 生成失败时使用默认模板。
     const defaultHtml = `<div style="padding: 20px; text-align: center; background-color: #1e1e20; color: #E5EAF3;">
       <h2 style="color: #F56C6C;">模板数据解析失败</h2>
-      <p>鏃犳硶鏍规嵁鎻愪緵鐨勬ā鏉挎暟鎹敓鎴愰瑙堛€傝妫€鏌ユā鏉挎暟鎹牸寮忔槸鍚︽纭€?/p>
+      <p>无法根据提供的模板数据生成预览，请检查模板数据格式是否正确。</p>
       <pre style="text-align: left; background: #2b2b2b; padding: 10px; border-radius: 5px; color: #E5EAF3;">${JSON.stringify(error, null, 2)}</pre>
     </div>`;
     generatedHtml.value = defaultHtml;

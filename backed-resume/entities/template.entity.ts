@@ -8,13 +8,13 @@ export class Template {
   @Column({ name: 'name' })
   templateName: string;
 
-  @Column({ name: 'thumbnail', type: 'varchar', length: 500, nullable: true })
+  @Column({ name: 'thumbnail', type: 'longtext', nullable: true })
   previewImage: string;
 
-  @Column({ name: 'html_content', type: 'text', nullable: true })
+  @Column({ name: 'html_content', type: 'longtext', nullable: true })
   templateData: string;
 
-  @Column({ name: 'css_content', type: 'text', nullable: true })
+  @Column({ name: 'css_content', type: 'longtext', nullable: true })
   cssContent: string;
 
   @Column({ nullable: true })

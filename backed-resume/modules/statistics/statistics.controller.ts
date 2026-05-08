@@ -37,12 +37,12 @@ export class StatisticsController {
   }
 
   @Get('user-activity')
-  async getUserActivity(): Promise<ApiResponse<any>> {
-    const users = await this.statisticsService.getUserActivity();
+  async getUserActivity(@Query('limit') limit?: string): Promise<ApiResponse<any>> {
+    const users = await this.statisticsService.getUserActivity(limit ? Number(limit) : undefined);
     return {
       code: 200,
       message: 'success',
       data: users,
     };
   }
-} 
+}

@@ -495,7 +495,7 @@ function createPdfStorageUploader(): PdfStorageUploader | null {
     return new R2Uploader(
       r2Config.bucket,
       normalizePublicBaseUrl(r2Config.publicBaseUrl),
-      r2Config.endpoint,
+      normalizeS3Endpoint(r2Config.endpoint, r2Config.bucket),
       r2Config.accessKeyId,
       r2Config.secretAccessKey,
       r2Config.region,
@@ -525,6 +525,17 @@ function createPdfStorageUploader(): PdfStorageUploader | null {
 
 function normalizePublicBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
+}
+
+function normalizeS3Endpoint(endpoint: string, bucket: string): string {
+  const normalized = endpoint.replace(/\/+$/, '');
+  const bucketPath = `/${bucket}`;
+
+  if (normalized.endsWith(bucketPath)) {
+    return normalized.slice(0, -bucketPath.length);
+  }
+
+  return normalized;
 }
 
 function resolveBrowserExecutablePath(): string | undefined {
