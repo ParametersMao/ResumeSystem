@@ -4,8 +4,16 @@ import { useUserStore } from '@/store/user';
 import { setupMock } from './mock';
 import router from '@/router';
 // 使用相对 baseURL，开发态通过 Vite 代理到后端，避免浏览器 CORS
+const apiBaseURL = import.meta.env.VITE_API_BASE || '/';
+function normalizeApiUrl(url) {
+    const normalizedBase = apiBaseURL.replace(/\/+$/, '');
+    if (normalizedBase === '/api' && /^\/api(\/|$)/.test(url)) {
+        return url.replace(/^\/api(?=\/|$)/, '');
+    }
+    return url;
+}
 const instance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE || '/',
+    baseURL: apiBaseURL,
     timeout: 15000
 });
 // ==================== Token 自动刷新状态 ====================
@@ -21,6 +29,9 @@ function onRefreshFailed(err) {
 }
 // ==================== 请求拦截器 ====================
 instance.interceptors.request.use((config) => {
+    if (config.url) {
+        config.url = normalizeApiUrl(config.url);
+    }
     const user = useUserStore();
     if (user.token) {
         config.headers = config.headers || {};
@@ -61,7 +72,7 @@ instance.interceptors.response.use((resp) => resp, async (err) => {
         isRefreshing = true;
         try {
             // 调用刷新接口
-            const refreshRes = await axios.post('/api/auth/refresh', { refresh_token: refreshToken }, { baseURL: import.meta.env.VITE_API_BASE || '/' });
+            const refreshRes = await axios.post(normalizeApiUrl('/api/auth/refresh'), { refresh_token: refreshToken }, { baseURL: apiBaseURL });
             const newAccessToken = refreshRes.data?.data?.access_token;
             const newRefreshToken = refreshRes.data?.data?.refresh_token;
             if (!newAccessToken)
