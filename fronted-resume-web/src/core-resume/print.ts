@@ -1,7 +1,7 @@
 const coreResumePrintStyles = `
   @page {
     size: A4;
-    margin: 0;
+    margin: 5mm;
   }
 
   * {
