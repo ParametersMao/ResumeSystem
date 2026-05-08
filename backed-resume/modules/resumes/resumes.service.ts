@@ -260,7 +260,7 @@ export class ResumesService {
       const page = await browser.newPage();
       page.setDefaultTimeout(30_000);
 
-      await page.setContent(html, { waitUntil: 'load', timeout: 30_000 });
+      await page.setContent(injectPdfSafeMargins(html), { waitUntil: 'load', timeout: 30_000 });
       await page.emulateMediaType('print');
 
       await page.evaluate(async () => {
@@ -536,6 +536,42 @@ function normalizeS3Endpoint(endpoint: string, bucket: string): string {
   }
 
   return normalized;
+}
+
+function injectPdfSafeMargins(html: string): string {
+  if (html.includes('resume-pdf-safe-margins')) {
+    return html;
+  }
+
+  const safeMarginStyle = `
+    <style id="resume-pdf-safe-margins">
+      @page {
+        size: A4;
+        margin: 5mm;
+      }
+
+      html,
+      body {
+        margin: 0 !important;
+        background: #ffffff !important;
+      }
+
+      body {
+        box-sizing: border-box !important;
+        padding: 5mm !important;
+      }
+
+      .resume-sheet {
+        max-width: 100% !important;
+      }
+    </style>
+  `;
+
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${safeMarginStyle}</head>`);
+  }
+
+  return `${safeMarginStyle}${html}`;
 }
 
 function resolveBrowserExecutablePath(): string | undefined {
