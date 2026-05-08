@@ -399,8 +399,8 @@ const coreResumePrintStyles = `
   }
 
   .resume-section {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   .section-heading {
@@ -408,6 +408,8 @@ const coreResumePrintStyles = `
     align-items: center;
     gap: 10px;
     margin-bottom: 14px;
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
   .section-heading-bar {
@@ -433,8 +435,8 @@ const coreResumePrintStyles = `
     padding: 16px 18px;
     border-radius: 16px;
     background: #f8fafc;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   .item-heading {
@@ -442,6 +444,8 @@ const coreResumePrintStyles = `
     justify-content: space-between;
     gap: 12px;
     align-items: baseline;
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
   .item-heading h3 {

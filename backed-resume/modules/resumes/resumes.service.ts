@@ -564,6 +564,31 @@ function injectPdfSafeMargins(html: string): string {
       .resume-sheet {
         max-width: 100% !important;
       }
+
+      .resume-section,
+      .timeline-section,
+      .spotlight-section,
+      .section-item,
+      .timeline-card,
+      .spotlight-card {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
+
+      .section-heading,
+      .item-heading,
+      .timeline-marker,
+      .timeline-card-top,
+      .spotlight-card-head {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+
+      p,
+      li {
+        orphans: 2;
+        widows: 2;
+      }
     </style>
   `;
 
