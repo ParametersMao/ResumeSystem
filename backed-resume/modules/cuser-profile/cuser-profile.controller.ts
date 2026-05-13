@@ -12,13 +12,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { mkdirSync } from 'fs';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
+import { randomUUID } from 'crypto';
 import { ApiResponse } from '../../common/interfaces/pagination.interface';
 import { CUserProfileResponseDto, UpdateCUserProfileDto } from '../../dto/c-user-profile.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CuserProfileService } from './cuser-profile.service';
+import { StorageService } from '../storage/storage.service';
 
 function ensureCuser(req: any) {
   if (!req.user?.id) {
@@ -32,7 +32,10 @@ function ensureCuser(req: any) {
 
 @Controller('api/cuser')
 export class CuserProfileController {
-  constructor(private readonly profileService: CuserProfileService) {}
+  constructor(
+    private readonly profileService: CuserProfileService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)
@@ -57,22 +60,11 @@ export class CuserProfileController {
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const dest = join(process.cwd(), 'uploads', 'avatars');
-          mkdirSync(dest, { recursive: true });
-          cb(null, dest);
-        },
-        filename: (req, file, cb) => {
-          const safeExt = (extname(file.originalname || '') || '.png').slice(0, 10);
-          const name = `avatar-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`;
-          cb(null, name);
-        },
-      }),
+      storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
-        const isImage = /^image\/(png|jpeg|jpg|webp|gif|svg\+xml)$/i.test(file.mimetype || '');
-        cb(isImage ? null : new BadRequestException('仅支持图片文件'), isImage);
+        const isImage = /^image\/(png|jpe?g|webp)$/i.test(file.mimetype || '');
+        cb(isImage ? null : new BadRequestException('仅支持 PNG、JPG、WebP 图片'), isImage);
       },
     }),
   )
@@ -88,8 +80,24 @@ export class CuserProfileController {
       return { code: 200, message: 'success', data: { avatarUrl } };
     }
 
-    const avatarUrl = `/uploads/avatars/${file.filename}`;
+    const result = await this.storageService.uploadObject({
+      key: `avatars/user-${userId}/avatar-${Date.now()}-${randomUUID()}${resolveImageExtension(file)}`,
+      body: file.buffer,
+      contentType: file.mimetype,
+      cacheControl: 'public, max-age=31536000, immutable',
+    });
+    const avatarUrl = result.url;
     await this.profileService.update(userId, { avatarUrl });
     return { code: 200, message: 'success', data: { avatarUrl } };
   }
+}
+
+function resolveImageExtension(file: Express.Multer.File): string {
+  const mimeExtMap: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+  };
+  return mimeExtMap[file.mimetype] || '.png';
 }

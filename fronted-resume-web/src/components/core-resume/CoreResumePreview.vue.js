@@ -2,6 +2,24 @@ import { computed, ref } from 'vue';
 import { resolveTemplateVariant } from '@/core-resume/templates';
 const props = defineProps();
 const sheetRef = ref(null);
+const avatarConfig = computed(() => props.document.templateLayout?.avatar || {});
+const profileAvatar = computed(() => {
+    if (avatarConfig.value.enabled === false || avatarConfig.value.placement === 'hidden') {
+        return '';
+    }
+    return props.document.profile.avatar?.trim();
+});
+const avatarClass = computed(() => `avatar-shape-${avatarConfig.value.shape || 'rounded'}`);
+const avatarStyle = computed(() => {
+    const style = {};
+    if (avatarConfig.value.width) {
+        style.width = `${avatarConfig.value.width}px`;
+    }
+    if (avatarConfig.value.height) {
+        style.height = `${avatarConfig.value.height}px`;
+    }
+    return style;
+});
 const contactItems = computed(() => {
     const profile = props.document.profile;
     return [
@@ -35,7 +53,7 @@ const sheetStyle = computed(() => {
 function getPrimaryText(type, item) {
     switch (type) {
         case 'intention':
-            return String(item.intention || '求职意向');
+            return String(item.intention || props.document.profile.title || '求职意向');
         case 'education':
             return String(item.school || '学校名称');
         case 'experience':
@@ -207,6 +225,8 @@ let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['timeline-hero']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-hero']} */ ;
 /** @type {__VLS_StyleScopedClasses['timeline-contact-grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-header-side']} */ ;
+/** @type {__VLS_StyleScopedClasses['timeline-avatar']} */ ;
 /** @type {__VLS_StyleScopedClasses['sidebar-layout']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-body']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-meta']} */ ;
@@ -238,6 +258,15 @@ if (__VLS_ctx.templateVariant === 'sidebar') {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "sidebar-identity" },
     });
+    if (__VLS_ctx.profileAvatar) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
+            ...{ class: "resume-avatar sidebar-avatar" },
+            ...{ class: (__VLS_ctx.avatarClass) },
+            ...{ style: (__VLS_ctx.avatarStyle) },
+            src: (__VLS_ctx.profileAvatar),
+            alt: "个人照片",
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
         ...{ class: "resume-name" },
     });
@@ -360,6 +389,18 @@ else if (__VLS_ctx.templateVariant === 'timeline') {
     });
     (__VLS_ctx.document.profile.title || '前端工程师');
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "timeline-meta-panel" },
+    });
+    if (__VLS_ctx.profileAvatar) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
+            ...{ class: "resume-avatar timeline-avatar" },
+            ...{ class: (__VLS_ctx.avatarClass) },
+            ...{ style: (__VLS_ctx.avatarStyle) },
+            src: (__VLS_ctx.profileAvatar),
+            alt: "个人照片",
+        });
+    }
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "timeline-contact-grid" },
     });
     for (const [item] of __VLS_getVForSourceType((__VLS_ctx.contactItems))) {
@@ -468,6 +509,15 @@ else if (__VLS_ctx.templateVariant === 'spotlight') {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "spotlight-meta-card" },
     });
+    if (__VLS_ctx.profileAvatar) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
+            ...{ class: "resume-avatar spotlight-avatar" },
+            ...{ class: (__VLS_ctx.avatarClass) },
+            ...{ style: (__VLS_ctx.avatarStyle) },
+            src: (__VLS_ctx.profileAvatar),
+            alt: "个人照片",
+        });
+    }
     for (const [item] of __VLS_getVForSourceType((__VLS_ctx.contactItems))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             key: (item.label),
@@ -613,7 +663,9 @@ else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.header, __VLS_intrinsicElements.header)({
         ...{ class: "resume-header" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "resume-identity" },
+    });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
         ...{ class: "resume-name" },
     });
@@ -622,6 +674,18 @@ else {
         ...{ class: "resume-role" },
     });
     (__VLS_ctx.document.profile.title || '前端工程师');
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "resume-header-side" },
+    });
+    if (__VLS_ctx.profileAvatar) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
+            ...{ class: "resume-avatar" },
+            ...{ class: (__VLS_ctx.avatarClass) },
+            ...{ style: (__VLS_ctx.avatarStyle) },
+            src: (__VLS_ctx.profileAvatar),
+            alt: "个人照片",
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "resume-meta" },
     });
@@ -708,6 +772,8 @@ else {
 /** @type {__VLS_StyleScopedClasses['sidebar-layout']} */ ;
 /** @type {__VLS_StyleScopedClasses['sidebar-column']} */ ;
 /** @type {__VLS_StyleScopedClasses['sidebar-identity']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-avatar']} */ ;
+/** @type {__VLS_StyleScopedClasses['sidebar-avatar']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-name']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-role']} */ ;
 /** @type {__VLS_StyleScopedClasses['sidebar-block']} */ ;
@@ -732,6 +798,9 @@ else {
 /** @type {__VLS_StyleScopedClasses['eyebrow']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-name']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-role']} */ ;
+/** @type {__VLS_StyleScopedClasses['timeline-meta-panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-avatar']} */ ;
+/** @type {__VLS_StyleScopedClasses['timeline-avatar']} */ ;
 /** @type {__VLS_StyleScopedClasses['timeline-contact-grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['timeline-section']} */ ;
 /** @type {__VLS_StyleScopedClasses['timeline-marker']} */ ;
@@ -754,6 +823,8 @@ else {
 /** @type {__VLS_StyleScopedClasses['resume-role']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-summary']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-meta-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-avatar']} */ ;
+/** @type {__VLS_StyleScopedClasses['spotlight-avatar']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-meta-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-body']} */ ;
 /** @type {__VLS_StyleScopedClasses['spotlight-side']} */ ;
@@ -785,8 +856,11 @@ else {
 /** @type {__VLS_StyleScopedClasses['spotlight-date']} */ ;
 /** @type {__VLS_StyleScopedClasses['item-description']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-header']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-identity']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-name']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-role']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-header-side']} */ ;
+/** @type {__VLS_StyleScopedClasses['resume-avatar']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-meta']} */ ;
 /** @type {__VLS_StyleScopedClasses['resume-section']} */ ;
 /** @type {__VLS_StyleScopedClasses['section-heading']} */ ;
@@ -806,6 +880,9 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             sheetRef: sheetRef,
+            profileAvatar: profileAvatar,
+            avatarClass: avatarClass,
+            avatarStyle: avatarStyle,
             contactItems: contactItems,
             templateVariant: templateVariant,
             visibleSections: visibleSections,

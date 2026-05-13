@@ -51,6 +51,57 @@ const coreResumePrintStyles = `
     break-inside: avoid;
   }
 
+  .resume-identity {
+    min-width: 0;
+  }
+
+  .resume-header-side {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .resume-avatar {
+    width: 86px;
+    height: 108px;
+    flex: 0 0 auto;
+    border-radius: 18px;
+    object-fit: cover;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    background: #fff;
+  }
+
+  .avatar-shape-circle {
+    border-radius: 999px;
+  }
+
+  .avatar-shape-square {
+    border-radius: 6px;
+  }
+
+  .avatar-shape-rounded {
+    border-radius: 18px;
+  }
+
+  .sidebar-avatar {
+    width: 96px;
+    height: 120px;
+    margin-bottom: 18px;
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+  }
+
+  .timeline-avatar {
+    justify-self: end;
+  }
+
+  .spotlight-avatar {
+    justify-self: center;
+    width: 96px;
+    height: 120px;
+  }
+
   .resume-name {
     margin: 0 0 8px;
     font-size: 34px;
@@ -165,6 +216,12 @@ const coreResumePrintStyles = `
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .timeline-meta-panel {
+    display: grid;
+    gap: 14px;
+    justify-items: stretch;
   }
 
   .timeline-contact-grid span {

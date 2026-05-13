@@ -2,10 +2,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import CoreResumePreview from '@/components/core-resume/CoreResumePreview.vue';
-import { buildResumeTitle, CORE_SECTION_DEFINITIONS, createEmptyDocument, createSectionItem, ensureAllSections, extractThemeFromTemplate, getSectionDefinition, mergeResumeTheme, parseResumeContent, } from '@/core-resume/model';
+import { buildResumeTitle, CORE_SECTION_DEFINITIONS, createEmptyDocument, createSectionItem, ensureAllSections, extractLayoutFromTemplate, extractThemeFromTemplate, getSectionDefinition, mergeResumeTheme, parseResumeContent, } from '@/core-resume/model';
 import { buildCoreResumePrintHtml } from '@/core-resume/print';
 import { resolveTemplatePreset, resolveTemplateVariant } from '@/core-resume/templates';
-import { createResume, createResumeVersionSnapshot, exportResumePdfByHtml, getResume, listResumeVersions, rollbackResumeVersion, updateResume, } from '@/api/resume';
+import { createResume, createResumeVersionSnapshot, exportResumePdfByHtml, getResume, listResumeVersions, rollbackResumeVersion, updateResume, uploadResumePhoto, } from '@/api/resume';
 import { getTemplateDetail } from '@/api/template';
 import { aiGenerate, aiPolish } from '@/api/ai';
 import { useUserStore } from '@/store/user';
@@ -29,6 +29,7 @@ const previewRef = ref(null);
 const documentState = ref(createEmptyDocument());
 const saveStatus = ref('idle');
 const exportingPdf = ref(false);
+const uploadingAvatar = ref(false);
 const creatingVersion = ref(false);
 const stylePanelCollapsed = ref(false);
 const collapsedSections = ref(new Set());
@@ -97,6 +98,9 @@ const aiExecutionModeLabel = computed(() => {
             return '未运行';
     }
 });
+function isSectionHidden(type) {
+    return hiddenSections.value.some((section) => section.type === type);
+}
 const aiExecutionTip = computed(() => {
     switch (aiExecutionMode.value) {
         case 'live':
@@ -160,7 +164,9 @@ async function loadTemplatePreset(id) {
         const detail = await getTemplateDetail(id);
         const templateData = parseTemplatePayload(detail.templateData);
         const templateTheme = extractThemeFromTemplate(templateData);
+        const templateLayout = extractLayoutFromTemplate(templateData);
         documentState.value.templateTheme = templateTheme;
+        documentState.value.templateLayout = templateLayout;
         documentState.value.theme = mergeResumeTheme(templateTheme, documentState.value.themeOverrides, documentState.value.theme);
         documentState.value.templateId = id;
         documentState.value.templateName = detail.name || '模板';
@@ -203,6 +209,9 @@ function applyResumeResponse(response) {
         templateTheme: shouldPreserveSelectedTemplate
             ? documentState.value.templateTheme
             : parsed.templateTheme,
+        templateLayout: shouldPreserveSelectedTemplate
+            ? documentState.value.templateLayout
+            : parsed.templateLayout,
         themeOverrides: parsed.themeOverrides,
         templateId: shouldPreserveSelectedTemplate
             ? (templateId.value || documentState.value.templateId)
@@ -232,6 +241,38 @@ function toggleSectionVisibility(type) {
     else {
         showSection(section);
     }
+}
+async function handleAvatarChange(event) {
+    const input = event.target;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) {
+        return;
+    }
+    if (!file.type.startsWith('image/')) {
+        ElMessage.warning('请上传图片文件');
+        return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+        ElMessage.warning('照片建议控制在 2MB 以内');
+        return;
+    }
+    uploadingAvatar.value = true;
+    try {
+        const result = await uploadResumePhoto(file);
+        documentState.value.profile.avatar = result.url;
+        ElMessage.success('照片上传成功');
+    }
+    catch (error) {
+        console.error('照片上传失败:', error);
+        ElMessage.error('照片上传失败，请稍后重试');
+    }
+    finally {
+        uploadingAvatar.value = false;
+    }
+}
+function clearAvatar() {
+    documentState.value.profile.avatar = '';
 }
 function showSection(section) {
     section.visible = true;
@@ -893,9 +934,10 @@ async function exportPdf() {
     exportingPdf.value = true;
     try {
         const exportTitle = buildResumeTitle(documentState.value.profile);
+        const exportFilename = buildResumePdfFilename();
         const html = buildCoreResumePrintHtml(sheet.outerHTML, exportTitle);
         const { url } = await exportResumePdfByHtml(html);
-        await downloadPdf(url, `${sanitizeFilename(exportTitle)}.pdf`);
+        await downloadPdf(url, exportFilename);
     }
     catch (error) {
         console.error('导出 PDF 失败:', error);
@@ -904,6 +946,10 @@ async function exportPdf() {
     finally {
         exportingPdf.value = false;
     }
+}
+function buildResumePdfFilename() {
+    const name = sanitizeFilename(documentState.value.profile.name?.trim() || '张三');
+    return `${name}的简历.pdf`;
 }
 function parseTemplatePayload(payload) {
     if (!payload) {
@@ -977,6 +1023,9 @@ function restoreDraft() {
             templateTheme: shouldPreserveSelectedTemplate
                 ? documentState.value.templateTheme
                 : restored.templateTheme,
+            templateLayout: shouldPreserveSelectedTemplate
+                ? documentState.value.templateLayout
+                : restored.templateLayout,
             themeOverrides: restored.themeOverrides,
             templateId: shouldPreserveSelectedTemplate
                 ? (documentState.value.templateId || templateId.value)
@@ -1304,6 +1353,20 @@ let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['preview-toolbar']} */ ;
 /** @type {__VLS_StyleScopedClasses['style-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-title-row']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['is-hidden']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-dot']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['is-hidden']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-state']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-preview']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-preview']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-copy']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-copy']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-upload']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-block']} */ ;
 /** @type {__VLS_StyleScopedClasses['preview-toolbar']} */ ;
 /** @type {__VLS_StyleScopedClasses['version-drawer-header']} */ ;
@@ -1333,6 +1396,8 @@ let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['preview-panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['preview-stage']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-editor']} */ ;
 /** @type {__VLS_StyleScopedClasses['ai-comparison-grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['item-editor-toolbar']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-title-row']} */ ;
@@ -1382,37 +1447,29 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.
 });
 (__VLS_ctx.visibleSectionsCount);
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "module-chips" },
+    ...{ class: "module-switch-grid" },
 });
 for (const [definition] of __VLS_getVForSourceType((__VLS_ctx.CORE_SECTION_DEFINITIONS))) {
-    const __VLS_4 = {}.ElButton;
-    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
-    // @ts-ignore
-    const __VLS_5 = __VLS_asFunctionalComponent(__VLS_4, new __VLS_4({
-        ...{ 'onClick': {} },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.toggleSectionVisibility(definition.type);
+            } },
         key: (definition.type),
-        size: "small",
-        type: (__VLS_ctx.hiddenSections.some((section) => section.type === definition.type) ? 'primary' : 'default'),
-        plain: true,
-    }));
-    const __VLS_6 = __VLS_5({
-        ...{ 'onClick': {} },
-        key: (definition.type),
-        size: "small",
-        type: (__VLS_ctx.hiddenSections.some((section) => section.type === definition.type) ? 'primary' : 'default'),
-        plain: true,
-    }, ...__VLS_functionalComponentArgsRest(__VLS_5));
-    let __VLS_8;
-    let __VLS_9;
-    let __VLS_10;
-    const __VLS_11 = {
-        onClick: (...[$event]) => {
-            __VLS_ctx.toggleSectionVisibility(definition.type);
-        }
-    };
-    __VLS_7.slots.default;
-    (__VLS_ctx.hiddenSections.some((section) => section.type === definition.type) ? `显示${definition.title}` : `隐藏${definition.title}`);
-    var __VLS_7;
+        type: "button",
+        ...{ class: "module-switch-card" },
+        ...{ class: ({ 'is-hidden': __VLS_ctx.isSectionHidden(definition.type) }) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "module-switch-dot" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "module-switch-title" },
+    });
+    (definition.title);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "module-switch-state" },
+    });
+    (__VLS_ctx.isSectionHidden(definition.type) ? '已隐藏' : '显示中');
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
     ...{ class: "editor-card" },
@@ -1424,6 +1481,65 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
     ...{ class: "card-badge" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "profile-photo-editor" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "profile-photo-preview" },
+    ...{ class: ({ 'has-photo': __VLS_ctx.documentState.profile.avatar }) },
+});
+if (__VLS_ctx.documentState.profile.avatar) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
+        src: (__VLS_ctx.documentState.profile.avatar),
+        alt: "个人照片",
+    });
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+}
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "profile-photo-copy" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.strong, __VLS_intrinsicElements.strong)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "profile-photo-actions" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "profile-photo-upload" },
+});
+(__VLS_ctx.uploadingAvatar ? '上传中...' : '上传照片');
+__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+    ...{ onChange: (__VLS_ctx.handleAvatarChange) },
+    type: "file",
+    accept: "image/png,image/jpeg,image/webp",
+    disabled: (__VLS_ctx.uploadingAvatar),
+});
+if (__VLS_ctx.documentState.profile.avatar) {
+    const __VLS_4 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_5 = __VLS_asFunctionalComponent(__VLS_4, new __VLS_4({
+        ...{ 'onClick': {} },
+        text: true,
+        type: "danger",
+        size: "small",
+    }));
+    const __VLS_6 = __VLS_5({
+        ...{ 'onClick': {} },
+        text: true,
+        type: "danger",
+        size: "small",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_5));
+    let __VLS_8;
+    let __VLS_9;
+    let __VLS_10;
+    const __VLS_11 = {
+        onClick: (__VLS_ctx.clearAvatar)
+    };
+    __VLS_7.slots.default;
+    var __VLS_7;
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "field-grid" },
 });
@@ -1451,11 +1567,11 @@ const __VLS_16 = {}.ElInput;
 // @ts-ignore
 const __VLS_17 = __VLS_asFunctionalComponent(__VLS_16, new __VLS_16({
     modelValue: (__VLS_ctx.documentState.profile.title),
-    placeholder: "请输入职位",
+    placeholder: "例如：前端工程师",
 }));
 const __VLS_18 = __VLS_17({
     modelValue: (__VLS_ctx.documentState.profile.title),
-    placeholder: "请输入职位",
+    placeholder: "例如：前端工程师",
 }, ...__VLS_functionalComponentArgsRest(__VLS_17));
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     ...{ class: "field-block" },
@@ -1603,13 +1719,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
     // @ts-ignore
     const __VLS_57 = __VLS_asFunctionalComponent(__VLS_56, new __VLS_56({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (!section.visible || __VLS_ctx.visibleSectionsCount <= 1),
     }));
     const __VLS_58 = __VLS_57({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (!section.visible || __VLS_ctx.visibleSectionsCount <= 1),
     }, ...__VLS_functionalComponentArgsRest(__VLS_57));
@@ -1628,13 +1746,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
     // @ts-ignore
     const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (section.visible),
     }));
     const __VLS_66 = __VLS_65({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (section.visible),
     }, ...__VLS_functionalComponentArgsRest(__VLS_65));
@@ -1653,12 +1773,14 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
     // @ts-ignore
     const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
     }));
     const __VLS_74 = __VLS_73({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
     }, ...__VLS_functionalComponentArgsRest(__VLS_73));
     let __VLS_76;
@@ -1676,13 +1798,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
     // @ts-ignore
     const __VLS_81 = __VLS_asFunctionalComponent(__VLS_80, new __VLS_80({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (sectionIndex === 0),
     }));
     const __VLS_82 = __VLS_81({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (sectionIndex === 0),
     }, ...__VLS_functionalComponentArgsRest(__VLS_81));
@@ -1701,13 +1825,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
     // @ts-ignore
     const __VLS_89 = __VLS_asFunctionalComponent(__VLS_88, new __VLS_88({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (sectionIndex === __VLS_ctx.documentState.sections.length - 1),
     }));
     const __VLS_90 = __VLS_89({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
         disabled: (sectionIndex === __VLS_ctx.documentState.sections.length - 1),
     }, ...__VLS_functionalComponentArgsRest(__VLS_89));
@@ -1726,12 +1852,14 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
     // @ts-ignore
     const __VLS_97 = __VLS_asFunctionalComponent(__VLS_96, new __VLS_96({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
     }));
     const __VLS_98 = __VLS_97({
         ...{ 'onClick': {} },
-        text: true,
+        ...{ class: "editor-action-btn" },
+        plain: true,
         size: "small",
     }, ...__VLS_functionalComponentArgsRest(__VLS_97));
     let __VLS_100;
@@ -1769,13 +1897,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
             // @ts-ignore
             const __VLS_105 = __VLS_asFunctionalComponent(__VLS_104, new __VLS_104({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn" },
+                plain: true,
                 type: "primary",
                 size: "small",
             }));
             const __VLS_106 = __VLS_105({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn" },
+                plain: true,
                 type: "primary",
                 size: "small",
             }, ...__VLS_functionalComponentArgsRest(__VLS_105));
@@ -1799,13 +1929,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
             // @ts-ignore
             const __VLS_113 = __VLS_asFunctionalComponent(__VLS_112, new __VLS_112({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn" },
+                plain: true,
                 size: "small",
                 disabled: (itemIndex === 0),
             }));
             const __VLS_114 = __VLS_113({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn" },
+                plain: true,
                 size: "small",
                 disabled: (itemIndex === 0),
             }, ...__VLS_functionalComponentArgsRest(__VLS_113));
@@ -1828,13 +1960,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
             // @ts-ignore
             const __VLS_121 = __VLS_asFunctionalComponent(__VLS_120, new __VLS_120({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn" },
+                plain: true,
                 size: "small",
                 disabled: (itemIndex === section.items.length - 1),
             }));
             const __VLS_122 = __VLS_121({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn" },
+                plain: true,
                 size: "small",
                 disabled: (itemIndex === section.items.length - 1),
             }, ...__VLS_functionalComponentArgsRest(__VLS_121));
@@ -1857,13 +1991,15 @@ for (const [section, sectionIndex] of __VLS_getVForSourceType((__VLS_ctx.documen
             // @ts-ignore
             const __VLS_129 = __VLS_asFunctionalComponent(__VLS_128, new __VLS_128({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn is-danger" },
+                plain: true,
                 type: "danger",
                 size: "small",
             }));
             const __VLS_130 = __VLS_129({
                 ...{ 'onClick': {} },
-                text: true,
+                ...{ class: "editor-action-btn is-danger" },
+                plain: true,
                 type: "danger",
                 size: "small",
             }, ...__VLS_functionalComponentArgsRest(__VLS_129));
@@ -3207,10 +3343,19 @@ var __VLS_404;
 /** @type {__VLS_StyleScopedClasses['title-with-help']} */ ;
 /** @type {__VLS_StyleScopedClasses['help-dot']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-badge']} */ ;
-/** @type {__VLS_StyleScopedClasses['module-chips']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-card']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-dot']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-title']} */ ;
+/** @type {__VLS_StyleScopedClasses['module-switch-state']} */ ;
 /** @type {__VLS_StyleScopedClasses['editor-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-title-row']} */ ;
 /** @type {__VLS_StyleScopedClasses['card-badge']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-editor']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-preview']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-copy']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['profile-photo-upload']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-block']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-block']} */ ;
@@ -3224,10 +3369,21 @@ var __VLS_404;
 /** @type {__VLS_StyleScopedClasses['card-title-row']} */ ;
 /** @type {__VLS_StyleScopedClasses['section-title-group']} */ ;
 /** @type {__VLS_StyleScopedClasses['section-actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
 /** @type {__VLS_StyleScopedClasses['section-body']} */ ;
 /** @type {__VLS_StyleScopedClasses['item-editor']} */ ;
 /** @type {__VLS_StyleScopedClasses['item-editor-toolbar']} */ ;
 /** @type {__VLS_StyleScopedClasses['item-editor-actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['editor-action-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['is-danger']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-block']} */ ;
 /** @type {__VLS_StyleScopedClasses['field-block']} */ ;
@@ -3360,6 +3516,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             documentState: documentState,
             saveStatus: saveStatus,
             exportingPdf: exportingPdf,
+            uploadingAvatar: uploadingAvatar,
             creatingVersion: creatingVersion,
             stylePanelCollapsed: stylePanelCollapsed,
             collapsedSections: collapsedSections,
@@ -3397,10 +3554,13 @@ const __VLS_self = (await import('vue')).defineComponent({
             aiResultLabel: aiResultLabel,
             aiEmptySourceText: aiEmptySourceText,
             aiExecutionModeLabel: aiExecutionModeLabel,
+            isSectionHidden: isSectionHidden,
             aiExecutionTip: aiExecutionTip,
             saveStatusText: saveStatusText,
             updateSectionTitle: updateSectionTitle,
             toggleSectionVisibility: toggleSectionVisibility,
+            handleAvatarChange: handleAvatarChange,
+            clearAvatar: clearAvatar,
             showSection: showSection,
             hideSection: hideSection,
             resetSection: resetSection,

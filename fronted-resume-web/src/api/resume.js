@@ -34,6 +34,14 @@ export async function exportResumePdfByHtml(html) {
     const { data } = await http.post('/api/resumes/export', { html });
     return data.data;
 }
+export async function uploadResumePhoto(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await http.post('/api/resumes/assets/photo', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data.data;
+}
 export async function listResumeVersions(resumeId, userId) {
     const params = userId ? { userId } : {};
     const { data } = await http.get(`/api/resumes/${resumeId}/versions`, { params });
