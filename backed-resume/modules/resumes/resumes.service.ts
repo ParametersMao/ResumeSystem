@@ -3,13 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
-import * as OSS from 'ali-oss';
 import * as puppeteer from 'puppeteer';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Resume } from '../../entities/resume.entity';
 import { ResumeVersion } from '../../entities/resume-version.entity';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
+import { StorageService } from '../storage/storage.service';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -22,57 +21,8 @@ interface ResumeVersionSchema {
 
 type ResumeVersionSourceType = 'save' | 'manual' | 'rollback';
 
-interface PdfStorageUploader {
-  uploadPdf(fileName: string, pdfBuffer: Buffer): Promise<string>;
-}
-
-class LegacyOssUploader implements PdfStorageUploader {
-  constructor(private readonly client: OSS) {}
-
-  async uploadPdf(fileName: string, pdfBuffer: Buffer): Promise<string> {
-    const result = await this.client.put(fileName, pdfBuffer);
-    return result.url;
-  }
-}
-
-class R2Uploader implements PdfStorageUploader {
-  private readonly client: S3Client;
-
-  constructor(
-    private readonly bucket: string,
-    private readonly publicBaseUrl: string,
-    endpoint: string,
-    accessKeyId: string,
-    secretAccessKey: string,
-    region = 'auto',
-  ) {
-    this.client = new S3Client({
-      region,
-      endpoint,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
-  }
-
-  async uploadPdf(fileName: string, pdfBuffer: Buffer): Promise<string> {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: fileName,
-        Body: pdfBuffer,
-        ContentType: 'application/pdf',
-      }),
-    );
-
-    return `${this.publicBaseUrl}/${fileName}`;
-  }
-}
-
 @Injectable()
 export class ResumesService {
-  private pdfStorageUploader: PdfStorageUploader | null = null;
   private resumeVersionSchemaPromise: Promise<ResumeVersionSchema> | null = null;
 
   constructor(
@@ -80,9 +30,8 @@ export class ResumesService {
     private resumeRepository: Repository<Resume>,
     @InjectRepository(ResumeVersion)
     private resumeVersionRepository: Repository<ResumeVersion>,
-  ) {
-    this.pdfStorageUploader = createPdfStorageUploader();
-  }
+    private readonly storageService: StorageService,
+  ) {}
 
   async create(createResumeDto: CreateResumeDto): Promise<ResumeResponseDto> {
     const resume = this.resumeRepository.create(createResumeDto);
@@ -260,7 +209,7 @@ export class ResumesService {
       const page = await browser.newPage();
       page.setDefaultTimeout(30_000);
 
-      await page.setContent(html, { waitUntil: 'load', timeout: 30_000 });
+      await page.setContent(injectPdfSafeMargins(html), { waitUntil: 'load', timeout: 30_000 });
       await page.emulateMediaType('print');
 
       await page.evaluate(async () => {
@@ -300,12 +249,14 @@ export class ResumesService {
         margin: { top: '5mm', right: '5mm', bottom: '5mm', left: '5mm' },
       })) as unknown as Buffer;
 
-      if (this.pdfStorageUploader) {
-        const fileName = `resume-${randomUUID()}.pdf`;
-        return await this.pdfStorageUploader.uploadPdf(fileName, pdfBuffer);
-      }
-
-      return `data:application/pdf;base64,${Buffer.from(pdfBuffer).toString('base64')}`;
+      const fileName = `exports/resume-${randomUUID()}.pdf`;
+      const result = await this.storageService.uploadObject({
+        key: fileName,
+        body: Buffer.from(pdfBuffer),
+        contentType: 'application/pdf',
+        cacheControl: 'private, max-age=0, must-revalidate',
+      });
+      return result.url;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('timeout') || msg.includes('Timeout')) {
@@ -322,6 +273,19 @@ export class ResumesService {
         await browser.close().catch(() => {});
       }
     }
+  }
+
+  async uploadResumePhoto(file: Express.Multer.File, userId?: number): Promise<{ url: string; key: string }> {
+    const ext = resolveImageExtension(file);
+    const userSegment = userId ? `user-${userId}` : 'anonymous';
+    const result = await this.storageService.uploadObject({
+      key: `resume-photos/${userSegment}/photo-${Date.now()}-${randomUUID()}${ext}`,
+      body: file.buffer,
+      contentType: file.mimetype,
+      cacheControl: 'public, max-age=31536000, immutable',
+    });
+
+    return { url: result.url, key: result.key };
   }
 
   private mapToResponseDto(resume: Resume): ResumeResponseDto {
@@ -475,67 +439,75 @@ export class ResumesService {
   }
 }
 
-function createPdfStorageUploader(): PdfStorageUploader | null {
-  const r2Config = {
-    endpoint: process.env.R2_ENDPOINT,
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    bucket: process.env.R2_BUCKET,
-    publicBaseUrl: process.env.R2_PUBLIC_BASE_URL,
-    region: process.env.R2_REGION || 'auto',
-  };
-
-  if (
-    r2Config.endpoint &&
-    r2Config.accessKeyId &&
-    r2Config.secretAccessKey &&
-    r2Config.bucket &&
-    r2Config.publicBaseUrl
-  ) {
-    return new R2Uploader(
-      r2Config.bucket,
-      normalizePublicBaseUrl(r2Config.publicBaseUrl),
-      normalizeS3Endpoint(r2Config.endpoint, r2Config.bucket),
-      r2Config.accessKeyId,
-      r2Config.secretAccessKey,
-      r2Config.region,
-    );
+function injectPdfSafeMargins(html: string): string {
+  if (html.includes('resume-pdf-safe-margins')) {
+    return html;
   }
 
-  const ossConfig = {
-    region: process.env.OSS_REGION,
-    accessKeyId: process.env.OSS_ACCESS_KEY_ID,
-    accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
-    bucket: process.env.OSS_BUCKET,
-  };
+  const safeMarginStyle = `
+    <style id="resume-pdf-safe-margins">
+      @page {
+        size: A4;
+        margin: 5mm;
+      }
 
-  if (ossConfig.region && ossConfig.accessKeyId && ossConfig.accessKeySecret && ossConfig.bucket) {
-    return new LegacyOssUploader(
-      new OSS({
-        region: ossConfig.region,
-        accessKeyId: ossConfig.accessKeyId,
-        accessKeySecret: ossConfig.accessKeySecret,
-        bucket: ossConfig.bucket,
-      }),
-    );
+      html,
+      body {
+        margin: 0 !important;
+        background: #ffffff !important;
+      }
+
+      body {
+        box-sizing: border-box !important;
+        padding: 5mm !important;
+      }
+
+      .resume-sheet {
+        max-width: 100% !important;
+      }
+
+      .resume-section,
+      .timeline-section,
+      .spotlight-section,
+      .section-item,
+      .timeline-card,
+      .spotlight-card {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
+
+      .section-heading,
+      .item-heading,
+      .timeline-marker,
+      .timeline-card-top,
+      .spotlight-card-head {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+
+      p,
+      li {
+        orphans: 2;
+        widows: 2;
+      }
+    </style>
+  `;
+
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${safeMarginStyle}</head>`);
   }
 
-  return null;
+  return `${safeMarginStyle}${html}`;
 }
 
-function normalizePublicBaseUrl(url: string): string {
-  return url.replace(/\/+$/, '');
-}
-
-function normalizeS3Endpoint(endpoint: string, bucket: string): string {
-  const normalized = endpoint.replace(/\/+$/, '');
-  const bucketPath = `/${bucket}`;
-
-  if (normalized.endsWith(bucketPath)) {
-    return normalized.slice(0, -bucketPath.length);
-  }
-
-  return normalized;
+function resolveImageExtension(file: Express.Multer.File): string {
+  const mimeExtMap: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+  };
+  return mimeExtMap[file.mimetype] || '.png';
 }
 
 function resolveBrowserExecutablePath(): string | undefined {

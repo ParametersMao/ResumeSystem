@@ -17,17 +17,19 @@
           </div>
           <span class="card-badge">{{ visibleSectionsCount }} 个模块显示中</span>
         </div>
-        <div class="module-chips">
-          <el-button
+        <div class="module-switch-grid">
+          <button
             v-for="definition in CORE_SECTION_DEFINITIONS"
             :key="definition.type"
-            size="small"
-            :type="hiddenSections.some((section) => section.type === definition.type) ? 'primary' : 'default'"
-            plain
+            type="button"
+            class="module-switch-card"
+            :class="{ 'is-hidden': isSectionHidden(definition.type) }"
             @click="toggleSectionVisibility(definition.type)"
           >
-            {{ hiddenSections.some((section) => section.type === definition.type) ? `显示${definition.title}` : `隐藏${definition.title}` }}
-          </el-button>
+            <span class="module-switch-dot"></span>
+            <span class="module-switch-title">{{ definition.title }}</span>
+            <span class="module-switch-state">{{ isSectionHidden(definition.type) ? '已隐藏' : '显示中' }}</span>
+          </button>
         </div>
       </section>
 
@@ -36,14 +38,31 @@
           <h3>个人信息</h3>
           <span class="card-badge">固定模块</span>
         </div>
+        <div class="profile-photo-editor">
+          <div class="profile-photo-preview" :class="{ 'has-photo': documentState.profile.avatar }">
+            <img v-if="documentState.profile.avatar" :src="documentState.profile.avatar" alt="个人照片" />
+            <span v-else>照片</span>
+          </div>
+          <div class="profile-photo-copy">
+            <strong>个人照片</strong>
+            <p>建议上传清晰证件照或职业头像，导出 PDF 时会同步显示。</p>
+            <div class="profile-photo-actions">
+              <label class="profile-photo-upload">
+                {{ uploadingAvatar ? '上传中...' : '上传照片' }}
+                <input type="file" accept="image/png,image/jpeg,image/webp" :disabled="uploadingAvatar" @change="handleAvatarChange" />
+              </label>
+              <el-button v-if="documentState.profile.avatar" text type="danger" size="small" @click="clearAvatar">移除</el-button>
+            </div>
+          </div>
+        </div>
         <div class="field-grid">
           <label class="field-block">
             <span>姓名</span>
             <el-input v-model="documentState.profile.name" placeholder="请输入姓名" />
           </label>
           <label class="field-block">
-            <span>目标职位</span>
-            <el-input v-model="documentState.profile.title" placeholder="请输入职位" />
+            <span>目标岗位</span>
+            <el-input v-model="documentState.profile.title" placeholder="例如：前端工程师" />
           </label>
           <label class="field-block">
             <span>电话</span>
@@ -87,19 +106,20 @@
             <el-switch v-model="section.visible" inline-prompt active-text="显示" inactive-text="隐藏" />
           </div>
           <div class="section-actions">
-            <el-button text size="small" @click="hideSection(section)" :disabled="!section.visible || visibleSectionsCount <= 1">隐藏</el-button>
-            <el-button text size="small" @click="showSection(section)" :disabled="section.visible">恢复</el-button>
-            <el-button text size="small" @click="resetSection(section)">重置</el-button>
-            <el-button text size="small" @click="moveSection(sectionIndex, -1)" :disabled="sectionIndex === 0">上移</el-button>
+            <el-button class="editor-action-btn" plain size="small" @click="hideSection(section)" :disabled="!section.visible || visibleSectionsCount <= 1">隐藏</el-button>
+            <el-button class="editor-action-btn" plain size="small" @click="showSection(section)" :disabled="section.visible">恢复</el-button>
+            <el-button class="editor-action-btn" plain size="small" @click="resetSection(section)">重置</el-button>
+            <el-button class="editor-action-btn" plain size="small" @click="moveSection(sectionIndex, -1)" :disabled="sectionIndex === 0">上移</el-button>
             <el-button
-              text
+              class="editor-action-btn"
+              plain
               size="small"
               @click="moveSection(sectionIndex, 1)"
               :disabled="sectionIndex === documentState.sections.length - 1"
             >
               下移
             </el-button>
-            <el-button text size="small" @click="toggleCollapse(section.id)">
+            <el-button class="editor-action-btn" plain size="small" @click="toggleCollapse(section.id)">
               {{ collapsedSections.has(section.id) ? '展开' : '收起' }}
             </el-button>
           </div>
@@ -116,7 +136,8 @@
               <div class="item-editor-actions">
                 <el-button
                   v-if="canAiPolishSection(section)"
-                  text
+                  class="editor-action-btn"
+                  plain
                   type="primary"
                   size="small"
                   @click="openAiPolish(section, itemIndex)"
@@ -125,7 +146,8 @@
                 </el-button>
                 <el-button
                   v-if="canMoveItem(section)"
-                  text
+                  class="editor-action-btn"
+                  plain
                   size="small"
                   @click="moveItem(section, itemIndex, -1)"
                   :disabled="itemIndex === 0"
@@ -134,7 +156,8 @@
                 </el-button>
                 <el-button
                   v-if="canMoveItem(section)"
-                  text
+                  class="editor-action-btn"
+                  plain
                   size="small"
                   @click="moveItem(section, itemIndex, 1)"
                   :disabled="itemIndex === section.items.length - 1"
@@ -143,7 +166,8 @@
                 </el-button>
                 <el-button
                   v-if="canRemoveItem(section)"
-                  text
+                  class="editor-action-btn is-danger"
+                  plain
                   type="danger"
                   size="small"
                   @click="removeItem(section, itemIndex)"
@@ -599,6 +623,7 @@ import {
   createEmptyDocument,
   createSectionItem,
   ensureAllSections,
+  extractLayoutFromTemplate,
   extractThemeFromTemplate,
   getSectionDefinition,
   mergeResumeTheme,
@@ -614,6 +639,7 @@ import {
   listResumeVersions,
   rollbackResumeVersion,
   updateResume,
+  uploadResumePhoto,
 } from '@/api/resume'
 import { getTemplateDetail } from '@/api/template'
 import { aiGenerate, aiPolish, type AiGenerateResponse, type PolishSuggestion } from '@/api/ai'
@@ -702,6 +728,7 @@ const previewRef = ref<InstanceType<typeof CoreResumePreview> | null>(null)
 const documentState = ref<CoreResumeDocument>(createEmptyDocument())
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const exportingPdf = ref(false)
+const uploadingAvatar = ref(false)
 const creatingVersion = ref(false)
 const stylePanelCollapsed = ref(false)
 const collapsedSections = ref<Set<string>>(new Set())
@@ -775,6 +802,10 @@ const aiExecutionModeLabel = computed(() => {
       return '未运行'
   }
 })
+
+function isSectionHidden(type: CoreSectionType) {
+  return hiddenSections.value.some((section) => section.type === type)
+}
 const aiExecutionTip = computed(() => {
   switch (aiExecutionMode.value) {
     case 'live':
@@ -852,7 +883,9 @@ async function loadTemplatePreset(id: string) {
     const detail = await getTemplateDetail(id)
     const templateData = parseTemplatePayload(detail.templateData)
     const templateTheme = extractThemeFromTemplate(templateData)
+    const templateLayout = extractLayoutFromTemplate(templateData)
     documentState.value.templateTheme = templateTheme
+    documentState.value.templateLayout = templateLayout
     documentState.value.theme = mergeResumeTheme(
       templateTheme,
       documentState.value.themeOverrides,
@@ -905,6 +938,9 @@ function applyResumeResponse(response: any) {
     templateTheme: shouldPreserveSelectedTemplate
       ? documentState.value.templateTheme
       : parsed.templateTheme,
+    templateLayout: shouldPreserveSelectedTemplate
+      ? documentState.value.templateLayout
+      : parsed.templateLayout,
     themeOverrides: parsed.themeOverrides,
     templateId: shouldPreserveSelectedTemplate
       ? (templateId.value || documentState.value.templateId)
@@ -936,6 +972,39 @@ function toggleSectionVisibility(type: CoreSectionType) {
   } else {
     showSection(section)
   }
+}
+
+async function handleAvatarChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) {
+    return
+  }
+  if (!file.type.startsWith('image/')) {
+    ElMessage.warning('请上传图片文件')
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.warning('照片建议控制在 2MB 以内')
+    return
+  }
+
+  uploadingAvatar.value = true
+  try {
+    const result = await uploadResumePhoto(file)
+    documentState.value.profile.avatar = result.url
+    ElMessage.success('照片上传成功')
+  } catch (error) {
+    console.error('照片上传失败:', error)
+    ElMessage.error('照片上传失败，请稍后重试')
+  } finally {
+    uploadingAvatar.value = false
+  }
+}
+
+function clearAvatar() {
+  documentState.value.profile.avatar = ''
 }
 
 function showSection(section: CoreResumeSection) {
@@ -1697,15 +1766,21 @@ async function exportPdf() {
   exportingPdf.value = true
   try {
     const exportTitle = buildResumeTitle(documentState.value.profile)
+    const exportFilename = buildResumePdfFilename()
     const html = buildCoreResumePrintHtml(sheet.outerHTML, exportTitle)
     const { url } = await exportResumePdfByHtml(html)
-    await downloadPdf(url, `${sanitizeFilename(exportTitle)}.pdf`)
+    await downloadPdf(url, exportFilename)
   } catch (error) {
     console.error('导出 PDF 失败:', error)
     ElMessage.error('导出失败，请稍后重试')
   } finally {
     exportingPdf.value = false
   }
+}
+
+function buildResumePdfFilename() {
+  const name = sanitizeFilename(documentState.value.profile.name?.trim() || '张三')
+  return `${name}的简历.pdf`
 }
 
 function parseTemplatePayload(payload: unknown) {
@@ -1789,6 +1864,9 @@ function restoreDraft() {
       templateTheme: shouldPreserveSelectedTemplate
         ? documentState.value.templateTheme
         : restored.templateTheme,
+      templateLayout: shouldPreserveSelectedTemplate
+        ? documentState.value.templateLayout
+        : restored.templateLayout,
       themeOverrides: restored.themeOverrides,
       templateId: shouldPreserveSelectedTemplate
         ? (documentState.value.templateId || templateId.value)
@@ -2313,16 +2391,175 @@ function hasSectionContent(item: CoreResumeItem) {
   flex-wrap: wrap;
 }
 
+.editor-action-btn {
+  --el-button-bg-color: #ffffff;
+  --el-button-border-color: #dbe4f0;
+  --el-button-text-color: #475569;
+  --el-button-hover-bg-color: #eff6ff;
+  --el-button-hover-border-color: #93c5fd;
+  --el-button-hover-text-color: #1d4ed8;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.editor-action-btn.is-danger {
+  --el-button-hover-bg-color: #fff1f2;
+  --el-button-hover-border-color: #fecdd3;
+  --el-button-hover-text-color: #e11d48;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.module-chips {
-  display: flex;
-  flex-wrap: wrap;
+.module-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.module-switch-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   gap: 8px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(135deg, #f8fbff, #eef6ff);
+  color: #1e293b;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.module-switch-card:hover {
+  transform: translateY(-1px);
+  border-color: #60a5fa;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.module-switch-card.is-hidden {
+  border-color: #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+}
+
+.module-switch-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.module-switch-card.is-hidden .module-switch-dot {
+  background: #cbd5e1;
+  box-shadow: none;
+}
+
+.module-switch-title {
+  overflow: hidden;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.module-switch-state {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.module-switch-card.is-hidden .module-switch-state {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.profile-photo-editor {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbff, #ffffff);
+}
+
+.profile-photo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 86px;
+  height: 108px;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.profile-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-photo-preview.has-photo {
+  border-style: solid;
+  background: #fff;
+}
+
+.profile-photo-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.profile-photo-copy strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.profile-photo-copy p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.profile-photo-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-photo-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.profile-photo-upload input {
+  display: none;
 }
 
 .style-actions {
@@ -2947,6 +3184,11 @@ function hasSectionContent(item: CoreResumeItem) {
   }
 
   .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-switch-grid,
+  .profile-photo-editor {
     grid-template-columns: 1fr;
   }
 

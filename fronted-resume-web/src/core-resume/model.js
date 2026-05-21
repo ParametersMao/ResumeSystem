@@ -4,7 +4,7 @@ export const CORE_SECTION_DEFINITIONS = [
         title: '求职意向',
         allowMultiple: false,
         defaultVisible: true,
-        fields: [{ key: 'intention', label: '求职意向', type: 'text', placeholder: '例如：前端工程师' }],
+        fields: [{ key: 'intention', label: '补充求职意向', type: 'text', placeholder: '可选，例如：ToB SaaS / 北京 / 远程' }],
     },
     {
         type: 'education',
@@ -123,6 +123,7 @@ export const DEFAULT_CORE_THEME = {
 export const DEFAULT_CORE_PROFILE = {
     name: '张三',
     title: '前端工程师',
+    avatar: '',
     phone: '13800138000',
     email: 'zhangsan@example.com',
     gender: '',
@@ -184,6 +185,7 @@ export function createDemoDocument(themeOverrides) {
     document.profile = {
         name: '王小明',
         title: '产品经理',
+        avatar: '',
         phone: '13900000000',
         email: 'wang@example.com',
         gender: '男',
@@ -267,6 +269,7 @@ export function ensureAllSections(document) {
     });
     base.profile = { ...base.profile, ...(document.profile || {}) };
     base.templateTheme = normalizeThemePatch(document.templateTheme);
+    base.templateLayout = normalizeTemplateLayout(document.templateLayout);
     base.themeOverrides = normalizeThemePatch(document.themeOverrides);
     base.theme = mergeResumeTheme(base.templateTheme, base.themeOverrides, document.theme);
     base.templateId = document.templateId;
@@ -291,6 +294,14 @@ export function extractThemeFromTemplate(templateData) {
         itemSpacing: toNumber(spacing.elementMargin),
     };
 }
+export function extractLayoutFromTemplate(templateData) {
+    if (!templateData || typeof templateData !== 'object') {
+        return undefined;
+    }
+    return normalizeTemplateLayout({
+        avatar: templateData.profile?.avatar || templateData.layout?.avatar || templateData.avatar,
+    });
+}
 export function buildResumeTitle(profile) {
     const name = profile.name?.trim() || '未命名简历';
     const title = profile.title?.trim();
@@ -314,11 +325,55 @@ export function parseResumeContent(rawContent) {
         sections: normalizeSections(source.sections),
         theme: mergeResumeTheme(source.templateTheme, source.themeOverrides, source.theme),
         templateTheme: normalizeThemePatch(source.templateTheme),
+        templateLayout: normalizeTemplateLayout(source.templateLayout),
         themeOverrides: normalizeThemePatch(source.themeOverrides),
         templateId: typeof source.templateId === 'string' ? source.templateId : undefined,
         templateName: typeof source.templateName === 'string' ? source.templateName : undefined,
         templateVariant: isCoreTemplateVariant(source.templateVariant) ? source.templateVariant : undefined,
     };
+}
+function normalizeTemplateLayout(layout) {
+    if (!layout || typeof layout !== 'object') {
+        return undefined;
+    }
+    const source = layout;
+    const avatar = normalizeAvatarLayout(source.avatar);
+    return avatar ? { avatar } : undefined;
+}
+function normalizeAvatarLayout(value) {
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+    const source = value;
+    const avatar = {};
+    if (typeof source.enabled === 'boolean') {
+        avatar.enabled = source.enabled;
+    }
+    if (isAvatarPlacement(source.placement)) {
+        avatar.placement = source.placement;
+    }
+    if (isAvatarShape(source.shape)) {
+        avatar.shape = source.shape;
+    }
+    const width = toNumber(source.width);
+    if (width !== undefined && width >= 40 && width <= 180) {
+        avatar.width = width;
+    }
+    const height = toNumber(source.height);
+    if (height !== undefined && height >= 40 && height <= 220) {
+        avatar.height = height;
+    }
+    return Object.keys(avatar).length ? avatar : undefined;
+}
+function isAvatarPlacement(value) {
+    return (value === 'default' ||
+        value === 'hidden' ||
+        value === 'header-right' ||
+        value === 'sidebar-top' ||
+        value === 'meta-card');
+}
+function isAvatarShape(value) {
+    return value === 'rounded' || value === 'circle' || value === 'square';
 }
 function isCoreTemplateVariant(value) {
     return (value === 'classic' ||
@@ -402,6 +457,7 @@ function normalizeProfile(profile) {
     return {
         name: toText(basic.name),
         title: toText(basic.title),
+        avatar: toText(basic.avatar || basic.photo || source.avatar || source.photo),
         phone: toText(contacts.phone || basic.phone),
         email: toText(contacts.email || basic.email),
         gender: toText(basic.gender),

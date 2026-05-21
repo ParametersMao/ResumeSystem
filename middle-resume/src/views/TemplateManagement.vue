@@ -325,6 +325,17 @@ import { formatDate } from '@/utils/common'
 
 type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
 
+const TEMPLATE_AVATAR_PRESETS: Record<TemplateVariant, Record<string, any>> = {
+  classic: { enabled: true, placement: 'header-right', shape: 'rounded', width: 86, height: 108 },
+  sidebar: { enabled: true, placement: 'sidebar-top', shape: 'circle', width: 96, height: 96 },
+  timeline: { enabled: true, placement: 'meta-card', shape: 'rounded', width: 86, height: 108 },
+  spotlight: { enabled: true, placement: 'meta-card', shape: 'rounded', width: 96, height: 120 },
+  ats: { enabled: false, placement: 'hidden' },
+  executive: { enabled: true, placement: 'header-right', shape: 'rounded', width: 82, height: 104 },
+  compact: { enabled: false, placement: 'hidden' },
+  editorial: { enabled: true, placement: 'header-right', shape: 'square', width: 86, height: 108 },
+}
+
 // 搜索表单
 const searchForm = reactive({
   templateName: '',
@@ -398,8 +409,12 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     meta: {
       recommendWeight: 0,
     },
+    profile: {
+      avatar: TEMPLATE_AVATAR_PRESETS.classic,
+    },
     layout: {
       variant: 'classic',
+      avatar: TEMPLATE_AVATAR_PRESETS.classic,
     },
     theme: {
       variant: 'classic',
@@ -421,9 +436,13 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     meta: {
       recommendWeight: 0,
     },
+    profile: {
+      avatar: TEMPLATE_AVATAR_PRESETS.sidebar,
+    },
     layout: {
       variant: 'sidebar',
       sidebarWidth: 250,
+      avatar: TEMPLATE_AVATAR_PRESETS.sidebar,
     },
     theme: {
       variant: 'sidebar',
@@ -445,9 +464,13 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     meta: {
       recommendWeight: 0,
     },
+    profile: {
+      avatar: TEMPLATE_AVATAR_PRESETS.timeline,
+    },
     layout: {
       variant: 'timeline',
       emphasis: 'experience',
+      avatar: TEMPLATE_AVATAR_PRESETS.timeline,
     },
     theme: {
       variant: 'timeline',
@@ -469,9 +492,13 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     meta: {
       recommendWeight: 0,
     },
+    profile: {
+      avatar: TEMPLATE_AVATAR_PRESETS.spotlight,
+    },
     layout: {
       variant: 'spotlight',
       emphasis: 'brand',
+      avatar: TEMPLATE_AVATAR_PRESETS.spotlight,
     },
     theme: {
       variant: 'spotlight',
@@ -491,7 +518,8 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     variant: 'ats',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    layout: { variant: 'ats', emphasis: 'readability' },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS.ats },
+    layout: { variant: 'ats', emphasis: 'readability', avatar: TEMPLATE_AVATAR_PRESETS.ats },
     theme: {
       variant: 'ats',
       colors: { primary: '#111827' },
@@ -503,7 +531,8 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     variant: 'executive',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    layout: { variant: 'executive', emphasis: 'leadership' },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS.executive },
+    layout: { variant: 'executive', emphasis: 'leadership', avatar: TEMPLATE_AVATAR_PRESETS.executive },
     theme: {
       variant: 'executive',
       colors: { primary: '#92400e' },
@@ -515,7 +544,8 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     variant: 'compact',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    layout: { variant: 'compact', emphasis: 'dense' },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS.compact },
+    layout: { variant: 'compact', emphasis: 'dense', avatar: TEMPLATE_AVATAR_PRESETS.compact },
     theme: {
       variant: 'compact',
       colors: { primary: '#334155' },
@@ -527,7 +557,8 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
     variant: 'editorial',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    layout: { variant: 'editorial', emphasis: 'creative' },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS.editorial },
+    layout: { variant: 'editorial', emphasis: 'creative', avatar: TEMPLATE_AVATAR_PRESETS.editorial },
     theme: {
       variant: 'editorial',
       colors: { primary: '#e11d48' },

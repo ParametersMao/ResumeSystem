@@ -376,10 +376,16 @@ export class TemplatesService {
       : this.resolveTemplateVariant(templateData, '');
 
     if (this.isTemplateVariant(variant)) {
+      const avatar = this.resolveAvatarLayout(parsed, variant);
       parsed.variant = variant;
+      parsed.profile = {
+        ...(typeof parsed.profile === 'object' && parsed.profile ? parsed.profile : {}),
+        avatar,
+      };
       parsed.layout = {
         ...(typeof parsed.layout === 'object' && parsed.layout ? parsed.layout : {}),
         variant,
+        avatar,
       };
       parsed.theme = {
         ...(typeof parsed.theme === 'object' && parsed.theme ? parsed.theme : {}),
@@ -399,6 +405,41 @@ export class TemplatesService {
     };
 
     return JSON.stringify(parsed, null, 2);
+  }
+
+  private resolveAvatarLayout(parsed: any, variant: TemplateVariant) {
+    const existing =
+      typeof parsed?.profile?.avatar === 'object' && parsed.profile.avatar
+        ? parsed.profile.avatar
+        : typeof parsed?.layout?.avatar === 'object' && parsed.layout.avatar
+          ? parsed.layout.avatar
+          : {};
+
+    return {
+      ...this.getDefaultAvatarLayout(variant),
+      ...existing,
+    };
+  }
+
+  private getDefaultAvatarLayout(variant: TemplateVariant) {
+    switch (variant) {
+      case 'sidebar':
+        return { enabled: true, placement: 'sidebar-top', shape: 'circle', width: 96, height: 96 };
+      case 'timeline':
+        return { enabled: true, placement: 'meta-card', shape: 'rounded', width: 86, height: 108 };
+      case 'spotlight':
+        return { enabled: true, placement: 'meta-card', shape: 'rounded', width: 96, height: 120 };
+      case 'ats':
+      case 'compact':
+        return { enabled: false, placement: 'hidden' };
+      case 'editorial':
+        return { enabled: true, placement: 'header-right', shape: 'square', width: 86, height: 108 };
+      case 'executive':
+        return { enabled: true, placement: 'header-right', shape: 'rounded', width: 82, height: 104 };
+      case 'classic':
+      default:
+        return { enabled: true, placement: 'header-right', shape: 'rounded', width: 86, height: 108 };
+    }
   }
 
   private isTemplateVariant(value: unknown): value is TemplateVariant {

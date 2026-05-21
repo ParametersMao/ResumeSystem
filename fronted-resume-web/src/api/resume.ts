@@ -43,6 +43,15 @@ export async function exportResumePdfByHtml(html: string) {
   return data.data
 }
 
+export async function uploadResumePhoto(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await http.post<ApiResponse<{ url: string; key: string }>>('/api/resumes/assets/photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data.data
+}
+
 export async function listResumeVersions(resumeId: string, userId?: number) {
   const params = userId ? { userId } : {}
   const { data } = await http.get<ApiResponse<any[]>>(`/api/resumes/${resumeId}/versions`, { params })

@@ -1,7 +1,24 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Request,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ResumesService } from './resumes.service';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { ApiResponse, PaginatedApiResponse } from '../../common/interfaces/pagination.interface';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/resumes')
 export class ResumesController {
@@ -78,6 +95,33 @@ export class ResumesController {
       code: 200,
       message: '导出成功',
       data: { url },
+    };
+  }
+
+  @Post('assets/photo')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (req, file, cb) => {
+        const isImage = /^image\/(png|jpe?g|webp)$/i.test(file.mimetype || '');
+        cb(isImage ? null : new BadRequestException('仅支持 PNG、JPG、WebP 图片'), isImage);
+      },
+    }),
+  )
+  async uploadPhoto(
+    @Request() req,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<ApiResponse<{ url: string; key: string }>> {
+    if (!file) {
+      throw new BadRequestException('请上传照片文件');
+    }
+    const result = await this.resumesService.uploadResumePhoto(file, req.user?.id);
+    return {
+      code: 200,
+      message: '上传成功',
+      data: result,
     };
   }
 

@@ -5,6 +5,7 @@
         <div class="sidebar-layout">
           <aside class="sidebar-column">
             <div class="sidebar-identity">
+              <img v-if="profileAvatar" class="resume-avatar sidebar-avatar" :class="avatarClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
               <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
               <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
             </div>
@@ -81,11 +82,14 @@
             <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
             <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
           </div>
-          <div class="timeline-contact-grid">
-            <span v-for="item in contactItems" :key="item.label">
-              <strong>{{ item.label }}</strong>
-              <em>{{ item.value }}</em>
-            </span>
+          <div class="timeline-meta-panel">
+            <img v-if="profileAvatar" class="resume-avatar timeline-avatar" :class="avatarClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+            <div class="timeline-contact-grid">
+              <span v-for="item in contactItems" :key="item.label">
+                <strong>{{ item.label }}</strong>
+                <em>{{ item.value }}</em>
+              </span>
+            </div>
           </div>
         </header>
 
@@ -149,6 +153,7 @@
             </p>
           </div>
           <div class="spotlight-meta-card">
+            <img v-if="profileAvatar" class="resume-avatar spotlight-avatar" :class="avatarClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
             <div v-for="item in contactItems" :key="item.label" class="spotlight-meta-item">
               <span>{{ item.label }}</span>
               <strong>{{ item.value }}</strong>
@@ -247,14 +252,17 @@
 
       <template v-else>
         <header class="resume-header">
-          <div>
+          <div class="resume-identity">
             <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
             <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
           </div>
-          <div class="resume-meta">
-            <span v-for="item in contactItems" :key="item.label">
-              <strong>{{ item.label }}：</strong>{{ item.value }}
-            </span>
+          <div class="resume-header-side">
+            <img v-if="profileAvatar" class="resume-avatar" :class="avatarClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+            <div class="resume-meta">
+              <span v-for="item in contactItems" :key="item.label">
+                <strong>{{ item.label }}：</strong>{{ item.value }}
+              </span>
+            </div>
           </div>
         </header>
 
@@ -312,7 +320,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { CoreResumeDocument, CoreResumeSectionItem, CoreSectionType } from '@/core-resume/model'
+import type { CoreAvatarLayout, CoreResumeDocument, CoreResumeSectionItem, CoreSectionType } from '@/core-resume/model'
 import { resolveTemplateVariant } from '@/core-resume/templates'
 
 interface ContactItem {
@@ -327,6 +335,25 @@ interface Props {
 const props = defineProps<Props>()
 
 const sheetRef = ref<HTMLElement | null>(null)
+
+const avatarConfig = computed<CoreAvatarLayout>(() => props.document.templateLayout?.avatar || {})
+const profileAvatar = computed(() => {
+  if (avatarConfig.value.enabled === false || avatarConfig.value.placement === 'hidden') {
+    return ''
+  }
+  return props.document.profile.avatar?.trim()
+})
+const avatarClass = computed(() => `avatar-shape-${avatarConfig.value.shape || 'rounded'}`)
+const avatarStyle = computed(() => {
+  const style: Record<string, string> = {}
+  if (avatarConfig.value.width) {
+    style.width = `${avatarConfig.value.width}px`
+  }
+  if (avatarConfig.value.height) {
+    style.height = `${avatarConfig.value.height}px`
+  }
+  return style
+})
 
 const contactItems = computed<ContactItem[]>(() => {
   const profile = props.document.profile
@@ -370,7 +397,7 @@ const sheetStyle = computed(() => {
 function getPrimaryText(type: CoreSectionType, item: CoreResumeSectionItem) {
   switch (type) {
     case 'intention':
-      return String(item.intention || '求职意向')
+      return String(item.intention || props.document.profile.title || '求职意向')
     case 'education':
       return String(item.school || '学校名称')
     case 'experience':
@@ -481,6 +508,57 @@ defineExpose({
   border-bottom: 2px solid rgba(37, 99, 235, 0.16);
 }
 
+.resume-identity {
+  min-width: 0;
+}
+
+.resume-header-side {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.resume-avatar {
+  width: 86px;
+  height: 108px;
+  flex: 0 0 auto;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.avatar-shape-circle {
+  border-radius: 999px;
+}
+
+.avatar-shape-square {
+  border-radius: 6px;
+}
+
+.avatar-shape-rounded {
+  border-radius: 18px;
+}
+
+.sidebar-avatar {
+  width: 96px;
+  height: 120px;
+  margin-bottom: 18px;
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+}
+
+.timeline-avatar {
+  justify-self: end;
+}
+
+.spotlight-avatar {
+  justify-self: center;
+  width: 96px;
+  height: 120px;
+}
+
 .resume-name {
   margin: 0 0 8px;
   font-size: 34px;
@@ -569,6 +647,12 @@ defineExpose({
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.timeline-meta-panel {
+  display: grid;
+  gap: 14px;
+  justify-items: stretch;
 }
 
 .timeline-contact-grid span {
@@ -1122,6 +1206,15 @@ defineExpose({
 
   .timeline-contact-grid {
     grid-template-columns: 1fr;
+  }
+
+  .resume-header-side {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .timeline-avatar {
+    justify-self: start;
   }
 
   .sidebar-layout {
