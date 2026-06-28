@@ -15,6 +15,9 @@
           <el-select v-model="searchForm.operationType" placeholder="请选择操作类型" clearable>
             <el-option label="润色" value="polish" />
             <el-option label="生成" value="generate" />
+            <el-option label="深度诊断" value="diagnose" />
+            <el-option label="Agent 润色" value="agent-polish" />
+            <el-option label="Agent 生成" value="agent-generate" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -322,7 +325,10 @@ const handleCurrentChange = (page: number) => {
 const getOperationTypeColor = (type: string) => {
   const colors = {
     polish: 'primary',
-    generate: 'success'
+    generate: 'success',
+    diagnose: 'warning',
+    'agent-polish': 'primary',
+    'agent-generate': 'success'
   }
   return colors[type as keyof typeof colors] || 'info'
 }
@@ -330,7 +336,10 @@ const getOperationTypeColor = (type: string) => {
 const getOperationTypeLabel = (type: string) => {
   const labels = {
     polish: '润色',
-    generate: '生成'
+    generate: '生成',
+    diagnose: '深度诊断',
+    'agent-polish': 'Agent 润色',
+    'agent-generate': 'Agent 生成'
   }
   return labels[type as keyof typeof labels] || type
 }

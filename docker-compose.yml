@@ -31,6 +31,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      agent:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -44,9 +46,15 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-1h}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET:-}
+      EMAIL_ALLOW_DEV_CODE: ${EMAIL_ALLOW_DEV_CODE:-false}
       OPENAI_API_URL: ${OPENAI_API_URL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_EXECUTION_ENGINE: ${AI_EXECUTION_ENGINE:-direct}
+      AGENT_SERVICE_URL: ${AGENT_SERVICE_URL:-http://agent:8000}
+      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
       R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_REGION: ${R2_REGION:-auto}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
@@ -110,7 +118,41 @@ services:
       DB_DATABASE: ${DB_DATABASE:-resume_system}
     command: ["node", "scripts/seed-diverse-templates.js"]
 
+  agent:
+    build:
+      context: ./python-agent
+    container_name: resume-agent
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_started
+    environment:
+      AGENT_EXECUTION_MODE: ${AGENT_EXECUTION_MODE:-mock}
+      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
+      OPENAI_API_URL: ${OPENAI_API_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-resume_knowledge}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-fastembed}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.35}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: resume-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+
 volumes:
   mysql_data:
   backend_uploads:
-
+  qdrant_data:

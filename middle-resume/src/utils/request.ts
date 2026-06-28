@@ -36,6 +36,9 @@ class RequestService {
     // 响应拦截器 — 统一解包 AxiosResponse，直接返回 ApiResponse<T>
     this.instance.interceptors.response.use(
       (response: AxiosResponse<ApiResponse>) => {
+        if (response.config.responseType === 'blob') {
+          return response.data as any
+        }
         const { data } = response
 
         if (data.code === 200) {

@@ -1,5 +1,5 @@
 import { BadGatewayException, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { AiGenerateDto, AiPolishDto } from '../../dto/ai-mock.dto';
+import { AiDiagnoseDto, AiGenerateDto, AiPolishDto } from '../../dto/ai-mock.dto';
 import { AiConfigDto } from '../../dto/system-config.dto';
 
 interface PolishSuggestion {
@@ -55,6 +55,21 @@ export interface AiGenerateRuntimeResult {
   executionMode: LiveExecutionMode;
 }
 
+export interface AiDiagnoseRuntimeResult {
+  taskType: 'diagnose';
+  executionMode: LiveExecutionMode;
+  provider: string;
+  model: string;
+  diagnostics: string[];
+  strategy: string[];
+  warnings: string[];
+  suggestions: Array<Record<string, any>>;
+  patch: Record<string, any>;
+  steps: Array<Record<string, any>>;
+  sources: Array<Record<string, any>>;
+  tokenUsed: number;
+}
+
 export interface AiPromptPreviewResult {
   taskType: 'polish' | 'generate';
   provider: string;
@@ -78,12 +93,89 @@ export interface AiConnectionTestResult {
 
 @Injectable()
 export class AiRuntimeService {
+  async diagnose(dto: AiDiagnoseDto, config: AiConfigDto): Promise<AiDiagnoseRuntimeResult> {
+    const sectionType = this.toPlainText(dto.sectionType || '') || 'general';
+    const jobTitle = this.toPlainText(dto.jobTitle || '') || '目标岗位';
+    const content = this.toPlainText(
+      dto.selectedText ||
+        dto.contentText ||
+        (dto.content ? JSON.stringify(dto.content) : ''),
+    );
+    const userInstruction = this.toPlainText(dto.userInstruction || '');
+    const promptPreview = [
+      `目标岗位：${jobTitle}`,
+      `诊断模块：${sectionType}`,
+      `简历内容：${content || '未提供'}`,
+      userInstruction ? `用户要求：${userInstruction}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const executionMode = this.resolveExecutionMode(config, false);
+
+    if (executionMode === 'live') {
+      const liveResult = await this.callOpenAiCompatible<{
+        diagnostics?: unknown[];
+        strategy?: unknown[];
+        warnings?: unknown[];
+      }>({
+        config,
+        promptPreview,
+        taskType: 'diagnose',
+        fallbackErrorMessage: 'AI 诊断服务返回结果异常',
+      });
+
+      return {
+        taskType: 'diagnose',
+        executionMode,
+        provider: config.provider,
+        model: config.apiModel,
+        diagnostics: this.normalizeStringList(liveResult.payload.diagnostics),
+        strategy: this.normalizeStringList(liveResult.payload.strategy),
+        warnings: this.normalizeStringList(liveResult.payload.warnings),
+        suggestions: [],
+        patch: {},
+        steps: [],
+        sources: [],
+        tokenUsed: liveResult.tokenUsed,
+      };
+    }
+
+    const diagnostics = content
+      ? [
+          `当前${sectionType === 'general' ? '简历' : '模块'}内容已具备基础信息，但可以进一步突出与${jobTitle}的匹配度。`,
+          content.length < 80
+            ? '内容信息量偏少，建议补充具体职责、使用的方法和可验证的结果。'
+            : '内容较完整，建议继续压缩泛化表述，优先保留岗位关键词与结果信息。',
+        ]
+      : ['当前没有足够内容可供诊断，建议先补充真实经历、职责或项目背景。'];
+
+    return {
+      taskType: 'diagnose',
+      executionMode,
+      provider: config.provider,
+      model: config.apiModel,
+      diagnostics,
+      strategy: [
+        `围绕${jobTitle}补充岗位关键词，确保招聘方能快速识别匹配点。`,
+        '经历描述采用“场景、行动、结果”的顺序，并优先量化可验证成果。',
+      ],
+      warnings: content ? [] : ['未提供正文，当前结果仅为结构性建议。'],
+      suggestions: [],
+      patch: {},
+      steps: [],
+      sources: [],
+      tokenUsed: Math.max(20, Math.min(content.length, 800)),
+    };
+  }
+
   async polish(dto: AiPolishDto, config: AiConfigDto): Promise<AiPolishRuntimeResult> {
     const inputText = this.toPlainText(dto.inputText);
+    const sectionType = dto.sectionType || 'general';
+    const jobTitle = this.toPlainText(dto.jobTitle || '') || '目标岗位';
     const promptPreview = this.renderPrompt(config.polishPromptTemplate, {
       input: inputText,
-      sectionType: dto.sectionType || 'general',
-      jobTitle: this.toPlainText(dto.jobTitle || '') || '目标岗位',
+      sectionType,
+      jobTitle,
     });
     const executionMode = this.resolveExecutionMode(config, false);
 
@@ -116,7 +208,7 @@ export class AiRuntimeService {
       };
     }
 
-    const suggestions = this.buildPolishSuggestions(inputText, dto.sectionType || 'general', promptPreview, dto.jobTitle);
+    const suggestions = this.buildPolishSuggestions(inputText, sectionType, promptPreview, jobTitle);
     return {
       sectionType: dto.sectionType || null,
       suggestions,
@@ -178,11 +270,11 @@ export class AiRuntimeService {
       role: inferred.role || jobTitle,
       duration: { start: '2024-01', end: '2024-12' },
       desc: this.buildStarDescription({
-        scenario: inferred.organization || `${jobTitle}相关团队`,
+        scenario: inferred.organization || `${jobTitle}相关业务`,
         action: `负责${jobTitle}方向的核心模块交付，联动产品、设计与后端推进需求落地`,
         result: inferred.keyword
           ? `围绕${inferred.keyword}持续优化关键流程，提升交付质量与协作效率`
-          : '持续优化交付质量、协作效率与最终体验',
+          : '持续优化交付质量、协作效率与最终用户体验',
       }),
     };
     const generatedProject = {
@@ -200,7 +292,7 @@ export class AiRuntimeService {
 
     return {
       sectionType,
-      intention: `${jobTitle}`,
+      intention: jobTitle,
       summary: isProfessionalTone
         ? `面向${jobTitle}岗位，具备扎实的专业基础与工程化能力，能够围绕业务目标独立推进需求交付，并通过结果导向的表达清晰呈现项目价值与个人贡献。`
         : `适配${jobTitle}岗位，具备完整的开发与协作能力，能够高质量完成需求落地，并持续优化效率、质量与用户体验。`,
@@ -251,7 +343,12 @@ export class AiRuntimeService {
 
   async testConnection(config: AiConfigDto): Promise<AiConnectionTestResult> {
     const executionMode = this.resolveExecutionMode(config, false);
-    const endpoint = config.provider === 'mock' ? '' : `${this.normalizeApiBaseUrl(config.apiBaseUrl)}/models`;
+    const endpoint =
+      config.provider === 'mock'
+        ? ''
+        : config.executionEngine === 'agent'
+          ? `${this.normalizeApiBaseUrl(config.agentBaseUrl)}/health`
+          : `${this.normalizeApiBaseUrl(config.apiBaseUrl)}/models`;
 
     if (config.provider === 'mock') {
       return {
@@ -273,7 +370,10 @@ export class AiRuntimeService {
         configReady: false,
         success: false,
         status: 'incomplete',
-        message: '外部 provider 配置未完成，请先补齐 API Base URL、API Key 和模型名称。',
+        message:
+          config.provider === 'langgraph-agent'
+            ? 'Agent provider 配置未完成，请先补齐 Agent 服务地址。'
+            : '外部 provider 配置未完成，请先补齐 API Base URL、API Key 和模型名称。',
         endpoint,
       };
     }
@@ -284,9 +384,7 @@ export class AiRuntimeService {
     try {
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-        },
+        headers: config.executionEngine === 'agent' ? {} : this.buildConnectionTestHeaders(config),
         signal: controller.signal,
       });
 
@@ -301,7 +399,10 @@ export class AiRuntimeService {
           configReady: true,
           success: true,
           status: 'success',
-          message: '连接测试成功，当前 provider 已可正常访问。',
+          message:
+            config.executionEngine === 'agent'
+              ? 'Agent 服务连接成功；模型配置将在实际诊断、润色或生成请求中校验。'
+              : '连接测试成功，当前模型厂商已可正常访问。',
           endpoint,
           responsePreview,
         };
@@ -355,7 +456,18 @@ export class AiRuntimeService {
 
   private isExternalConfigReady(config: AiConfigDto) {
     if (config.provider === 'mock') return true;
+    if (config.provider === 'langgraph-agent') return Boolean(config.apiBaseUrl);
     return Boolean(config.apiBaseUrl && config.apiKey && config.apiModel);
+  }
+
+  private buildConnectionTestHeaders(config: AiConfigDto): Record<string, string> {
+    if (config.provider === 'langgraph-agent') {
+      return {};
+    }
+
+    return {
+      Authorization: `Bearer ${config.apiKey}`,
+    };
   }
 
   private renderPrompt(template: string, variables: Record<string, string>) {
@@ -364,6 +476,16 @@ export class AiRuntimeService {
 
   private toPlainText(value: string) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  private normalizeStringList(values: unknown) {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+
+    return values
+      .map((value) => this.toPlainText(String(value || '')))
+      .filter(Boolean);
   }
 
   private escapeHtml(value: string) {
@@ -409,6 +531,11 @@ export class AiRuntimeService {
       intention: '求职意向',
       experience: '工作经验',
       projects: '项目经历',
+      education: '教育背景',
+      internship: '实习经历',
+      campus: '校园经历',
+      skills: '技能特长',
+      awards: '荣誉证书',
     };
     const sectionLabel = sectionLabelMap[sectionType] || '当前模块';
 
@@ -464,7 +591,7 @@ export class AiRuntimeService {
   }: {
     config: AiConfigDto;
     promptPreview: string;
-    taskType: 'polish' | 'generate';
+    taskType: 'polish' | 'generate' | 'diagnose';
     fallbackErrorMessage: string;
   }): Promise<{ payload: T; tokenUsed: number }> {
     if (!this.isExternalConfigReady(config)) {
@@ -519,23 +646,32 @@ export class AiRuntimeService {
     }
   }
 
-  private buildMessages(taskType: 'polish' | 'generate', promptPreview: string): OpenAiMessage[] {
+  private buildMessages(taskType: 'polish' | 'generate' | 'diagnose', promptPreview: string): OpenAiMessage[] {
     const formatInstruction =
       taskType === 'polish'
         ? [
             '你是专业简历优化助手。',
-            '请仅返回 JSON，不要添加 Markdown 代码块。',
+            '请只返回 JSON，不要添加 Markdown 代码块。',
             'JSON 结构必须为：{"suggestions":[{"reason":"...","text":"..."},{"reason":"...","text":"..."}]}。',
             'suggestions 至少返回 2 条，reason 要简短明确，text 直接给可替换到简历里的中文内容。',
+            '不要编造学历、公司、时间、证书等事实信息；如果需要补充，请用更稳妥的表达。',
           ].join('\n')
-        : [
+        : taskType === 'generate'
+          ? [
             '你是专业简历生成助手。',
-            '请仅返回 JSON，不要添加 Markdown 代码块。',
+            '请只返回 JSON，不要添加 Markdown 代码块。',
             'JSON 结构必须为：{"sectionType":"...","intention":"...","summary":"...","skills":["..."],"experiences":[{"company":"...","role":"...","duration":{"start":"YYYY-MM","end":"YYYY-MM"},"desc":"..."}],"projects":[{"name":"...","role":"...","duration":{"start":"YYYY-MM","end":"YYYY-MM"},"desc":"..."}]}。',
             'summary 要像可直接放进自我评价的中文初稿，intention 直接返回求职意向，skills 至少 4 项，experiences 和 projects 至少各 1 项。',
             '如果用户已经提供部分关键词、项目名、公司名、角色或时间，请优先沿用这些已知信息补全剩余字段，不要随意改写已有事实。',
             '经历和项目描述优先采用成果导向表达，尽量体现场景、动作和结果，可参考 STAR 思路，但不要机械写成字母缩写。',
-          ].join('\n');
+          ].join('\n')
+          : [
+              '你是专业简历诊断顾问。',
+              '请只返回 JSON，不要添加 Markdown 代码块。',
+              'JSON 结构必须为：{"diagnostics":["..."],"strategy":["..."],"warnings":["..."]}。',
+              'diagnostics 说明当前内容的具体问题，strategy 给出可执行优化策略，warnings 仅列出事实缺失、疑似夸大或无法验证的风险。',
+              '不要编造用户未提供的经历、公司、学校、时间、证书或量化结果。',
+            ].join('\n');
 
     return [
       {

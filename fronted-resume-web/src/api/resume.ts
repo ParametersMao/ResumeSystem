@@ -4,7 +4,6 @@ import type { Resume } from '@/store/resume'
 export async function createResume(templateId: string | undefined, title: string, userId: number, content: string) {
   const payload: Record<string, unknown> = {
     title,
-    userId,
     content,
   }
 
@@ -20,20 +19,18 @@ export async function createResume(templateId: string | undefined, title: string
 }
 
 export async function getResume(resumeId: string, userId?: number) {
-  const params = userId ? { userId } : {}
-  const { data } = await http.get<ApiResponse<any>>(`/api/resumes/${resumeId}`, { params })
+  const { data } = await http.get<ApiResponse<any>>(`/api/resumes/${resumeId}`)
   return data.data
 }
 
 export async function updateResume(resumeId: string, payload: any, userId?: number) {
-  const params = userId ? { userId } : {}
-  const { data } = await http.put<ApiResponse<any>>(`/api/resumes/${resumeId}`, payload, { params })
+  const { data } = await http.put<ApiResponse<any>>(`/api/resumes/${resumeId}`, payload)
   return data.data
 }
 
 export async function listMyResumes(userId: number, page = 1, limit = 10) {
   const { data } = await http.get<ApiResponse<PageResult<any>>>('/api/resumes', { 
-    params: { userId, page, limit } 
+    params: { page, limit }
   })
   return data.data
 }
@@ -53,20 +50,17 @@ export async function uploadResumePhoto(file: File) {
 }
 
 export async function listResumeVersions(resumeId: string, userId?: number) {
-  const params = userId ? { userId } : {}
-  const { data } = await http.get<ApiResponse<any[]>>(`/api/resumes/${resumeId}/versions`, { params })
+  const { data } = await http.get<ApiResponse<any[]>>(`/api/resumes/${resumeId}/versions`)
   return data.data
 }
 
 export async function createResumeVersionSnapshot(resumeId: string, userId?: number, remark?: string) {
-  const params = userId ? { userId } : {}
-  const { data } = await http.post<ApiResponse<any>>(`/api/resumes/${resumeId}/versions`, { remark }, { params })
+  const { data } = await http.post<ApiResponse<any>>(`/api/resumes/${resumeId}/versions`, { remark })
   return data.data
 }
 
 export async function rollbackResumeVersion(resumeId: string, versionId: number, userId?: number) {
-  const params = userId ? { userId } : {}
-  const { data } = await http.post<ApiResponse<any>>(`/api/resumes/${resumeId}/rollback`, { versionId }, { params })
+  const { data } = await http.post<ApiResponse<any>>(`/api/resumes/${resumeId}/rollback`, { versionId })
   return data.data
 }
 

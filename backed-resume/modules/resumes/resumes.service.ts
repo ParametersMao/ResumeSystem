@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
@@ -9,6 +16,7 @@ import { ResumeVersion } from '../../entities/resume-version.entity';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
 import { StorageService } from '../storage/storage.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -31,23 +39,55 @@ export class ResumesService {
     @InjectRepository(ResumeVersion)
     private resumeVersionRepository: Repository<ResumeVersion>,
     private readonly storageService: StorageService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
-  async create(createResumeDto: CreateResumeDto): Promise<ResumeResponseDto> {
-    const resume = this.resumeRepository.create(createResumeDto);
-    const savedResume = await this.resumeRepository.save(resume);
+  async create(createResumeDto: CreateResumeDto, userId: number): Promise<ResumeResponseDto> {
+    await this.entitlementsService.assertCanCreateResume(userId);
+    await this.entitlementsService.assertDatabaseStorageAvailable(
+      userId,
+      Buffer.byteLength(createResumeDto.content || '', 'utf8') +
+        Buffer.byteLength(createResumeDto.previewImage || '', 'utf8'),
+    );
+    const savedResume = await this.resumeRepository.manager.transaction(
+      async (manager) => {
+        const rows: Array<{ resumeLimit: number }> = await manager.query(
+          `SELECT resume_limit AS resumeLimit
+           FROM c_user_entitlements
+           WHERE user_id = ?
+           FOR UPDATE`,
+          [userId],
+        );
+        const resumeLimit = Number(rows[0]?.resumeLimit || 2);
+        const used = await manager.getRepository(Resume).count({
+          where: { userId, status: 1 },
+        });
+        if (used >= resumeLimit) {
+          throw new ForbiddenException(
+            `免费版最多保存 ${resumeLimit} 份简历`,
+          );
+        }
+        const resume = manager.getRepository(Resume).create({
+          ...createResumeDto,
+          userId,
+        });
+        return manager.getRepository(Resume).save(resume);
+      },
+    );
     return this.mapToResponseDto(savedResume);
   }
 
   async findAllByUser(userId: number, page = 1, limit = 10): Promise<PaginationResponse<ResumeListResponseDto>> {
-    const skip = (page - 1) * limit;
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 10)));
+    const skip = (safePage - 1) * safeLimit;
 
     const [resumes, total] = await this.resumeRepository.findAndCount({
       where: { userId, status: 1 },
       relations: ['template', 'user'],
       order: { updateTime: 'DESC' },
       skip,
-      take: limit,
+      take: safeLimit,
     });
 
     const responseData = resumes.map((resume) => this.mapToListResponseDto(resume));
@@ -55,17 +95,14 @@ export class ResumesService {
     return {
       list: responseData,
       total,
-      page,
-      limit,
+      page: safePage,
+      limit: safeLimit,
     };
   }
 
-  async findOne(id: number, userId?: number): Promise<ResumeResponseDto> {
-    const where: Record<string, number> = { id, status: 1 };
-    if (userId) where.userId = userId;
-
+  async findOne(id: number, userId: number): Promise<ResumeResponseDto> {
     const resume = await this.resumeRepository.findOne({
-      where,
+      where: { id, userId, status: 1 },
       relations: ['template', 'user'],
     });
 
@@ -76,11 +113,10 @@ export class ResumesService {
     return this.mapToResponseDto(resume);
   }
 
-  async update(id: number, updateResumeDto: UpdateResumeDto, userId?: number): Promise<ResumeResponseDto> {
-    const where: Record<string, number> = { id, status: 1 };
-    if (userId) where.userId = userId;
-
-    const resume = await this.resumeRepository.findOne({ where });
+  async update(id: number, updateResumeDto: UpdateResumeDto, userId: number): Promise<ResumeResponseDto> {
+    const resume = await this.resumeRepository.findOne({
+      where: { id, userId, status: 1 },
+    });
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
@@ -88,6 +124,20 @@ export class ResumesService {
     if (updateResumeDto.version !== undefined && resume.version !== updateResumeDto.version) {
       throw new ConflictException('简历版本冲突，请刷新后重试');
     }
+
+    const oldBytes =
+      Buffer.byteLength(resume.content || '', 'utf8') +
+      Buffer.byteLength(resume.previewImage || '', 'utf8');
+    const newBytes =
+      Buffer.byteLength(updateResumeDto.content ?? resume.content ?? '', 'utf8') +
+      Buffer.byteLength(
+        updateResumeDto.previewImage ?? resume.previewImage ?? '',
+        'utf8',
+      );
+    await this.entitlementsService.assertDatabaseStorageAvailable(
+      userId,
+      newBytes - oldBytes,
+    );
 
     await this.saveVersionSnapshot(resume, 'save');
 
@@ -98,12 +148,13 @@ export class ResumesService {
     return this.mapToResponseDto(updatedResume);
   }
 
-  async listVersions(resumeId: number, userId?: number): Promise<ResumeVersion[]> {
+  async listVersions(resumeId: number, userId: number): Promise<ResumeVersion[]> {
+    await this.assertOwnership(resumeId, userId);
     const schema = await this.getResumeVersionSchema();
     const conditions = ['resume_id = ?'];
     const params: Array<number> = [resumeId];
 
-    if (userId && schema.hasUserId) {
+    if (schema.hasUserId) {
       conditions.push('user_id = ?');
       params.push(userId);
     }
@@ -131,11 +182,10 @@ export class ResumesService {
     return rows as ResumeVersion[];
   }
 
-  async createVersionSnapshot(resumeId: number, userId?: number, remark?: string): Promise<ResumeVersion> {
-    const whereResume: Record<string, number> = { id: resumeId, status: 1 };
-    if (userId) whereResume.userId = userId;
-
-    const resume = await this.resumeRepository.findOne({ where: whereResume });
+  async createVersionSnapshot(resumeId: number, userId: number, remark?: string): Promise<ResumeVersion> {
+    const resume = await this.resumeRepository.findOne({
+      where: { id: resumeId, userId, status: 1 },
+    });
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
@@ -151,11 +201,10 @@ export class ResumesService {
     return latest;
   }
 
-  async rollback(resumeId: number, versionId: number, userId?: number): Promise<ResumeResponseDto> {
-    const whereResume: Record<string, number> = { id: resumeId, status: 1 };
-    if (userId) whereResume.userId = userId;
-
-    const resume = await this.resumeRepository.findOne({ where: whereResume });
+  async rollback(resumeId: number, versionId: number, userId: number): Promise<ResumeResponseDto> {
+    const resume = await this.resumeRepository.findOne({
+      where: { id: resumeId, userId, status: 1 },
+    });
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
@@ -173,11 +222,10 @@ export class ResumesService {
     return this.mapToResponseDto(saved);
   }
 
-  async remove(id: number, userId?: number): Promise<void> {
-    const where: Record<string, number> = { id, status: 1 };
-    if (userId) where.userId = userId;
-
-    const resume = await this.resumeRepository.findOne({ where });
+  async remove(id: number, userId: number): Promise<void> {
+    const resume = await this.resumeRepository.findOne({
+      where: { id, userId, status: 1 },
+    });
     if (!resume) {
       throw new NotFoundException('简历不存在');
     }
@@ -186,7 +234,7 @@ export class ResumesService {
     await this.resumeRepository.save(resume);
   }
 
-  async exportPdf(html: string): Promise<string> {
+  async exportPdf(html: string, userId: number): Promise<string> {
     if (!html?.trim()) {
       throw new ServiceUnavailableException('PDF 导出失败：未提供有效 HTML 内容');
     }
@@ -198,7 +246,9 @@ export class ResumesService {
       );
     }
 
+    await this.entitlementsService.consumePdf(userId);
     let browser: puppeteer.Browser | null = null;
+    let reservedStorageBytes = 0;
     try {
       browser = await puppeteer.launch({
         headless: true,
@@ -249,7 +299,12 @@ export class ResumesService {
         margin: { top: '5mm', right: '5mm', bottom: '5mm', left: '5mm' },
       })) as unknown as Buffer;
 
-      const fileName = `exports/resume-${randomUUID()}.pdf`;
+      reservedStorageBytes = pdfBuffer.length;
+      await this.entitlementsService.consumeStorage(
+        userId,
+        reservedStorageBytes,
+      );
+      const fileName = `exports/user-${userId}/resume-${randomUUID()}.pdf`;
       const result = await this.storageService.uploadObject({
         key: fileName,
         body: Buffer.from(pdfBuffer),
@@ -258,6 +313,13 @@ export class ResumesService {
       });
       return result.url;
     } catch (err: unknown) {
+      await this.entitlementsService.refundPdf(userId);
+      if (reservedStorageBytes) {
+        await this.entitlementsService.refundStorage(
+          userId,
+          reservedStorageBytes,
+        );
+      }
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('timeout') || msg.includes('Timeout')) {
         throw new ServiceUnavailableException('PDF 导出超时，请稍后重试或使用打印方式导出');
@@ -275,17 +337,23 @@ export class ResumesService {
     }
   }
 
-  async uploadResumePhoto(file: Express.Multer.File, userId?: number): Promise<{ url: string; key: string }> {
+  async uploadResumePhoto(file: Express.Multer.File, userId: number): Promise<{ url: string; key: string }> {
     const ext = resolveImageExtension(file);
-    const userSegment = userId ? `user-${userId}` : 'anonymous';
-    const result = await this.storageService.uploadObject({
-      key: `resume-photos/${userSegment}/photo-${Date.now()}-${randomUUID()}${ext}`,
-      body: file.buffer,
-      contentType: file.mimetype,
-      cacheControl: 'public, max-age=31536000, immutable',
-    });
+    const userSegment = `user-${userId}`;
+    await this.entitlementsService.consumeStorage(userId, file.size);
+    try {
+      const result = await this.storageService.uploadObject({
+        key: `resume-photos/${userSegment}/photo-${Date.now()}-${randomUUID()}${ext}`,
+        body: file.buffer,
+        contentType: file.mimetype,
+        cacheControl: 'public, max-age=31536000, immutable',
+      });
 
-    return { url: result.url, key: result.key };
+      return { url: result.url, key: result.key };
+    } catch (error) {
+      await this.entitlementsService.refundStorage(userId, file.size);
+      throw error;
+    }
   }
 
   private mapToResponseDto(resume: Resume): ResumeResponseDto {
@@ -404,14 +472,15 @@ export class ResumesService {
       `INSERT INTO resume_versions (${columns.join(', ')}) VALUES (${placeholders})`,
       params,
     );
+    await this.entitlementsService.trimVersions(resume.userId, resume.id);
   }
 
-  private async findVersionSnapshot(resumeId: number, versionId: number, userId?: number): Promise<ResumeVersion | null> {
+  private async findVersionSnapshot(resumeId: number, versionId: number, userId: number): Promise<ResumeVersion | null> {
     const schema = await this.getResumeVersionSchema();
     const conditions = ['id = ?', 'resume_id = ?'];
     const params: Array<number> = [versionId, resumeId];
 
-    if (userId && schema.hasUserId) {
+    if (schema.hasUserId) {
       conditions.push('user_id = ?');
       params.push(userId);
     }
@@ -436,6 +505,15 @@ export class ResumesService {
     );
 
     return (rows[0] as ResumeVersion | undefined) ?? null;
+  }
+
+  private async assertOwnership(resumeId: number, userId: number): Promise<void> {
+    const exists = await this.resumeRepository.exist({
+      where: { id: resumeId, userId, status: 1 },
+    });
+    if (!exists) {
+      throw new NotFoundException('简历不存在');
+    }
   }
 }
 
@@ -501,6 +579,10 @@ function injectPdfSafeMargins(html: string): string {
 }
 
 function resolveImageExtension(file: Express.Multer.File): string {
+  if (!isSupportedImageBuffer(file.buffer, file.mimetype)) {
+    throw new BadRequestException('上传失败：图片文件内容与类型不匹配');
+  }
+
   const mimeExtMap: Record<string, string> = {
     'image/jpeg': '.jpg',
     'image/jpg': '.jpg',
@@ -508,6 +590,24 @@ function resolveImageExtension(file: Express.Multer.File): string {
     'image/webp': '.webp',
   };
   return mimeExtMap[file.mimetype] || '.png';
+}
+
+function isSupportedImageBuffer(buffer: Buffer, mimetype: string): boolean {
+  if (!buffer?.length) return false;
+
+  if (mimetype === 'image/png') {
+    return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+
+  if (mimetype === 'image/jpeg' || mimetype === 'image/jpg') {
+    return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+  }
+
+  if (mimetype === 'image/webp') {
+    return buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+  }
+
+  return false;
 }
 
 function resolveBrowserExecutablePath(): string | undefined {

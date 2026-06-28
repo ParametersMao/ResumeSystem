@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiOperation } from '../../entities/ai-operation.entity';
@@ -9,19 +9,9 @@ interface AiOperationSchema {
   hasStatus: boolean;
 }
 
-interface EntitlementSchema {
-  hasPlanCode: boolean;
-  hasAccountWeight: boolean;
-  hasAiFreeTotal: boolean;
-  hasAiFreeUsed: boolean;
-  hasAiFreeResetPolicy: boolean;
-  hasExpireAt: boolean;
-}
-
 @Injectable()
 export class AiOperationsService {
   private aiOperationSchemaPromise: Promise<AiOperationSchema> | null = null;
-  private entitlementSchemaPromise: Promise<EntitlementSchema> | null = null;
 
   constructor(
     @InjectRepository(AiOperation)
@@ -74,34 +64,10 @@ export class AiOperationsService {
   }
 
   async create(createAiOperationDto: CreateAiOperationDto): Promise<AiOperation> {
-    const [aiOperationSchema, entitlementSchema] = await Promise.all([
-      this.getAiOperationSchema(),
-      this.getEntitlementSchema(),
-    ]);
+    const aiOperationSchema = await this.getAiOperationSchema();
 
     return this.aiOperationRepository.manager.transaction(async (manager) => {
       const userId = createAiOperationDto.userId;
-
-      if (this.canEnforceEntitlementLimit(entitlementSchema)) {
-        await manager.query(
-          `INSERT IGNORE INTO c_user_entitlements
-            (user_id, plan_code, account_weight, ai_free_total, ai_free_used, ai_free_reset_policy, expire_at)
-           VALUES (?, 'free', 0, 20, 0, 'never', NULL)`,
-          [userId],
-        );
-
-        const updateResult: any = await manager.query(
-          `UPDATE c_user_entitlements
-           SET ai_free_used = ai_free_used + 1
-           WHERE user_id = ? AND ai_free_used < ai_free_total`,
-          [userId],
-        );
-
-        const affectedRows = updateResult?.affectedRows ?? updateResult?.[0]?.affectedRows ?? 0;
-        if (!affectedRows) {
-          throw new ForbiddenException('AI 免费次数不足');
-        }
-      }
 
       await manager.query(
         `UPDATE c_users SET ai_operation_count = ai_operation_count + 1 WHERE id = ?`,
@@ -128,8 +94,18 @@ export class AiOperationsService {
 
   async getStatistics(): Promise<any> {
     const totalOperations = await this.aiOperationRepository.count();
-    const polishCount = await this.aiOperationRepository.count({ where: { operationType: 'polish' } });
-    const generateCount = await this.aiOperationRepository.count({ where: { operationType: 'generate' } });
+    const polishCount = await this.aiOperationRepository
+      .createQueryBuilder('aiOperation')
+      .where('aiOperation.operationType IN (:...types)', { types: ['polish', 'agent-polish'] })
+      .getCount();
+    const generateCount = await this.aiOperationRepository
+      .createQueryBuilder('aiOperation')
+      .where('aiOperation.operationType IN (:...types)', { types: ['generate', 'agent-generate'] })
+      .getCount();
+    const diagnoseCount = await this.aiOperationRepository
+      .createQueryBuilder('aiOperation')
+      .where('aiOperation.operationType = :type', { type: 'diagnose' })
+      .getCount();
     const totalTokens = await this.aiOperationRepository
       .createQueryBuilder('aiOperation')
       .select('SUM(aiOperation.tokenUsed)', 'total')
@@ -139,6 +115,7 @@ export class AiOperationsService {
       totalOperations,
       polishCount,
       generateCount,
+      diagnoseCount,
       totalTokens: parseInt(totalTokens.total, 10) || 0,
     };
   }
@@ -156,31 +133,12 @@ export class AiOperationsService {
     };
   }
 
-  private canEnforceEntitlementLimit(schema: EntitlementSchema) {
-    return (
-      schema.hasPlanCode &&
-      schema.hasAccountWeight &&
-      schema.hasAiFreeTotal &&
-      schema.hasAiFreeUsed &&
-      schema.hasAiFreeResetPolicy &&
-      schema.hasExpireAt
-    );
-  }
-
   private async getAiOperationSchema(): Promise<AiOperationSchema> {
     if (!this.aiOperationSchemaPromise) {
       this.aiOperationSchemaPromise = this.ensureAiOperationSchema();
     }
 
     return this.aiOperationSchemaPromise;
-  }
-
-  private async getEntitlementSchema(): Promise<EntitlementSchema> {
-    if (!this.entitlementSchemaPromise) {
-      this.entitlementSchemaPromise = this.ensureEntitlementSchema();
-    }
-
-    return this.entitlementSchemaPromise;
   }
 
   private async ensureAiOperationSchema(): Promise<AiOperationSchema> {
@@ -233,80 +191,4 @@ export class AiOperationsService {
     };
   }
 
-  private async ensureEntitlementSchema(): Promise<EntitlementSchema> {
-    await this.aiOperationRepository.query(`
-      CREATE TABLE IF NOT EXISTS c_user_entitlements (
-        user_id INT NOT NULL PRIMARY KEY,
-        plan_code VARCHAR(32) NOT NULL DEFAULT 'free',
-        account_weight INT NOT NULL DEFAULT 0,
-        ai_free_total INT NOT NULL DEFAULT 20,
-        ai_free_used INT NOT NULL DEFAULT 0,
-        ai_free_reset_policy VARCHAR(16) NOT NULL DEFAULT 'never',
-        expire_at DATETIME NULL,
-        create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
-
-    const userColumns = await this.aiOperationRepository.query('SHOW COLUMNS FROM c_users');
-    const userColumnNames = new Set(
-      userColumns.map((column: { Field?: string; field?: string }) => column.Field ?? column.field),
-    );
-
-    if (!userColumnNames.has('ai_operation_count')) {
-      await this.aiOperationRepository.query(
-        'ALTER TABLE c_users ADD COLUMN ai_operation_count INT NOT NULL DEFAULT 0 AFTER status',
-      );
-    }
-
-    const columns = await this.aiOperationRepository.query('SHOW COLUMNS FROM c_user_entitlements');
-    const columnNames = new Set(
-      columns.map((column: { Field?: string; field?: string }) => column.Field ?? column.field),
-    );
-
-    if (!columnNames.has('plan_code')) {
-      await this.aiOperationRepository.query(
-        "ALTER TABLE c_user_entitlements ADD COLUMN plan_code VARCHAR(32) NOT NULL DEFAULT 'free' AFTER user_id",
-      );
-    }
-
-    if (!columnNames.has('account_weight')) {
-      await this.aiOperationRepository.query(
-        'ALTER TABLE c_user_entitlements ADD COLUMN account_weight INT NOT NULL DEFAULT 0 AFTER plan_code',
-      );
-    }
-
-    if (!columnNames.has('ai_free_total')) {
-      await this.aiOperationRepository.query(
-        'ALTER TABLE c_user_entitlements ADD COLUMN ai_free_total INT NOT NULL DEFAULT 20 AFTER account_weight',
-      );
-    }
-
-    if (!columnNames.has('ai_free_used')) {
-      await this.aiOperationRepository.query(
-        'ALTER TABLE c_user_entitlements ADD COLUMN ai_free_used INT NOT NULL DEFAULT 0 AFTER ai_free_total',
-      );
-    }
-
-    if (!columnNames.has('ai_free_reset_policy')) {
-      await this.aiOperationRepository.query(
-        "ALTER TABLE c_user_entitlements ADD COLUMN ai_free_reset_policy VARCHAR(16) NOT NULL DEFAULT 'never' AFTER ai_free_used",
-      );
-    }
-
-    if (!columnNames.has('expire_at')) {
-      await this.aiOperationRepository.query(
-        'ALTER TABLE c_user_entitlements ADD COLUMN expire_at DATETIME NULL AFTER ai_free_reset_policy',
-      );
-    }
-
-    return {
-      hasPlanCode: true,
-      hasAccountWeight: true,
-      hasAiFreeTotal: true,
-      hasAiFreeUsed: true,
-      hasAiFreeResetPolicy: true,
-      hasExpireAt: true,
-    };
-  }
 }

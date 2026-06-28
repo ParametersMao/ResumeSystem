@@ -16,7 +16,7 @@ export class CUserEntitlement {
   @Column({ type: 'int', default: 0, name: 'account_weight' })
   accountWeight: number;
 
-  @Column({ type: 'int', default: 20, name: 'ai_free_total' })
+  @Column({ type: 'int', default: 10, name: 'ai_free_total' })
   aiFreeTotal: number;
 
   @Column({ type: 'int', default: 0, name: 'ai_free_used' })
@@ -24,6 +24,27 @@ export class CUserEntitlement {
 
   @Column({ type: 'varchar', length: 16, default: 'never', name: 'ai_free_reset_policy' })
   aiFreeResetPolicy: string;
+
+  @Column({ type: 'int', default: 2, name: 'resume_limit' })
+  resumeLimit: number;
+
+  @Column({ type: 'int', default: 5, name: 'version_limit' })
+  versionLimit: number;
+
+  @Column({ type: 'int', default: 3, name: 'pdf_monthly_total' })
+  pdfMonthlyTotal: number;
+
+  @Column({ type: 'int', default: 0, name: 'pdf_monthly_used' })
+  pdfMonthlyUsed: number;
+
+  @Column({ type: 'bigint', default: 104857600, name: 'storage_limit_bytes' })
+  storageLimitBytes: number;
+
+  @Column({ type: 'bigint', default: 0, name: 'storage_used_bytes' })
+  storageUsedBytes: number;
+
+  @Column({ type: 'datetime', nullable: true, name: 'usage_period_start' })
+  usagePeriodStart: Date | null;
 
   @Column({ type: 'datetime', nullable: true, name: 'expire_at' })
   expireAt: Date | null;

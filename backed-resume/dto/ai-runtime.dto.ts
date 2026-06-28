@@ -32,6 +32,15 @@ export class AiConnectionTestDto {
   provider?: string;
 
   @IsOptional()
+  @IsIn(['direct', 'agent'])
+  executionEngine?: 'direct' | 'agent';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  agentBaseUrl?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(500)
   apiBaseUrl?: string;

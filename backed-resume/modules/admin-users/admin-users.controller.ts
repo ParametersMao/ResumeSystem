@@ -4,8 +4,11 @@ import { CreateAdminUserDto, UpdateAdminUserDto, UpdateAdminUserStatusDto, Admin
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedApiResponse, ApiResponse } from '../../common/interfaces/pagination.interface';
 import { AdminUser } from '../../entities/admin-user.entity';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminOnlyGuard } from '../auth/admin-only.guard';
 
 @Controller('api/admin/users')
+@UseGuards(JwtAuthGuard, AdminOnlyGuard)
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
 
@@ -113,4 +116,4 @@ export class AdminUsersController {
       data: null,
     };
   }
-} 
+}

@@ -1,114 +1,111 @@
 import { defineStore } from 'pinia'
-import { login as apiLogin, register as apiRegister, getUserInfo, logout as apiLogout } from '@/api/user'
-import type { LoginParams, RegisterParams, UserInfo } from '@/api/user'
+import {
+  getUserInfo,
+  login as apiLogin,
+  loginByEmailCode,
+  logout as apiLogout,
+  registerByEmail,
+  type LoginParams,
+  type LoginResult,
+  type UserInfo,
+} from '@/api/user'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem('auth_token') || '',
     user: null as UserInfo | null,
-    loading: false
+    loading: false,
   }),
-  
+
   getters: {
     isAuthed: (state) => !!state.token && !!state.user,
-    isLoggedIn: (state) => !!state.token
+    isLoggedIn: (state) => !!state.token,
   },
-  
+
   actions: {
-    // 设置token
     setToken(token: string) {
       this.token = token
-      if (token) {
-        localStorage.setItem('auth_token', token)
-      } else {
-        localStorage.removeItem('auth_token')
-      }
+      if (token) localStorage.setItem('auth_token', token)
+      else localStorage.removeItem('auth_token')
     },
 
-    // 设置用户信息
     setUser(user: UserInfo | null) {
       this.user = user
     },
 
-    // 登录
+    applySession(session: LoginResult) {
+      this.setToken(session.access_token)
+      localStorage.setItem('refresh_token', session.refresh_token)
+      this.setUser(session.user as UserInfo)
+    },
+
     async login(params: LoginParams) {
+      return this.runSessionRequest(() => apiLogin(params), '登录失败')
+    },
+
+    async emailLogin(params: { email: string; code: string }) {
+      return this.runSessionRequest(() => loginByEmailCode(params), '邮箱登录失败')
+    },
+
+    async emailRegister(params: {
+      email: string
+      code: string
+      password: string
+      username?: string
+    }) {
+      return this.runSessionRequest(() => registerByEmail(params), '注册失败')
+    },
+
+    async runSessionRequest(
+      request: () => Promise<{ code: number; message: string; data: LoginResult }>,
+      fallback: string,
+    ) {
       try {
         this.loading = true
-        const response = await apiLogin(params)
-        
+        const response = await request()
         if (response.code === 200) {
-          this.setToken(response.data.access_token)
-          this.setUser(response.data.user as UserInfo)
+          this.applySession(response.data)
           return { success: true, message: response.message }
-        } else {
-          return { success: false, message: response.message }
         }
+        return { success: false, message: response.message }
       } catch (error: any) {
-        const message = error.response?.data?.message || '登录失败'
-        return { success: false, message }
+        return {
+          success: false,
+          message: error.response?.data?.message || fallback,
+        }
       } finally {
         this.loading = false
       }
     },
 
-    // 注册
-    async register(params: RegisterParams) {
-      try {
-        this.loading = true
-        const response = await apiRegister(params)
-        
-        if (response.code === 200) {
-          this.setToken(response.data.access_token)
-          this.setUser(response.data.user as UserInfo)
-          return { success: true, message: response.message }
-        } else {
-          return { success: false, message: response.message }
-        }
-      } catch (error: any) {
-        const message = error.response?.data?.message || '注册失败'
-        return { success: false, message }
-      } finally {
-        this.loading = false
-      }
-    },
-
-    // 获取用户信息
     async fetchUserInfo() {
-      if (!this.token) return
-
+      if (!this.token) return false
       try {
         const response = await getUserInfo()
         if (response.code === 200) {
           this.setUser(response.data)
           return true
         }
-      } catch (error) {
-        console.error('获取用户信息失败:', error)
-        // 如果获取用户信息失败，可能token已失效
-        this.logout()
+      } catch {
+        await this.logout()
       }
       return false
     },
 
-    // 登出
     async logout() {
       try {
         await apiLogout()
-      } catch (error) {
-        console.error('登出接口调用失败:', error)
       } finally {
         this.setToken('')
         this.setUser(null)
+        localStorage.removeItem('refresh_token')
       }
     },
 
-    // 初始化用户状态（应用启动时调用）
     async initUserState() {
       if (this.token && !this.user) {
         await this.fetchUserInfo()
       }
-    }
-  }
+    },
+  },
 })
-
-

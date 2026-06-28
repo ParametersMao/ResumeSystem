@@ -5,6 +5,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TemplateSearchDto } from '../../dto/template-search.dto';
 import { PaginatedApiResponse, ApiResponse } from '../../common/interfaces/pagination.interface';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminOnlyGuard } from '../auth/admin-only.guard';
 
 function ensureCuser(req: any) {
   if (!req.user?.id) throw new UnauthorizedException('用户信息无效');
@@ -49,6 +50,7 @@ export class TemplatesController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard, AdminOnlyGuard)
   async create(@Body() createTemplateDto: CreateTemplateDto): Promise<ApiResponse<TemplateResponseDto>> {
     const template = await this.templatesService.create(createTemplateDto);
     return {
@@ -71,6 +73,7 @@ export class TemplatesController {
   }
 
   @Put(':id')
+  @UseGuards(JwtAuthGuard, AdminOnlyGuard)
   async update(
     @Param('id') id: string,
     @Body() updateTemplateDto: UpdateTemplateDto,
@@ -96,6 +99,7 @@ export class TemplatesController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, AdminOnlyGuard)
   async remove(@Param('id') id: string): Promise<ApiResponse<null>> {
     await this.templatesService.remove(+id);
     return {

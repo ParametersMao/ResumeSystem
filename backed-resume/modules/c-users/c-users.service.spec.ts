@@ -26,6 +26,7 @@ describe('CUsersService', () => {
     createTime: new Date('2026-04-01'),
     updateTime: new Date('2026-04-01'),
     aiOperationCount: 0,
+    tokenVersion: 0,
   };
 
   const mockRepository = {

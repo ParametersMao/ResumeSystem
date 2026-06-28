@@ -63,17 +63,35 @@
             <el-switch v-model="form.ai.enabled" />
           </el-form-item>
 
-          <el-form-item label="Provider">
-            <el-select v-model="form.ai.provider" placeholder="请选择 Provider">
-              <el-option label="Mock（本地联调）" value="mock" />
-              <el-option label="OpenAI Compatible" value="openai-compatible" />
-              <el-option label="OpenAI" value="openai" />
-              <el-option label="自定义 Provider" value="custom" />
+          <el-form-item label="执行引擎">
+            <el-select v-model="form.ai.executionEngine">
+              <el-option label="直接调用模型" value="direct" />
+              <el-option label="LangGraph Agent" value="agent" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item v-if="form.ai.executionEngine === 'agent'" label="Agent 服务地址">
+            <el-input v-model="form.ai.agentBaseUrl" placeholder="例如 http://agent:8000" />
+          </el-form-item>
+
+          <el-form-item label="模型厂商">
+            <el-select v-model="form.ai.provider" placeholder="请选择模型厂商" @change="handleProviderChange">
+              <el-option
+                v-for="provider in providerOptions"
+                :key="provider.value"
+                :label="provider.label"
+                :value="provider.value"
+              >
+                <div class="provider-option">
+                  <span>{{ provider.label }}</span>
+                  <small>{{ provider.description }}</small>
+                </div>
+              </el-option>
             </el-select>
           </el-form-item>
 
           <el-form-item label="API Base URL">
-            <el-input v-model="form.ai.apiBaseUrl" placeholder="例如 https://api.openai.com/v1" />
+            <el-input v-model="form.ai.apiBaseUrl" :placeholder="currentProviderPreset.apiBaseUrl || '例如 https://api.openai.com/v1'" />
           </el-form-item>
 
           <el-form-item label="API Key">
@@ -85,7 +103,7 @@
           </el-form-item>
 
           <el-form-item label="模型名称">
-            <el-input v-model="form.ai.apiModel" placeholder="例如 gpt-4.1-mini / deepseek-chat" />
+            <el-input v-model="form.ai.apiModel" :placeholder="currentProviderPreset.apiModel || '例如 gpt-4.1-mini / deepseek-chat'" />
           </el-form-item>
 
           <el-form-item label="Temperature">
@@ -142,6 +160,61 @@
       </el-form>
     </el-card>
 
+    <el-card shadow="never" class="config-card">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <span>邮箱验证码服务</span>
+            <div class="section-description">用于用户注册、邮箱登录和找回密码。生产环境保存后请关闭开发验证码模式。</div>
+          </div>
+          <el-tag :type="emailConfigured ? 'success' : 'warning'">
+            {{ emailConfigured ? '配置完整' : '待配置' }}
+          </el-tag>
+        </div>
+      </template>
+
+      <el-form label-position="top" class="config-form">
+        <div class="form-grid">
+          <el-form-item label="SMTP 主机">
+            <el-input v-model="form.email.smtpHost" placeholder="例如 smtp.qq.com" />
+          </el-form-item>
+
+          <el-form-item label="SMTP 端口">
+            <el-input-number v-model="form.email.smtpPort" :min="1" :max="65535" />
+          </el-form-item>
+
+          <el-form-item label="SMTP 账号">
+            <el-input v-model="form.email.smtpUser" placeholder="通常为完整邮箱地址" />
+          </el-form-item>
+
+          <el-form-item label="SMTP 授权码或密码">
+            <el-input
+              v-model="form.email.smtpPass"
+              type="password"
+              show-password
+              placeholder="留空表示继续使用当前密码"
+            />
+          </el-form-item>
+
+          <el-form-item label="发件人名称">
+            <el-input v-model="form.email.fromName" placeholder="例如 简历系统" />
+          </el-form-item>
+
+          <el-form-item label="发件邮箱">
+            <el-input v-model="form.email.fromEmail" placeholder="例如 no-reply@example.com" />
+          </el-form-item>
+
+          <el-form-item label="加密方式">
+            <el-select v-model="form.email.encryption">
+              <el-option label="SSL" value="ssl" />
+              <el-option label="STARTTLS" value="tls" />
+              <el-option label="不加密" value="none" />
+            </el-select>
+          </el-form-item>
+        </div>
+      </el-form>
+    </el-card>
+
     <el-dialog v-model="previewVisible" title="Prompt 预览" width="760px">
       <div class="preview-meta">
         <el-tag>{{ previewState.taskType === 'polish' ? '润色任务' : '生成任务' }}</el-tag>
@@ -176,6 +249,72 @@ const DEFAULT_POLISH_PROMPT_TEMPLATE =
 const DEFAULT_GENERATE_PROMPT_TEMPLATE =
   '你是一名专业简历顾问。请围绕目标岗位 {{jobTitle}} 生成简历摘要、技能关键词与项目示例，输出内容要简洁、职业、可直接用于简历。'
 
+const providerOptions = [
+  {
+    label: 'Mock（本地联调）',
+    value: 'mock',
+    description: '不调用外部模型，用于开发和演示',
+    apiBaseUrl: '',
+    apiModel: 'mock-resume-polish'
+  },
+  {
+    label: 'DeepSeek',
+    value: 'deepseek',
+    description: 'DeepSeek OpenAI-compatible API',
+    apiBaseUrl: 'https://api.deepseek.com/v1',
+    apiModel: 'deepseek-v4-pro'
+  },
+  {
+    label: '通义千问 Qwen',
+    value: 'qwen',
+    description: '阿里云 DashScope 兼容模式',
+    apiBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    apiModel: 'qwen-plus'
+  },
+  {
+    label: '智谱 GLM',
+    value: 'glm',
+    description: '智谱 OpenAI-compatible API',
+    apiBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    apiModel: 'glm-4-flash'
+  },
+  {
+    label: 'Moonshot Kimi',
+    value: 'moonshot',
+    description: 'Moonshot OpenAI-compatible API',
+    apiBaseUrl: 'https://api.moonshot.cn/v1',
+    apiModel: 'moonshot-v1-8k'
+  },
+  {
+    label: '豆包 Doubao',
+    value: 'doubao',
+    description: '火山方舟 OpenAI-compatible API',
+    apiBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    apiModel: 'doubao-seed-1-6-250615'
+  },
+  {
+    label: 'OpenAI',
+    value: 'openai',
+    description: 'OpenAI 官方 API',
+    apiBaseUrl: 'https://api.openai.com/v1',
+    apiModel: 'gpt-4.1-mini'
+  },
+  {
+    label: 'OpenAI Compatible',
+    value: 'openai-compatible',
+    description: '任意兼容 /chat/completions 的服务',
+    apiBaseUrl: '',
+    apiModel: ''
+  },
+  {
+    label: '自定义 Provider',
+    value: 'custom',
+    description: '手动填写 Base URL、Key 和模型名',
+    apiBaseUrl: '',
+    apiModel: ''
+  }
+]
+
 const defaultConfig = (): SystemConfigData => ({
   site: {
     siteName: '简历系统',
@@ -195,6 +334,8 @@ const defaultConfig = (): SystemConfigData => ({
   },
   ai: {
     enabled: true,
+    executionEngine: 'direct',
+    agentBaseUrl: 'http://agent:8000',
     provider: 'mock',
     apiBaseUrl: '',
     apiKey: '',
@@ -228,6 +369,10 @@ const connectionState = reactive({
 })
 const form = reactive<SystemConfigData>(defaultConfig())
 
+const currentProviderPreset = computed(() => {
+  return providerOptions.find((item) => item.value === form.ai.provider) || providerOptions[0]
+})
+
 const aiConfigStatus = computed(() => {
   if (!form.ai.enabled) {
     return {
@@ -246,8 +391,9 @@ const aiConfigStatus = computed(() => {
   }
 
   const missingFields: string[] = []
+  if (form.ai.executionEngine === 'agent' && !form.ai.agentBaseUrl) missingFields.push('Agent 服务地址')
   if (!form.ai.apiBaseUrl) missingFields.push('API Base URL')
-  if (!form.ai.apiKey) missingFields.push('API Key')
+  if (!form.ai.apiKey && !form.ai.apiKeyConfigured) missingFields.push('API Key')
   if (!form.ai.apiModel) missingFields.push('模型名称')
 
   if (missingFields.length) {
@@ -261,9 +407,35 @@ const aiConfigStatus = computed(() => {
   return {
     label: '配置已就绪',
     type: 'success' as const,
-    message: '当前外部 provider 所需的关键字段已经补齐，可以先做连接测试，再决定是否投入真实联调。'
+    message:
+      form.ai.executionEngine === 'agent'
+        ? '当前请求会先进入 LangGraph Agent，再由 Agent 调用所选模型厂商。'
+        : '当前请求会由 NestJS 直接调用所选模型厂商。'
   }
 })
+
+const emailConfigured = computed(() => Boolean(
+  form.email.smtpHost &&
+  form.email.smtpPort &&
+  form.email.smtpUser &&
+  form.email.fromEmail &&
+  (form.email.smtpPass || form.email.smtpPassConfigured)
+))
+
+function handleProviderChange(provider: string) {
+  const preset = providerOptions.find((item) => item.value === provider)
+  if (!preset) return
+
+  if (preset.apiBaseUrl) {
+    form.ai.apiBaseUrl = preset.apiBaseUrl
+  }
+  if (preset.apiModel) {
+    form.ai.apiModel = preset.apiModel
+  }
+  if (provider === 'mock') {
+    form.ai.apiKey = ''
+  }
+}
 
 function applyConfig(data: SystemConfigData) {
   const next = data || defaultConfig()
@@ -288,10 +460,11 @@ async function handleSave() {
   saving.value = true
   try {
     const response = await updateSystemConfig({
+      email: { ...form.email },
       ai: { ...form.ai }
     })
     applyConfig(response.data)
-    ElMessage.success('AI 配置已保存')
+    ElMessage.success('系统配置已保存')
   } catch (error) {
     ElMessage.error('保存配置失败')
   } finally {
@@ -432,6 +605,13 @@ onMounted(() => {
   border-radius: 18px;
 }
 
+.section-description {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -443,6 +623,19 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 300px;
+}
+
+.provider-option small {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .config-form {

@@ -23,7 +23,7 @@ export class SystemConfigController {
   @Get()
   async getConfig(@Request() req): Promise<ApiResponse<SystemConfigDto>> {
     ensureAdmin(req);
-    const data = await this.systemConfigService.getConfig();
+    const data = await this.systemConfigService.getPublicConfig();
     return {
       code: 200,
       message: 'success',
@@ -34,7 +34,7 @@ export class SystemConfigController {
   @Put()
   async updateConfig(@Request() req, @Body() payload: PartialSystemConfigDto): Promise<ApiResponse<SystemConfigDto>> {
     ensureAdmin(req);
-    const data = await this.systemConfigService.updateConfig(payload || {});
+    const data = await this.systemConfigService.updatePublicConfig(payload || {});
     return {
       code: 200,
       message: '保存成功',
@@ -61,6 +61,7 @@ export class SystemConfigController {
     const mergedConfig = {
       ...current,
       ...(payload || {}),
+      apiKey: String(payload?.apiKey || '').trim() || current.apiKey,
     };
     const data = await this.aiRuntimeService.testConnection(mergedConfig);
     return {

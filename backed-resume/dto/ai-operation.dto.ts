@@ -1,13 +1,17 @@
 import { IsString, IsOptional, IsInt, Min, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
+export type AiOperationType = 'polish' | 'generate' | 'diagnose' | 'agent-polish' | 'agent-generate';
+
+const AI_OPERATION_TYPES: AiOperationType[] = ['polish', 'generate', 'diagnose', 'agent-polish', 'agent-generate'];
+
 export class CreateAiOperationDto {
   @IsInt()
   userId: number;
 
   @IsString()
-  @IsIn(['polish', 'generate'])
-  operationType: string;
+  @IsIn(AI_OPERATION_TYPES)
+  operationType: AiOperationType;
 
   @IsOptional()
   @IsString()
@@ -43,11 +47,11 @@ export class AiOperationQueryDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['polish', 'generate'])
-  operationType?: string;
+  @IsIn(AI_OPERATION_TYPES)
+  operationType?: AiOperationType;
 }
 
-// 响应数据DTO
+// 响应数据 DTO
 export class AiOperationResponseDto {
   id: number;
   userId: number;
@@ -57,4 +61,4 @@ export class AiOperationResponseDto {
   outputData?: string;
   createTime: Date;
   tokenUsed: number;
-} 
+}

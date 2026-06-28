@@ -142,6 +142,29 @@ export class CUsersService {
     return this.cUserRepository.findOne({ where: { phone } });
   }
 
+  async findByEmail(email: string): Promise<CUser | null> {
+    return this.cUserRepository.findOne({
+      where: { email: email.trim().toLowerCase() },
+    });
+  }
+
+  async updatePassword(id: number, password: string): Promise<void> {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await this.cUserRepository
+      .createQueryBuilder()
+      .update(CUser)
+      .set({
+        password: hashedPassword,
+        tokenVersion: () => 'token_version + 1',
+      })
+      .where('id = :id', { id })
+      .execute();
+  }
+
+  async invalidateSessions(id: number): Promise<void> {
+    await this.cUserRepository.increment({ id }, 'tokenVersion', 1);
+  }
+
   async verifyPassword(user: CUser | null, password: string): Promise<boolean> {
     if (!user?.password) {
       return false;

@@ -24,7 +24,10 @@ export const TEMPLATE_STATUS = {
 // AI操作类型
 export const AI_OPERATION_TYPES = {
   POLISH: 'polish',
-  GENERATE: 'generate'
+  GENERATE: 'generate',
+  DIAGNOSE: 'diagnose',
+  AGENT_POLISH: 'agent-polish',
+  AGENT_GENERATE: 'agent-generate'
 } as const
 
 // AI操作状态
@@ -100,4 +103,4 @@ export const CHART_COLORS = {
   WARNING: '#E6A23C',
   DANGER: '#F56C6C',
   INFO: '#909399'
-} as const 
+} as const

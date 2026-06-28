@@ -12,6 +12,49 @@ const DEFAULT_POLISH_PROMPT_TEMPLATE =
 const DEFAULT_GENERATE_PROMPT_TEMPLATE =
   '你是一名专业简历顾问。请围绕目标岗位 {{jobTitle}} 生成简历摘要、技能关键词与项目示例，输出内容要简洁、职业，并可直接用于简历。';
 
+const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: string }> = {
+  mock: {
+    apiModel: 'mock-resume-polish',
+  },
+  openai: {
+    apiBaseUrl: 'https://api.openai.com/v1',
+    apiModel: 'gpt-4.1-mini',
+  },
+  'openai-compatible': {
+    apiBaseUrl: 'https://api.openai.com/v1',
+    apiModel: 'gpt-4.1-mini',
+  },
+  deepseek: {
+    apiBaseUrl: 'https://api.deepseek.com/v1',
+    apiModel: 'deepseek-v4-pro',
+  },
+  qwen: {
+    apiBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    apiModel: 'qwen-plus',
+  },
+  glm: {
+    apiBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    apiModel: 'glm-4-flash',
+  },
+  moonshot: {
+    apiBaseUrl: 'https://api.moonshot.cn/v1',
+    apiModel: 'moonshot-v1-8k',
+  },
+  doubao: {
+    apiBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    apiModel: 'doubao-seed-1-6-250615',
+  },
+  'langgraph-agent': {
+    apiBaseUrl: 'http://agent:8000',
+    apiModel: 'resume-agent',
+  },
+};
+
+const ENV_AI_PROVIDER = process.env.AI_PROVIDER || 'mock';
+const ENV_AI_BASE_URL =
+  process.env.OPENAI_API_URL || (ENV_AI_PROVIDER === 'langgraph-agent' ? process.env.AGENT_SERVICE_URL || '' : '');
+const ENV_AI_MODEL = process.env.OPENAI_MODEL || AI_PROVIDER_PRESETS[ENV_AI_PROVIDER]?.apiModel || 'mock-resume-polish';
+
 const DEFAULT_SYSTEM_CONFIG: SystemConfigDto = {
   site: {
     siteName: '简历系统',
@@ -31,10 +74,12 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfigDto = {
   },
   ai: {
     enabled: true,
-    provider: 'mock',
-    apiBaseUrl: '',
-    apiKey: '',
-    apiModel: 'mock-resume-polish',
+    executionEngine: process.env.AI_EXECUTION_ENGINE === 'agent' ? 'agent' : 'direct',
+    agentBaseUrl: process.env.AGENT_SERVICE_URL || 'http://agent:8000',
+    provider: ENV_AI_PROVIDER,
+    apiBaseUrl: ENV_AI_BASE_URL,
+    apiKey: process.env.OPENAI_API_KEY || '',
+    apiModel: ENV_AI_MODEL,
     temperature: 0.7,
     dailyLimit: 500,
     perUserLimit: 20,
@@ -73,7 +118,9 @@ export class SystemConfigService {
   async updateConfig(payload: PartialSystemConfigDto): Promise<SystemConfigDto> {
     await this.ensureTable();
     const current = await this.getConfig();
-    const next = this.normalizeConfig(this.mergeConfig(current, payload));
+    const next = this.normalizeConfig(
+      this.mergeConfig(current, this.preserveSensitiveConfig(current, payload)),
+    );
 
     const existing = await this.systemConfigRepository.findOne({
       where: { configKey: GLOBAL_CONFIG_KEY },
@@ -91,6 +138,14 @@ export class SystemConfigService {
     }
 
     return next;
+  }
+
+  async getPublicConfig(): Promise<SystemConfigDto> {
+    return this.maskSensitiveConfig(await this.getConfig());
+  }
+
+  async updatePublicConfig(payload: PartialSystemConfigDto): Promise<SystemConfigDto> {
+    return this.maskSensitiveConfig(await this.updateConfig(payload));
   }
 
   async getAiConfig(): Promise<AiConfigDto> {
@@ -150,6 +205,47 @@ export class SystemConfigService {
     };
   }
 
+  private preserveSensitiveConfig(
+    current: SystemConfigDto,
+    payload: PartialSystemConfigDto,
+  ): PartialSystemConfigDto {
+    return {
+      ...payload,
+      email: payload.email
+        ? {
+            ...payload.email,
+            smtpPass:
+              this.toSafeString(payload.email.smtpPass) ||
+              current.email.smtpPass,
+          }
+        : undefined,
+      ai: payload.ai
+        ? {
+            ...payload.ai,
+            apiKey:
+              this.toSafeString(payload.ai.apiKey) ||
+              current.ai.apiKey,
+          }
+        : undefined,
+    };
+  }
+
+  private maskSensitiveConfig(config: SystemConfigDto): SystemConfigDto {
+    return {
+      ...config,
+      email: {
+        ...config.email,
+        smtpPass: '',
+        smtpPassConfigured: Boolean(config.email.smtpPass),
+      },
+      ai: {
+        ...config.ai,
+        apiKey: '',
+        apiKeyConfigured: Boolean(config.ai.apiKey),
+      },
+    };
+  }
+
   private normalizeConfig(config: SystemConfigDto): SystemConfigDto {
     return {
       ...config,
@@ -166,12 +262,21 @@ export class SystemConfigService {
   }
 
   private normalizeAiConfig(ai: AiConfigDto): AiConfigDto {
+    const legacyAgentProvider = this.toSafeString(ai?.provider) === 'langgraph-agent';
+    const environmentProvider = ENV_AI_PROVIDER === 'langgraph-agent' ? 'mock' : ENV_AI_PROVIDER;
+    const provider = legacyAgentProvider ? environmentProvider || 'mock' : this.toSafeString(ai?.provider) || 'mock';
+    const preset = AI_PROVIDER_PRESETS[provider] || {};
+    const apiBaseUrl = this.toSafeString(ai?.apiBaseUrl) || preset.apiBaseUrl || '';
+    const apiModel = this.toSafeString(ai?.apiModel) || preset.apiModel || 'mock-resume-polish';
+
     return {
       ...ai,
-      provider: this.toSafeString(ai?.provider) || 'mock',
-      apiBaseUrl: this.toSafeString(ai?.apiBaseUrl),
+      executionEngine: legacyAgentProvider || ai?.executionEngine === 'agent' ? 'agent' : 'direct',
+      agentBaseUrl: this.toSafeString(ai?.agentBaseUrl) || process.env.AGENT_SERVICE_URL || 'http://agent:8000',
+      provider,
+      apiBaseUrl,
       apiKey: this.toSafeString(ai?.apiKey),
-      apiModel: this.toSafeString(ai?.apiModel) || 'mock-resume-polish',
+      apiModel,
       polishPromptTemplate: this.normalizePromptTemplate(
         ai?.polishPromptTemplate,
         DEFAULT_POLISH_PROMPT_TEMPLATE,
