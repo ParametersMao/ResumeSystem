@@ -1,0 +1,284 @@
+{
+  "templateName": "蓝色条带行政简历",
+  "templateType": "single-column",
+  "version": "1.1.0",
+  "description": "白底蓝条主题的行政岗位简历模板，包含头像、顶部信息条、技能进度条等模块。",
+  "theme": {
+    "colors": {
+      "primary": "#0F3D7A",
+      "secondary": "#1F4F99",
+      "accent": "#173F7F",
+      "text": {
+        "primary": "#1F2A44",
+        "secondary": "#44516A",
+        "muted": "#8BA1C1"
+      },
+      "border": "#dbe3ee",
+      "background": "#ffffff"
+    },
+    "typography": {
+      "fontFamily": {
+        "body": "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif",
+        "heading": "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif"
+      },
+      "lineHeight": {
+        "normal": "1.75"
+      }
+    }
+  },
+  "globalStyles": {
+    "backgroundColor": "#ffffff",
+    "fontFamily": "var(--typography-fontFamily-body)",
+    "fontSize": "14px",
+    "lineHeight": "1.75",
+    "color": "#1F2A44"
+  },
+  "layout": {
+    "type": "single-column",
+    "container": {
+      "maxWidth": "820px",
+      "margin": "0 auto",
+      "padding": "48px 64px 60px",
+      "backgroundColor": "#ffffff",
+      "boxShadow": "0 18px 36px rgba(9, 31, 63, 0.08)"
+    }
+  },
+  "sectionStyles": {
+    "basic": {
+      "container": {
+        "marginBottom": "28px"
+      },
+      "title": {
+        "display": "none"
+      }
+    },
+    "education": {
+      "container": {
+        "marginBottom": "26px"
+      },
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "padding": "12px 22px",
+        "backgroundColor": "#0F3D7A",
+        "color": "#ffffff",
+        "letterSpacing": "2px"
+      },
+      "content": {
+        "backgroundColor": "#ffffff",
+        "border": "1px solid #dbe3ee",
+        "padding": "18px 22px",
+        "lineHeight": "1.8"
+      }
+    },
+    "experience": {
+      "container": {
+        "marginBottom": "26px"
+      },
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "padding": "12px 22px",
+        "backgroundColor": "#0F3D7A",
+        "color": "#ffffff",
+        "letterSpacing": "2px"
+      },
+      "content": {
+        "backgroundColor": "#ffffff",
+        "border": "1px solid #dbe3ee",
+        "padding": "18px 22px",
+        "lineHeight": "1.8"
+      }
+    },
+    "skills": {
+      "container": {
+        "marginBottom": "26px"
+      },
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "padding": "12px 22px",
+        "backgroundColor": "#0F3D7A",
+        "color": "#ffffff",
+        "letterSpacing": "2px"
+      },
+      "content": {
+        "backgroundColor": "#ffffff",
+        "border": "1px solid #dbe3ee",
+        "padding": "18px 22px"
+      }
+    },
+    "awards": {
+      "container": {
+        "marginBottom": "26px"
+      },
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "padding": "12px 22px",
+        "backgroundColor": "#0F3D7A",
+        "color": "#ffffff",
+        "letterSpacing": "2px"
+      },
+      "content": {
+        "backgroundColor": "#ffffff",
+        "border": "1px solid #dbe3ee",
+        "padding": "18px 22px",
+        "lineHeight": "1.8"
+      }
+    },
+    "summary": {
+      "container": {
+        "marginBottom": "0"
+      },
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "padding": "12px 22px",
+        "backgroundColor": "#0F3D7A",
+        "color": "#ffffff",
+        "letterSpacing": "2px"
+      },
+      "content": {
+        "backgroundColor": "#ffffff",
+        "border": "1px solid #dbe3ee",
+        "padding": "18px 22px",
+        "lineHeight": "1.9"
+      }
+    }
+  },
+  "sections": [
+    {
+      "id": "basic-1",
+      "type": "basic",
+      "title": "基本信息",
+      "visible": true,
+      "order": 0,
+      "data": {
+        "basic": {
+          "name": "李晓华",
+          "title": "行政专员",
+          "gender": "男",
+          "age": "33岁",
+          "yearsOfExperience": "2年经验",
+          "avatar": "https://cdn.jsdelivr.net/gh/ykdojo/avatars/peep-47.svg",
+          "contacts": {
+            "phone": "15888888888",
+            "email": "qmjianli@qq.com",
+            "site": "上海"
+          }
+        },
+        "summary": "工作积极主动，善于统筹，擅长办公室行政协调，能够独立完成大型会议筹备与执行；执行力强，注重细节。",
+        "meta": [
+          { "icon": "📅", "label": "年龄", "field": "basic.age" },
+          { "icon": "⚧", "label": "性别", "field": "basic.gender" },
+          { "icon": "💼", "label": "工作年限", "field": "basic.yearsOfExperience" },
+          { "icon": "📍", "label": "所在地", "field": "contacts.site" }
+        ],
+        "contacts": [
+          { "icon": "☎", "label": "电话", "field": "contacts.phone" },
+          { "icon": "✉", "label": "邮箱", "field": "contacts.email" }
+        ],
+        "actions": [
+          { "label": "个人简历", "type": "primary" }
+        ]
+      }
+    },
+    {
+      "id": "education-1",
+      "type": "education",
+      "title": "教育背景",
+      "visible": true,
+      "order": 1,
+      "items": [
+        {
+          "school": "全民简历师范大学",
+          "degree": "工商管理 · 本科",
+          "major": "主修课程：综合管理、行政管理、公共关系、心理学等",
+          "gpa": "GPA 3.66/4（专业前15%）",
+          "duration": {
+            "start": "2012-09",
+            "end": "2016-07"
+          }
+        }
+      ]
+    },
+    {
+      "id": "experience-1",
+      "type": "experience",
+      "title": "工作经验",
+      "visible": true,
+      "order": 2,
+      "items": [
+        {
+          "company": "全民简历网络有限公司",
+          "position": "行政专员",
+          "duration": {
+            "start": "2018-09",
+            "end": "至今"
+          },
+          "desc": {
+            "html": "<ul><li>负责总部行政与人事管理流程建设，协助制定内部制度与培训计划。</li><li>统筹办公环境、物资采购、固定资产管理，跟进月度行政预算。</li><li>组织策划大型会议、团建及福利活动，确保执行质量与反馈满意度。</li><li>协调财务、法务、供应商资源，完成跨部门合作。</li></ul>"
+          }
+        },
+        {
+          "company": "上海掌堂网络科技有限公司",
+          "position": "行政专员",
+          "duration": {
+            "start": "2016-09",
+            "end": "2018-08"
+          },
+          "desc": {
+            "html": "<ul><li>负责公司行政后勤工作，推进行政制度流程落地。</li><li>组织年度团建、文体活动，并制定活动方案与预算。</li><li>推进企业文化宣传、内部刊物编制及资料档案管理。</li><li>协助财务完成费用管理与报销审核，保障制度执行。</li></ul>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "skills-1",
+      "type": "skills",
+      "title": "技能特长",
+      "visible": true,
+      "order": 3,
+      "config": {
+        "layout": "progress",
+        "columns": 2
+      },
+      "items": [
+        { "name": "计算机", "level": 95 },
+        { "name": "沟通协调", "level": 92 },
+        { "name": "文档写作", "level": 90 }
+      ]
+    },
+    {
+      "id": "awards-1",
+      "type": "awards",
+      "title": "荣誉证书",
+      "visible": true,
+      "order": 4,
+      "items": [
+        {
+          "name": "优秀员工",
+          "description": "绩效考核优秀，连续两年获得公司嘉奖。"
+        },
+        {
+          "name": "服务明星",
+          "description": "组织大型活动表现突出，获“服务明星”称号。"
+        }
+      ]
+    },
+    {
+      "id": "summary-1",
+      "type": "summary",
+      "title": "自我评价",
+      "visible": true,
+      "order": 5,
+      "items": [
+        {
+          "text": "工作踏实认真，具备较强的组织协调能力和沟通能力。在行政管理和后勤保障方面拥有丰富经验，注重细节，执行力强，能够快速融入团队并推动项目落地。"
+        }
+      ]
+    }
+  ],
+  "customCss": ".resume-renderer{position:relative;padding-top:20px;background:#ffffff;} .resume-renderer::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:#0F3D7A;} .section-title{letter-spacing:2px;} .section-basic-wrapper .basic-banner{background:#ffffff;border-bottom:3px solid #0F3D7A;padding:28px 32px 18px;display:grid;grid-template-columns:120px 1fr auto;gap:24px;align-items:center;} .section-basic-wrapper .basic-avatar-wrapper{justify-self:center;} .section-basic-wrapper .basic-avatar{width:110px;height:130px;border-radius:8px;border:3px solid rgba(15,61,122,0.2);object-fit:cover;box-shadow:0 10px 22px rgba(15,61,122,0.18);} .section-basic-wrapper .basic-tag{align-self:flex-start;font-size:13px;color:#8BA1C1;letter-spacing:3px;} .section-basic-wrapper .basic-name{font-size:26px;font-weight:700;letter-spacing:4px;color:#0F3D7A;text-align:center;} .section-basic-wrapper .basic-title{font-size:14px;color:#0F3D7A;letter-spacing:2px;text-align:center;} .section-basic-wrapper .basic-meta-list{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:6px 24px;margin-top:12px;font-size:13px;color:#1F2A44;} .section-basic-wrapper .basic-meta-item{display:flex;align-items:center;gap:6px;} .section-basic-wrapper .basic-contact-list{display:flex;flex-direction:column;gap:6px;margin-top:18px;font-size:13px;color:#1F2A44;} .section-basic-wrapper .basic-contact-item{display:flex;align-items:center;gap:8px;} .section-basic-wrapper .contact-label::after{content:'：';} .section-basic-wrapper .basic-actions{display:flex;flex-direction:column;align-items:flex-end;gap:12px;} .section-basic-wrapper .basic-action{padding:12px 28px;background:#0F3D7A;color:#ffffff;border-radius:28px;text-decoration:none;letter-spacing:3px;font-weight:600;box-shadow:0 12px 22px rgba(15,61,122,0.25);} .section-basic-wrapper .basic-summary{margin-top:20px;font-size:13px;color:#44516C;line-height:1.9;text-indent:2em;} .section-education-wrapper .section-content,.section-experience-wrapper .section-content,.section-skills-wrapper .section-content,.section-awards-wrapper .section-content,.section-summary-wrapper .section-content{background:#ffffff;border:1px solid #dbe3ee;border-top:none;padding:18px 22px;} .section-education-content .education-item+.education-item,.section-experience-content .experience-item+.experience-item{margin-top:16px;border-top:1px solid #e6ecf5;padding-top:16px;} .section-experience-content ul{margin:6px 0 0 20px;padding:0;} .section-experience-content li{margin-bottom:6px;} .section-skills-content .skill-progress{height:6px;background:#e3eaf5;border-radius:100px;} .section-skills-content .skill-progress-bar{background:linear-gradient(90deg,#0F3D7A,#1F5AAE);} .section-awards-content p{margin:6px 0;font-size:13px;} @media (max-width:768px){.section-basic-wrapper .basic-banner{grid-template-columns:1fr;gap:18px;text-align:center;} .section-basic-wrapper .basic-actions{align-items:center;}}"
+}

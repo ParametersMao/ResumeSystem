@@ -1,0 +1,213 @@
+{
+  "templateName": "经典蓝色双列简历模板",
+  "templateType": "two-column",
+  "version": "2.0.0",
+  "description": "基于新版渲染引擎的经典蓝色双列简历模板",
+  "theme": {
+    "colors": {
+      "primary": "#4A90E2",
+      "secondary": "#357ABD",
+      "tertiary": "#2E6DA4",
+      "text": {
+        "primary": "#333333",
+        "secondary": "#666666",
+        "muted": "#999999"
+      },
+      "background": "#ffffff",
+      "border": "#e0e0e0",
+      "sectionBg": "#f8f9fa"
+    },
+    "typography": {
+      "fontFamily": {
+        "body": "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif",
+        "heading": "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif"
+      },
+      "fontSize": {
+        "base": "14px",
+        "small": "12px",
+        "large": "16px",
+        "h1": "24px",
+        "h2": "20px",
+        "h3": "16px",
+        "h4": "14px"
+      },
+      "fontWeight": {
+        "normal": "400",
+        "medium": "500",
+        "bold": "700"
+      },
+      "lineHeight": {
+        "normal": "1.5",
+        "tight": "1.2",
+        "loose": "1.6"
+      }
+    },
+    "spacing": {
+      "xs": "4px",
+      "sm": "8px",
+      "md": "12px",
+      "lg": "16px",
+      "xl": "20px",
+      "xxl": "24px"
+    }
+  },
+  "globalStyles": {
+    "backgroundColor": "#ffffff",
+    "fontFamily": "var(--typography-fontFamily-body)",
+    "fontSize": "var(--typography-fontSize-base)",
+    "lineHeight": "var(--typography-lineHeight-normal)",
+    "color": "var(--colors-text-primary)"
+  },
+  "layout": {
+    "type": "two-column",
+    "container": {
+      "maxWidth": "800px",
+      "margin": "0 auto",
+      "padding": "0",
+      "backgroundColor": "var(--colors-background)",
+      "borderRadius": "0px",
+      "boxShadow": "0 0 20px rgba(0,0,0,0.1)"
+    },
+    "content": {
+      "padding": "0",
+      "backgroundColor": "var(--colors-background)"
+    },
+    "columns": {
+      "widths": ["35%", "65%"],
+      "gap": "0",
+      "leftStyle": {
+        "backgroundColor": "var(--colors-sectionBg)",
+        "padding": "30px 20px",
+        "minHeight": "100vh"
+      },
+      "rightStyle": {
+        "backgroundColor": "var(--colors-background)",
+        "padding": "30px 25px",
+        "minHeight": "100vh"
+      }
+    }
+  },
+  "sectionStyles": {
+    "basic": {
+      "container": {
+        "marginBottom": "30px",
+        "textAlign": "center"
+      },
+      "title": {
+        "display": "none"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)"
+      }
+    },
+    "education": {
+      "container": {
+        "marginBottom": "25px"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-background)",
+        "backgroundColor": "var(--colors-primary)",
+        "padding": "8px 15px",
+        "marginBottom": "15px",
+        "textAlign": "center"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "skills": {
+      "container": {
+        "marginBottom": "25px"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-background)",
+        "backgroundColor": "var(--colors-primary)",
+        "padding": "8px 15px",
+        "marginBottom": "15px",
+        "textAlign": "center"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "experience": {
+      "container": {
+        "marginBottom": "25px"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-background)",
+        "backgroundColor": "var(--colors-primary)",
+        "padding": "8px 15px",
+        "marginBottom": "15px",
+        "textAlign": "center"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "projects": {
+      "container": {
+        "marginBottom": "25px"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-background)",
+        "backgroundColor": "var(--colors-primary)",
+        "padding": "8px 15px",
+        "marginBottom": "15px",
+        "textAlign": "center"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    },
+    "summary": {
+      "container": {
+        "marginBottom": "25px"
+      },
+      "title": {
+        "fontSize": "var(--typography-fontSize-h3)",
+        "fontWeight": "var(--typography-fontWeight-bold)",
+        "color": "var(--colors-background)",
+        "backgroundColor": "var(--colors-primary)",
+        "padding": "8px 15px",
+        "marginBottom": "15px",
+        "textAlign": "center"
+      },
+      "content": {
+        "fontSize": "var(--typography-fontSize-base)",
+        "lineHeight": "var(--typography-lineHeight-loose)"
+      }
+    }
+  },
+  "responsive": {
+    "breakpoints": {
+      "mobile": "0px",
+      "tablet": "768px",
+      "desktop": "1024px"
+    },
+    "styles": {
+      "mobile": {
+        ".resume-columns": {
+          "gridTemplateColumns": "1fr !important",
+          "gap": "0"
+        },
+        ".column-left, .column-right": {
+          "minHeight": "auto"
+        }
+      }
+    }
+  },
+  "customCss": "/* 全局样式重置 */\n.resume-renderer {\n  font-family: var(--typography-fontFamily-body);\n  color: var(--colors-text-primary);\n  line-height: var(--typography-lineHeight-normal);\n  background-color: var(--colors-background);\n}\n\n/* 个人信息样式 */\n.section-basic,\n.section-basic-wrapper {\n  text-align: center;\n  margin-bottom: 30px;\n}\n\n.section-basic .section-content,\n.section-basic-wrapper .section-content {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n}\n\n/* 头像样式 */\n.section-basic img,\n.section-basic-wrapper img {\n  width: 80px;\n  height: 80px;\n  border-radius: 50%;\n  object-fit: cover;\n  margin-bottom: 15px;\n  border: 3px solid var(--colors-primary);\n}\n\n/* 姓名样式 */\n.basic-name {\n  font-size: 22px;\n  font-weight: var(--typography-fontWeight-bold);\n  color: var(--colors-text-primary);\n  margin-bottom: 8px;\n}\n\n/* 职位样式 */\n.basic-title {\n  font-size: 16px;\n  color: var(--colors-text-secondary);\n  margin-bottom: 15px;\n}\n\n/* 联系信息样式 */\n.contact-info {\n  text-align: left;\n  width: 100%;\n}\n\n.contact-item {\n  display: flex;\n  align-items: center;\n  margin-bottom: 8px;\n  font-size: 13px;\n  color: var(--colors-text-secondary);\n}\n\n.contact-label {\n  font-weight: var(--typography-fontWeight-medium);\n  min-width: 45px;\n  margin-right: 8px;\n}\n\n/* 模块标题样式 */\n.section-education-title,\n.section-skills-title,\n.section-experience-title,\n.section-projects-title,\n.section-summary-title,\n.section-education-wrapper .section-title,\n.section-skills-wrapper .section-title,\n.section-experience-wrapper .section-title,\n.section-projects-wrapper .section-title,\n.section-summary-wrapper .section-title {\n  font-size: 16px !important;\n  font-weight: var(--typography-fontWeight-bold) !important;\n  color: var(--colors-background) !important;\n  background-color: var(--colors-primary) !important;\n  padding: 8px 15px !important;\n  margin-bottom: 15px !important;\n  text-align: center !important;\n  border-radius: 0 !important;\n  border: none !important;\n  display: block !important;\n}\n\n/* 教育背景样式 */\n.education-item {\n  margin-bottom: 15px;\n  padding-bottom: 12px;\n  border-bottom: 1px solid var(--colors-border);\n}\n\n.education-item:last-child {\n  border-bottom: none;\n  margin-bottom: 0;\n}\n\n.education-period {\n  font-size: 12px;\n  color: var(--colors-text-secondary);\n  margin-bottom: 4px;\n}\n\n.education-school {\n  font-weight: var(--typography-fontWeight-bold);\n  color: var(--colors-text-primary);\n  margin-bottom: 3px;\n  font-size: 14px;\n}\n\n.education-degree {\n  color: var(--colors-text-secondary);\n  font-size: 13px;\n  margin-bottom: 3px;\n}\n\n.education-gpa {\n  font-size: 12px;\n  color: var(--colors-text-muted);\n}\n\n/* 工作经验样式 */\n.experience-item {\n  margin-bottom: 20px;\n  padding-bottom: 15px;\n  border-bottom: 1px solid var(--colors-border);\n}\n\n.experience-item:last-child {\n  border-bottom: none;\n  margin-bottom: 0;\n}\n\n.experience-header {\n  margin-bottom: 8px;\n}\n\n.experience-period {\n  font-size: 12px;\n  color: var(--colors-text-secondary);\n  margin-bottom: 4px;\n}\n\n.experience-company {\n  font-weight: var(--typography-fontWeight-bold);\n  color: var(--colors-text-primary);\n  font-size: 14px;\n  margin-bottom: 2px;\n}\n\n.experience-position {\n  color: var(--colors-text-secondary);\n  font-size: 13px;\n  margin-bottom: 8px;\n}\n\n.experience-description {\n  font-size: 13px;\n  line-height: 1.5;\n  color: var(--colors-text-primary);\n}\n\n.experience-description ul {\n  margin: 0;\n  padding-left: 16px;\n}\n\n.experience-description li {\n  margin-bottom: 3px;\n}\n\n/* 技能样式 */\n.skills-list {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.skill-item {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  font-size: 13px;\n}\n\n.skill-name {\n  font-weight: var(--typography-fontWeight-medium);\n  color: var(--colors-text-primary);\n}\n\n.skill-level {\n  color: var(--colors-text-secondary);\n  font-size: 12px;\n}\n\n/* 技能进度条样式 */\n.skill-progress {\n  margin-top: 4px;\n  height: 4px;\n  background-color: var(--colors-border);\n  border-radius: 2px;\n  overflow: hidden;\n}\n\n.skill-progress-bar {\n  height: 100%;\n  background-color: var(--colors-primary);\n  transition: width 0.3s ease;\n}\n\n/* 自我评价样式 */\n.summary-content {\n  font-size: 13px;\n  line-height: 1.6;\n  color: var(--colors-text-primary);\n  text-align: justify;\n}\n\n/* 响应式调整 */\n@media (max-width: 768px) {\n  .resume-columns {\n    grid-template-columns: 1fr !important;\n  }\n  \n  .column-left,\n  .column-right {\n    min-height: auto !important;\n    padding: 20px !important;\n  }\n  \n  .section-basic,\n  .section-basic-wrapper {\n    margin-bottom: 20px;\n  }\n}"
+}

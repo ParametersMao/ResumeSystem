@@ -1,0 +1,143 @@
+{
+  "profile": {
+    "basic": {
+      "name": "全民简历",
+      "avatar": "",
+      "age": 29,
+      "gender": "男",
+      "location": "上海",
+      "yearsOfExperience": "7年经验",
+      "phone": "15588888888",
+      "email": "qmjianli@qq.com",
+      "intention": {
+        "expectedPosition": "市场营销/公关媒介",
+        "expectedSalary": "面议",
+        "expectedCity": "上海/北京/广州/深圳",
+        "expectedWorkTime": "2016年12月",
+        "weekStart": "一周内"
+      }
+    }
+  },
+  "sections": [
+    {
+      "id": "education-1",
+      "type": "education",
+      "title": "教育背景",
+      "visible": true,
+      "order": 1,
+      "items": [
+        {
+          "school": "全民简历师范大学",
+          "degree": "工商管理 - 本科",
+          "major": "工商管理",
+          "startDate": "2012-09",
+          "endDate": "2016-07",
+          "gpa": "GPA 3.66/4（专业学分3A）",
+          "courses": "主修课程：数学与统计学、法律、沟通学、经济学能力、外贸管理学、企业管理学、国际化公司会计、运营管理与物资采购、生活营销基础、人力资源开发管理、财务管理学、企业建立安排能力、房屋营销学、营业经济学等"
+        }
+      ]
+    },
+    {
+      "id": "experience-1",
+      "type": "experience",
+      "title": "工作经验",
+      "visible": true,
+      "order": 2,
+      "items": [
+        {
+          "company": "全民简历技术有限公司",
+          "position": "行政专员",
+          "startDate": "2018-09",
+          "endDate": "至今",
+          "responsibilities": [
+            "协助关于国际货运代理，报关委托书以及货款等流程的监理，管理各类证照、接受相关报表、咨询办理案案件与出入具的提供；",
+            "预约人员入座出示证件办理有关的费用、资料更新和管理工作，对经费与预存费时并汇清单有关的查账，其数据与档，具有大量项目的经费管理案与业务；",
+            "需要用全国各省/上司的准业项目客服工作，对产商注册后的证照证后"
+          ]
+        },
+        {
+          "company": "上海某跨国投资有限公司",
+          "position": "行政专员",
+          "startDate": "2016-09",
+          "endDate": "2018-08",
+          "responsibilities": [
+            "负责财务与银费划，经手银收；",
+            "对公款式处进制办每次会经支付工作，以经计项多方面制合和产报；",
+            "协助工工制多次业责费的审核与原有金额业处支次办以；",
+            "集业产多来管理工艺，测货方支经证及次发产次接与到产方各费技拆时计；",
+            "协助工初具工第，管产多处认入人才业办大项核，信收方较小预多支经证项的"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills-1",
+      "type": "skills",
+      "title": "技能特长",
+      "visible": true,
+      "order": 3,
+      "items": [
+        {
+          "category": "语言能力",
+          "skills": [
+            { "name": "普通话", "level": 5, "levelText": "熟练" }
+          ]
+        },
+        {
+          "category": "计算机",
+          "skills": [
+            { "name": "计算机", "level": 4, "levelText": "良好" }
+          ]
+        },
+        {
+          "category": "设计",
+          "skills": [
+            { "name": "设计", "level": 3, "levelText": "一般" }
+          ]
+        },
+        {
+          "category": "英语",
+          "skills": [
+            { "name": "英语", "level": 4, "levelText": "良好" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "awards-1",
+      "type": "awards",
+      "title": "荣誉证书",
+      "visible": true,
+      "order": 4,
+      "items": [
+        {
+          "name": "荣誉证书03",
+          "issuer": "所获奖励和知识获得",
+          "date": "2015"
+        },
+        {
+          "name": "荣誉证书02",
+          "issuer": "参加相关项/工作室的奖项，其有在获三或二等项项，",
+          "date": "2014"
+        },
+        {
+          "name": "荣誉证书01",
+          "issuer": "集受书关听用干能经证场所初报的人才经验证流所者"
+        }
+      ]
+    },
+    {
+      "id": "summary-1",
+      "type": "summary",
+      "title": "自我评价",
+      "visible": true,
+      "order": 5,
+      "items": [
+        {
+          "text": "本人积极进取，性格外向，擅长管理办公室自相关流程，管理与广告宣传，对长实习经历较强。新员，能得干学号，具有强软的沟通办证，对出色的文字写作等办公软件，以及跳教产家传内部任在可改、集成，专业课听常在的。"
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,421 @@
+{
+  "templateName": "全民简历-标准模板",
+  "templateVersion": 1,
+  "description": "专业的单栏简历模板，包含照片、完整的个人信息展示和求职意向",
+  "styles": {
+    "colors": {
+      "primary": "#2c5aa0",
+      "secondary": "#f5f5f5",
+      "text": "#333333",
+      "textSecondary": "#666666",
+      "textMuted": "#999999",
+      "background": "#ffffff",
+      "border": "#e5e7eb",
+      "accent": "#4a90a4"
+    },
+    "fonts": {
+      "heading": "Microsoft YaHei, PingFang SC, Hiragino Sans GB, Arial, sans-serif",
+      "body": "Microsoft YaHei, PingFang SC, Hiragino Sans GB, Arial, sans-serif"
+    },
+    "spacing": {
+      "sectionMargin": "20px",
+      "elementMargin": "12px"
+    }
+  },
+  "globalConfig": {
+    "maxWidth": "900px",
+    "padding": "40px 50px",
+    "borderRadius": "0",
+    "boxShadow": "none",
+    "contentBackground": "#ffffff",
+    "layout": "single-column"
+  },
+  "layout": [
+    {
+      "type": "personal",
+      "visible": true,
+      "order": 0,
+      "title": "个人信息",
+      "config": {
+        "layout": "flexible",
+        "showTitle": false,
+        "showAvatar": true,
+        "avatarPosition": "right",
+        "fields": {
+          "visible": [
+            "name",
+            "intention",
+            "expectedPosition",
+            "expectedSalary",
+            "expectedCity",
+            "expectedWorkTime",
+            "weekStart",
+            "age",
+            "gender",
+            "location",
+            "yearsOfExperience",
+            "phone",
+            "email"
+          ],
+          "order": [
+            "name",
+            "intention",
+            "age",
+            "gender",
+            "location",
+            "yearsOfExperience",
+            "phone",
+            "email"
+          ],
+          "labels": {
+            "name": "姓名",
+            "intention": "求职意向",
+            "expectedPosition": "期望岗位",
+            "expectedSalary": "期望薪资",
+            "expectedCity": "期望城市",
+            "expectedWorkTime": "期望工作时间",
+            "weekStart": "一周起始时间",
+            "age": "年龄",
+            "gender": "性别",
+            "location": "现居地",
+            "yearsOfExperience": "工作经验",
+            "phone": "手机",
+            "email": "邮箱"
+          }
+        },
+        "containerStyle": {
+          "borderBottom": "2px solid #2c5aa0",
+          "paddingBottom": "20px",
+          "marginBottom": "25px"
+        },
+        "avatarSectionStyle": {
+          "position": "absolute",
+          "right": "0",
+          "top": "0",
+          "width": "100px",
+          "height": "120px"
+        },
+        "avatarImageStyle": {
+          "width": "100px",
+          "height": "120px",
+          "objectFit": "cover",
+          "border": "2px solid #e5e7eb"
+        },
+        "avatarPlaceholderStyle": {
+          "width": "100px",
+          "height": "120px",
+          "backgroundColor": "#f5f5f5",
+          "border": "2px solid #e5e7eb",
+          "display": "flex",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "fontSize": "14px",
+          "color": "#999999"
+        },
+        "nameStyle": {
+          "fontSize": "28px",
+          "fontWeight": "700",
+          "color": "#333333",
+          "marginBottom": "15px",
+          "letterSpacing": "2px"
+        },
+        "intentionStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginBottom": "10px",
+          "lineHeight": "1.8",
+          "display": "flex",
+          "flexWrap": "wrap",
+          "gap": "8px"
+        },
+        "intentionItemStyle": {
+          "display": "inline-flex",
+          "alignItems": "center",
+          "marginRight": "12px"
+        },
+        "intentionLabelStyle": {
+          "fontWeight": "normal",
+          "marginRight": "4px"
+        },
+        "intentionValueStyle": {
+          "fontWeight": "normal"
+        },
+        "basicInfoStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginTop": "12px",
+          "marginBottom": "10px",
+          "display": "flex",
+          "alignItems": "center",
+          "gap": "8px",
+          "flexWrap": "wrap"
+        },
+        "basicInfoItemStyle": {
+          "display": "inline-flex",
+          "alignItems": "center"
+        },
+        "basicInfoSeparatorStyle": {
+          "margin": "0 8px",
+          "color": "#cccccc"
+        },
+        "contactStyle": {
+          "display": "flex",
+          "gap": "20px",
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginTop": "8px",
+          "flexWrap": "wrap"
+        },
+        "contactItemStyle": {
+          "display": "flex",
+          "alignItems": "center"
+        }
+      }
+    },
+    {
+      "type": "education",
+      "visible": true,
+      "order": 1,
+      "title": "教育背景",
+      "config": {
+        "layout": "standard",
+        "showTitle": true,
+        "titleStyle": {
+          "fontSize": "18px",
+          "fontWeight": "700",
+          "color": "#333333",
+          "marginBottom": "15px",
+          "paddingBottom": "8px",
+          "borderBottom": "2px solid #2c5aa0"
+        },
+        "itemStyle": {
+          "marginBottom": "20px",
+          "paddingBottom": "15px"
+        },
+        "headerStyle": {
+          "display": "flex",
+          "justifyContent": "space-between",
+          "alignItems": "baseline",
+          "marginBottom": "8px"
+        },
+        "schoolStyle": {
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "color": "#333333"
+        },
+        "degreeStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginLeft": "15px"
+        },
+        "dateStyle": {
+          "fontSize": "14px",
+          "color": "#999999",
+          "fontWeight": "normal"
+        },
+        "detailsStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "lineHeight": "1.8",
+          "marginTop": "8px"
+        },
+        "gpaStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginBottom": "6px"
+        },
+        "coursesStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "lineHeight": "1.8"
+        }
+      }
+    },
+    {
+      "type": "experience",
+      "visible": true,
+      "order": 2,
+      "title": "工作经验",
+      "config": {
+        "layout": "standard",
+        "showTitle": true,
+        "titleStyle": {
+          "fontSize": "18px",
+          "fontWeight": "700",
+          "color": "#333333",
+          "marginBottom": "15px",
+          "paddingBottom": "8px",
+          "borderBottom": "2px solid #2c5aa0"
+        },
+        "itemStyle": {
+          "marginBottom": "20px",
+          "paddingBottom": "15px"
+        },
+        "headerStyle": {
+          "display": "flex",
+          "justifyContent": "space-between",
+          "alignItems": "baseline",
+          "marginBottom": "8px"
+        },
+        "companyStyle": {
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "color": "#333333"
+        },
+        "positionStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginLeft": "15px"
+        },
+        "dateStyle": {
+          "fontSize": "14px",
+          "color": "#999999",
+          "fontWeight": "normal"
+        },
+        "descriptionStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "lineHeight": "1.8",
+          "marginTop": "8px"
+        },
+        "responsibilityStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "lineHeight": "1.8",
+          "marginTop": "4px",
+          "paddingLeft": "0"
+        },
+        "bulletStyle": {
+          "marginBottom": "4px",
+          "position": "relative",
+          "paddingLeft": "0"
+        }
+      }
+    },
+    {
+      "type": "skills",
+      "visible": true,
+      "order": 3,
+      "title": "技能特长",
+      "config": {
+        "layout": "bars",
+        "showTitle": true,
+        "titleStyle": {
+          "fontSize": "18px",
+          "fontWeight": "700",
+          "color": "#333333",
+          "marginBottom": "15px",
+          "paddingBottom": "8px",
+          "borderBottom": "2px solid #2c5aa0"
+        },
+        "skillBars": {
+          "enabled": true,
+          "showPercentage": false,
+          "barStyle": {
+            "height": "10px",
+            "backgroundColor": "#e5e7eb",
+            "borderRadius": "5px",
+            "marginBottom": "15px",
+            "overflow": "hidden"
+          },
+          "progressStyle": {
+            "backgroundColor": "#2c5aa0",
+            "height": "100%",
+            "borderRadius": "5px",
+            "transition": "width 0.3s ease"
+          },
+          "labelStyle": {
+            "fontSize": "14px",
+            "color": "#333333",
+            "marginBottom": "6px",
+            "fontWeight": "500",
+            "display": "flex",
+            "justifyContent": "space-between"
+          },
+          "itemStyle": {
+            "marginBottom": "15px"
+          }
+        },
+        "categoryStyle": {
+          "marginBottom": "20px"
+        },
+        "categoryTitleStyle": {
+          "fontSize": "15px",
+          "fontWeight": "600",
+          "color": "#333333",
+          "marginBottom": "12px"
+        }
+      }
+    },
+    {
+      "type": "awards",
+      "visible": true,
+      "order": 4,
+      "title": "荣誉证书",
+      "config": {
+        "layout": "list",
+        "showTitle": true,
+        "titleStyle": {
+          "fontSize": "18px",
+          "fontWeight": "700",
+          "color": "#333333",
+          "marginBottom": "15px",
+          "paddingBottom": "8px",
+          "borderBottom": "2px solid #2c5aa0"
+        },
+        "itemStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "lineHeight": "1.8",
+          "marginBottom": "8px",
+          "position": "relative",
+          "paddingLeft": "16px"
+        },
+        "bulletStyle": {
+          "position": "absolute",
+          "left": "0",
+          "top": "0.5em",
+          "width": "6px",
+          "height": "6px",
+          "backgroundColor": "#2c5aa0",
+          "borderRadius": "50%"
+        },
+        "awardNameStyle": {
+          "fontWeight": "500",
+          "color": "#333333"
+        },
+        "awardDateStyle": {
+          "color": "#999999",
+          "marginLeft": "8px",
+          "fontSize": "13px"
+        }
+      }
+    },
+    {
+      "type": "summary",
+      "visible": true,
+      "order": 5,
+      "title": "自我评价",
+      "config": {
+        "layout": "paragraph",
+        "showTitle": true,
+        "titleStyle": {
+          "fontSize": "18px",
+          "fontWeight": "700",
+          "color": "#333333",
+          "marginBottom": "15px",
+          "paddingBottom": "8px",
+          "borderBottom": "2px solid #2c5aa0"
+        },
+        "contentStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "lineHeight": "1.8",
+          "textAlign": "justify",
+          "textIndent": "0"
+        }
+      }
+    }
+  ]
+}
+

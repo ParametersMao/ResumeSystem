@@ -1,0 +1,256 @@
+{
+  "templateName": "单栏-标准简历模板",
+  "templateVersion": 1,
+  "description": "单栏布局的标准简历模板，适用于传统简历格式，包含完整的模块配置",
+  "styles": {
+    "colors": {
+      "primary": "#2c5aa0",
+      "secondary": "#f5f5f5",
+      "text": "#333333",
+      "background": "#ffffff",
+      "accent": "#4a90a4"
+    },
+    "fonts": {
+      "heading": "Microsoft YaHei, Arial, sans-serif",
+      "body": "Microsoft YaHei, Arial, sans-serif"
+    },
+    "spacing": {
+      "sectionMargin": "25px",
+      "elementMargin": "15px"
+    }
+  },
+  "globalConfig": {
+    "maxWidth": "860px",
+    "padding": "30px",
+    "borderRadius": "0",
+    "boxShadow": "none",
+    "contentBackground": "#ffffff",
+    "layout": "single-column"
+  },
+  "layout": [
+    {
+      "type": "personal",
+      "visible": true,
+      "title": "个人信息",
+      "config": {
+        "layout": "flexible",
+        "showTitle": false,
+        "fields": {
+          "visible": ["name", "title", "gender", "age", "yearsOfExperience", "phone", "email"],
+          "order": ["name", "title", "gender", "age", "yearsOfExperience", "phone", "email"],
+          "labels": {
+            "name": "姓名",
+            "title": "职位",
+            "gender": "性别",
+            "age": "年龄",
+            "yearsOfExperience": "工作经验",
+            "phone": "电话",
+            "email": "邮箱"
+          }
+        },
+        "nameStyle": {
+          "fontSize": "20px",
+          "fontWeight": "600",
+          "color": "#333333",
+          "marginBottom": "8px"
+        },
+        "titleStyle": {
+          "fontSize": "16px",
+          "fontWeight": "500",
+          "color": "#666666",
+          "marginBottom": "12px"
+        },
+        "fieldStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginBottom": "4px"
+        },
+        "contactStyle": {
+          "display": "flex",
+          "gap": "16px",
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginTop": "8px"
+        },
+        "infoSectionStyle": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "4px"
+        }
+      }
+    },
+    {
+      "type": "intention",
+      "visible": true,
+      "config": {
+        "layout": "simple",
+        "title": "求职意向",
+        "titleStyle": "underline",
+        "itemStyle": {
+          "fontSize": "14px",
+          "color": "#333333",
+          "lineHeight": "1.6"
+        }
+      }
+    },
+    {
+      "type": "education",
+      "visible": true,
+      "config": {
+        "layout": "timeline",
+        "title": "教育背景",
+        "titleStyle": "underline",
+        "schoolStyle": {
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "color": "#333333",
+          "marginBottom": "4px"
+        },
+        "degreeStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginBottom": "8px"
+        },
+        "dateStyle": {
+          "fontSize": "14px",
+          "color": "#999999",
+          "float": "right",
+          "fontWeight": "normal"
+        },
+        "itemStyle": {
+          "marginBottom": "20px",
+          "paddingBottom": "15px",
+          "borderBottom": "1px solid #e5e7eb"
+        },
+        "descriptionStyle": {
+          "fontSize": "13px",
+          "color": "#666666",
+          "lineHeight": "1.6",
+          "marginTop": "8px"
+        }
+      }
+    },
+    {
+      "type": "experience",
+      "visible": true,
+      "config": {
+        "layout": "timeline",
+        "title": "工作经验",
+        "titleStyle": "underline",
+        "companyStyle": {
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "color": "#333333",
+          "marginBottom": "4px"
+        },
+        "positionStyle": {
+          "fontSize": "14px",
+          "color": "#666666",
+          "marginBottom": "8px"
+        },
+        "dateStyle": {
+          "fontSize": "14px",
+          "color": "#999999",
+          "float": "right",
+          "fontWeight": "normal"
+        },
+        "descriptionStyle": {
+          "fontSize": "14px",
+          "color": "#333333",
+          "lineHeight": "1.8",
+          "marginTop": "8px"
+        },
+        "itemStyle": {
+          "marginBottom": "20px",
+          "paddingBottom": "15px",
+          "borderBottom": "1px solid #e5e7eb"
+        }
+      }
+    },
+    {
+      "type": "skills",
+      "visible": true,
+      "config": {
+        "layout": "mixed",
+        "title": "技能特长",
+        "titleStyle": "underline",
+        "languageSection": {
+          "title": "语言能力",
+          "style": {
+            "marginBottom": "12px"
+          }
+        },
+        "computerSection": {
+          "title": "计算机",
+          "style": {
+            "marginBottom": "12px"
+          }
+        },
+        "teamworkSection": {
+          "title": "团队能力",
+          "style": {
+            "marginBottom": "12px"
+          }
+        },
+        "skillBars": {
+          "enabled": true,
+          "barStyle": {
+            "height": "8px",
+            "backgroundColor": "#e5e7eb",
+            "borderRadius": "4px",
+            "marginBottom": "8px"
+          },
+          "progressStyle": {
+            "backgroundColor": "#2c5aa0",
+            "borderRadius": "4px"
+          },
+          "labelStyle": {
+            "fontSize": "13px",
+            "color": "#666666",
+            "marginBottom": "4px"
+          }
+        },
+        "tagStyle": {
+          "backgroundColor": "#f5f5f5",
+          "color": "#333333",
+          "padding": "4px 8px",
+          "borderRadius": "4px",
+          "fontSize": "13px",
+          "marginRight": "8px",
+          "marginBottom": "8px"
+        }
+      }
+    },
+    {
+      "type": "awards",
+      "visible": true,
+      "config": {
+        "layout": "simple",
+        "title": "荣誉证书",
+        "titleStyle": "underline",
+        "itemStyle": {
+          "fontSize": "14px",
+          "color": "#333333",
+          "lineHeight": "1.6",
+          "marginBottom": "8px"
+        }
+      }
+    },
+    {
+      "type": "summary",
+      "visible": true,
+      "config": {
+        "layout": "simple",
+        "title": "自我评价",
+        "titleStyle": "underline",
+        "itemStyle": {
+          "fontSize": "14px",
+          "color": "#333333",
+          "lineHeight": "1.8",
+          "textAlign": "justify"
+        }
+      }
+    }
+  ]
+}
+

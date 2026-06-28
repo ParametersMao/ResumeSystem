@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "jsx": "preserve",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/": ["./src/"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": [
+    "src/components/editor/**/*",
+    "src/components/resume/**/*",
+    "src/components/form/**/*",
+    "src/views/Editor.vue",
+    "src/views/ResumeEditor.vue",
+    "src/views/ResumeEditorNew.vue",
+    "src/utils/pagedExport.ts",
+    "src/utils/richText.ts",
+    "src/utils/templateAdapter.ts",
+    "src/utils/templateFile.ts"
+  ],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+
+

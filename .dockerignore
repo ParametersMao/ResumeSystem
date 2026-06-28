@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+**/*.out.log
+**/*.err.log
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+.git
+.playwright-cli
+runtime-logs
+output
+*.zip
+

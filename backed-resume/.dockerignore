@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+uploads
+*.log
+*.out.log
+*.err.log
+*.tsbuildinfo
+.env
+.env.*
+Dockerfile

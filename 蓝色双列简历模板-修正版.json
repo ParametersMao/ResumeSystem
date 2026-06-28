@@ -1,0 +1,363 @@
+{
+  "templateName": "蓝色双列个人简历",
+  "templateType": "two-column",
+  "version": "1.0.1",
+  "description": "蓝色主题的双列中文个人简历模板，含头像、教育、工作、技能、荣誉、自我评价模块。",
+  "theme": {
+    "colors": {
+      "primary": "#4A90E2",
+      "secondary": "#F3F7FC",
+      "tertiary": "#357ABD",
+      "text": {
+        "primary": "#20374B",
+        "secondary": "#667C8F",
+        "muted": "#9BA9BA"
+      },
+      "background": "#ffffff",
+      "border": "#d8e2ed"
+    },
+    "typography": {
+      "fontFamily": {
+        "body": "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif",
+        "heading": "'Microsoft YaHei', 'PingFang SC', Arial, sans-serif"
+      },
+      "lineHeight": {
+        "normal": "1.6"
+      }
+    }
+  },
+  "globalStyles": {
+    "backgroundColor": "#ffffff",
+    "fontFamily": "var(--typography-fontFamily-body)",
+    "fontSize": "14px",
+    "lineHeight": "1.6",
+    "color": "#20374B"
+  },
+  "layout": {
+    "type": "two-column",
+    "container": {
+      "maxWidth": "820px",
+      "margin": "0 auto",
+      "padding": "0",
+      "backgroundColor": "#ffffff",
+      "boxShadow": "0 10px 25px rgba(0,0,0,0.08)"
+    },
+    "content": {
+      "padding": "0",
+      "backgroundColor": "#ffffff"
+    },
+    "columns": {
+      "widths": ["34%", "66%"],
+      "gap": "0",
+      "leftStyle": {
+        "backgroundColor": "#F3F7FC",
+        "padding": "36px 26px"
+      },
+      "rightStyle": {
+        "backgroundColor": "#ffffff",
+        "padding": "36px 36px 48px"
+      }
+    }
+  },
+  "sectionStyles": {
+    "basic": {
+      "container": {
+        "marginBottom": "30px",
+        "textAlign": "center"
+      },
+      "title": {
+        "display": "none"
+      },
+      "custom": {
+        ".basic-name": {
+          "fontSize": "22px",
+          "fontWeight": "700",
+          "color": "#4A90E2",
+          "letterSpacing": "2px",
+          "marginBottom": "6px"
+        },
+        ".basic-title": {
+          "fontSize": "14px",
+          "color": "#667C8F",
+          "marginBottom": "12px"
+        },
+        ".basic-avatar": {
+          "width": "100px",
+          "height": "120px",
+          "borderRadius": "6px",
+          "margin": "20px auto 18px",
+          "border": "4px solid #ffffff",
+          "boxShadow": "0 6px 16px rgba(0,0,0,0.15)"
+        },
+        ".basic-info-list": {
+          "textAlign": "left",
+          "fontSize": "13px",
+          "lineHeight": "1.8",
+          "color": "#20374B"
+        },
+        ".basic-info-list span": {
+          "display": "inline-block",
+          "minWidth": "68px",
+          "color": "#667C8F"
+        }
+      }
+    },
+    "skills": {
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "color": "#4A90E2",
+        "borderBottom": "2px solid #4A90E2",
+        "paddingBottom": "6px",
+        "marginBottom": "12px"
+      },
+      "custom": {
+        ".skill-item": {
+          "marginBottom": "14px"
+        },
+        ".skill-name": {
+          "fontWeight": "600",
+          "fontSize": "13px",
+          "color": "#20374B",
+          "marginBottom": "6px"
+        },
+        ".skill-progress": {
+          "height": "6px",
+          "backgroundColor": "#dce5f2",
+          "borderRadius": "3px",
+          "overflow": "hidden"
+        },
+        ".skill-progress-bar": {
+          "height": "100%",
+          "backgroundColor": "#4A90E2",
+          "transition": "width .3s ease"
+        }
+      }
+    },
+    "awards": {
+      "title": {
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "color": "#4A90E2",
+        "borderBottom": "2px solid #4A90E2",
+        "paddingBottom": "6px",
+        "marginBottom": "12px"
+      },
+      "content": {
+        "fontSize": "13px",
+        "color": "#20374B"
+      }
+    },
+    "education": {
+      "title": {
+        "fontSize": "18px",
+        "fontWeight": "700",
+        "color": "#ffffff",
+        "backgroundColor": "#4A90E2",
+        "padding": "10px 18px",
+        "borderRadius": "4px"
+      },
+      "content": {
+        "fontSize": "14px",
+        "lineHeight": "1.7",
+        "color": "#20374B"
+      },
+      "items": {
+        "separator": {
+          "type": "solid",
+          "width": "1px",
+          "color": "#dce5f2",
+          "margin": "18px"
+        }
+      }
+    },
+    "experience": {
+      "title": {
+        "fontSize": "18px",
+        "fontWeight": "700",
+        "color": "#ffffff",
+        "backgroundColor": "#4A90E2",
+        "padding": "10px 18px",
+        "borderRadius": "4px"
+      },
+      "content": {
+        "fontSize": "14px",
+        "lineHeight": "1.7",
+        "color": "#20374B"
+      },
+      "items": {
+        "separator": {
+          "type": "solid",
+          "width": "1px",
+          "color": "#dce5f2",
+          "margin": "18px"
+        }
+      }
+    },
+    "summary": {
+      "title": {
+        "fontSize": "18px",
+        "fontWeight": "700",
+        "color": "#ffffff",
+        "backgroundColor": "#4A90E2",
+        "padding": "10px 18px",
+        "borderRadius": "4px"
+      },
+      "content": {
+        "fontSize": "14px",
+        "color": "#20374B",
+        "lineHeight": "1.7"
+      }
+    }
+  },
+  "profile": {
+    "basic": {
+      "name": "全民简历",
+      "title": "行政专员",
+      "age": "33岁",
+      "gender": "男",
+      "contacts": {
+        "phone": "15888888887",
+        "email": "qmjianli@qq.com",
+        "site": "上海"
+      },
+      "avatar": "https://cdn.jsdelivr.net/gh/ykdojo/avatars/peep-28.svg"
+    },
+    "summary": "工作积极主动，具备较强的组织协调能力与沟通能力，执行力强，善于团队协作，能够快速融入新环境。熟悉办公室行政流程，能够独立策划大型会议及活动，注重细节，学习能力强。"
+  },
+  "sections": [
+    {
+      "id": "basic-1",
+      "type": "basic",
+      "title": "基本信息",
+      "visible": true,
+      "order": 0,
+      "style": {
+        "column": "left"
+      },
+      "items": []
+    },
+    {
+      "id": "skills-1",
+      "type": "skills",
+      "title": "技能掌握",
+      "visible": true,
+      "order": 1,
+      "style": {
+        "column": "left"
+      },
+      "items": [
+        {
+          "name": "计算机",
+          "level": "精通",
+          "proficiency": 95
+        },
+        {
+          "name": "文档写作",
+          "level": "熟练",
+          "proficiency": 90
+        },
+        {
+          "name": "沟通协调",
+          "level": "熟练",
+          "proficiency": 92
+        }
+      ]
+    },
+    {
+      "id": "awards-1",
+      "type": "awards",
+      "title": "荣誉证书",
+      "visible": true,
+      "order": 2,
+      "style": {
+        "column": "left"
+      },
+      "items": [
+        {
+          "name": "优秀员工",
+          "description": "荣获公司年度优秀员工称号，连续三年保持部门最高绩效。"
+        },
+        {
+          "name": "服务明星",
+          "description": "多次在大型活动中担任总协调，获"服务明星"称号。"
+        }
+      ]
+    },
+    {
+      "id": "education-1",
+      "type": "education",
+      "title": "教育背景",
+      "visible": true,
+      "order": 0,
+      "style": {
+        "column": "right"
+      },
+      "items": [
+        {
+          "school": "全民简历师范大学",
+          "degree": "工商管理（本科）",
+          "major": "主修：综合管理、行政管理、公共关系、心理学等",
+          "duration": {
+            "start": "2012-09",
+            "end": "2016-07"
+          },
+          "gpa": "GPA 3.66/4（专业前15%）"
+        }
+      ]
+    },
+    {
+      "id": "experience-1",
+      "type": "experience",
+      "title": "工作经验",
+      "visible": true,
+      "order": 1,
+      "style": {
+        "column": "right"
+      },
+      "items": [
+        {
+          "company": "全民简历网络有限公司",
+          "position": "行政专员",
+          "duration": {
+            "start": "2018-09",
+            "end": "至今"
+          },
+          "desc": {
+            "html": "<ul><li>负责总部行政/人事管理流程建设，协助制定内部制度与工作指引；</li><li>统筹办公环境、物资采购、固定资产管理等日常行政工作；</li><li>组织大型会议、福利活动、员工培训，确保执行质量与反馈满意度；</li><li>配合财务、法务部门完成跨部门协作，确保各项流程合规、顺畅。</li></ul>"
+          }
+        },
+        {
+          "company": "上海掌堂网络科技有限公司",
+          "position": "行政专员",
+          "duration": {
+            "start": "2016-09",
+            "end": "2018-08"
+          },
+          "desc": {
+            "html": "<ul><li>负责公司行政后勤工作，协调各部门资源，推进行政项目落地；</li><li>组织年度团建、文体活动，并制定活动执行方案与预算；</li><li>推进企业文化宣传，制作宣传栏、月度简报及内部刊物；</li><li>管理办公物资、供应商资源及费用核销，提升行政运营效率。</li></ul>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "summary-1",
+      "type": "summary",
+      "title": "自我评价",
+      "visible": true,
+      "order": 2,
+      "style": {
+        "column": "right"
+      },
+      "items": [
+        {
+          "text": {
+            "html": "工作积极主动，具备较强的组织协调与沟通能力，执行力强，善于团队协作。熟悉办公室行政流程，能够独立策划大型会议及活动，注重细节。为人踏实稳重，心态成熟，学习能力强。"
+          }
+        }
+      ]
+    }
+  ],
+  "customCss": ".resume-renderer{position:relative;overflow:hidden;padding-top:140px;} .resume-renderer::before{content:'';position:absolute;top:0;left:0;right:0;height:120px;background:linear-gradient(135deg,#4A90E2 55%,#3B78C8 100%);} .resume-renderer .header-icons{position:absolute;top:36px;right:36px;display:flex;gap:14px;} .resume-renderer .header-icons span{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.2);color:#ffffff;display:inline-flex;align-items:center;justify-content:center;font-size:18px;}"
+}
+
