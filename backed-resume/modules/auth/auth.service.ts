@@ -9,6 +9,9 @@ import { Repository } from 'typeorm';
 import { Resume } from '../../entities/resume.entity';
 import { CUserProfile } from '../../entities/c-user-profile.entity';
 import { CUserEntitlement } from '../../entities/c-user-entitlement.entity';
+import { EmailAuthService } from './email-auth.service';
+import { EmailRegisterDto, EmailCodeLoginDto, ResetPasswordByEmailDto } from '../../dto/email-auth.dto';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -25,6 +28,8 @@ export class AuthService implements OnModuleInit {
     private cUserProfileRepository: Repository<CUserProfile>,
     @InjectRepository(CUserEntitlement)
     private cUserEntitlementRepository: Repository<CUserEntitlement>,
+    private readonly emailAuthService: EmailAuthService,
+    private readonly entitlementsService: EntitlementsService,
   ) {
     // 在构造函数中初始化 refresh token service
     this.refreshJwtService = new JwtService({
@@ -73,7 +78,13 @@ export class AuthService implements OnModuleInit {
 
   private issueTokens(payload: any, userId: number, type: 'admin' | 'cuser') {
     const access_token = this.buildAccessToken(payload);
-    const refresh_token = this.buildRefreshToken({ sub: userId, type });
+    const refresh_token = this.buildRefreshToken({
+      sub: userId,
+      type,
+      ...(type === 'cuser'
+        ? { tokenVersion: Number(payload.tokenVersion || 0) }
+        : {}),
+    });
     return { access_token, refresh_token };
   }
 
@@ -100,9 +111,9 @@ export class AuthService implements OnModuleInit {
           userId: cuser.id,
           planCode: 'free',
           accountWeight: 0,
-          aiFreeTotal: 20,
+          aiFreeTotal: 10,
           aiFreeUsed: 0,
-          aiFreeResetPolicy: 'never',
+          aiFreeResetPolicy: 'monthly',
           expireAt: null,
         });
       }
@@ -172,7 +183,15 @@ export class AuthService implements OnModuleInit {
       if (!user || user.status === 0) {
         throw new UnauthorizedException('用户不存在或已被禁用');
       }
-      const newPayload = { username: user.username, sub: user.id, type: 'cuser' };
+      if (Number(payload.tokenVersion || 0) !== Number(user.tokenVersion || 0)) {
+        throw new UnauthorizedException('登录状态已失效，请重新登录');
+      }
+      const newPayload = {
+        username: user.username,
+        sub: user.id,
+        type: 'cuser',
+        tokenVersion: user.tokenVersion || 0,
+      };
       const { access_token, refresh_token } = this.issueTokens(newPayload, user.id, 'cuser');
       return { access_token, refresh_token };
     } else {
@@ -209,14 +228,19 @@ export class AuthService implements OnModuleInit {
           userId: user.id,
           planCode: 'free',
           accountWeight: 0,
-          aiFreeTotal: 20,
+          aiFreeTotal: 10,
           aiFreeUsed: 0,
-          aiFreeResetPolicy: 'never',
+          aiFreeResetPolicy: 'monthly',
           expireAt: null,
         }),
       ]);
 
-      const payload = { username: user.username, sub: user.id, type: 'cuser' };
+      const payload = {
+        username: user.username,
+        sub: user.id,
+        type: 'cuser',
+        tokenVersion: user.tokenVersion || 0,
+      };
       const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'cuser');
 
       return {
@@ -246,7 +270,12 @@ export class AuthService implements OnModuleInit {
         throw new UnauthorizedException('用户已被禁用');
       }
 
-      const payload = { username: user.username, sub: user.id, type: 'cuser' };
+      const payload = {
+        username: user.username,
+        sub: user.id,
+        type: 'cuser',
+        tokenVersion: user.tokenVersion || 0,
+      };
       const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'cuser');
 
       return {
@@ -265,12 +294,108 @@ export class AuthService implements OnModuleInit {
   }
 
   async validateCUser(username: string, password: string): Promise<any> {
-    const user = await this.cUsersService.findByUsername(username);
+    const normalized = String(username || '').trim();
+    const user = normalized.includes('@')
+      ? await this.cUsersService.findByEmail(normalized)
+      : await this.cUsersService.findByUsername(normalized);
     if (user && await this.cUsersService.verifyPassword(user, password)) {
       const { password, ...result } = user;
       return result;
     }
     return null;
+  }
+
+  async registerWithEmail(dto: EmailRegisterDto) {
+    const email = dto.email.trim().toLowerCase();
+    await this.emailAuthService.consumeCode(email, 'register', dto.code);
+    if (await this.cUsersService.findByEmail(email)) {
+      throw new ConflictException('该邮箱已注册');
+    }
+
+    const username = await this.resolveAvailableUsername(dto.username, email);
+    const user = await this.cUsersService.create({
+      username,
+      password: dto.password,
+      email,
+      status: 1,
+    });
+    await Promise.all([
+      this.cUserProfileRepository.save({ userId: user.id }),
+      this.cUserEntitlementRepository.save({
+        userId: user.id,
+        planCode: 'free',
+        accountWeight: 0,
+        aiFreeTotal: 10,
+        aiFreeUsed: 0,
+        aiFreeResetPolicy: 'monthly',
+        expireAt: null,
+      }),
+      this.emailAuthService.bindEmailIdentity(user.id, email),
+    ]);
+    return this.buildCuserSession(user);
+  }
+
+  async loginWithEmailCode(dto: EmailCodeLoginDto) {
+    const email = dto.email.trim().toLowerCase();
+    await this.emailAuthService.consumeCode(email, 'login', dto.code);
+    const user = await this.cUsersService.findByEmail(email);
+    if (!user || user.status === 0) {
+      throw new UnauthorizedException('用户不存在或已被禁用');
+    }
+    await this.emailAuthService.bindEmailIdentity(user.id, email);
+    return this.buildCuserSession(user);
+  }
+
+  async resetPasswordByEmail(dto: ResetPasswordByEmailDto) {
+    const email = dto.email.trim().toLowerCase();
+    await this.emailAuthService.consumeCode(email, 'reset-password', dto.code);
+    const user = await this.cUsersService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('该邮箱尚未注册');
+    }
+    await this.cUsersService.updatePassword(user.id, dto.newPassword);
+    return { success: true };
+  }
+
+  async logoutCuserEverywhere(userId: number) {
+    await this.cUsersService.invalidateSessions(userId);
+    return { success: true };
+  }
+
+  private buildCuserSession(user: any) {
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      type: 'cuser',
+      tokenVersion: user.tokenVersion || 0,
+    };
+    const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'cuser');
+    return {
+      access_token,
+      refresh_token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+      },
+    };
+  }
+
+  private async resolveAvailableUsername(preferred: string | undefined, email: string) {
+    const base = (preferred || email.split('@')[0] || 'user')
+      .replace(/[^\w-]/g, '')
+      .slice(0, 24) || 'user';
+    if (!(await this.cUsersService.findByUsername(base))) {
+      return base;
+    }
+    for (let index = 1; index <= 100; index += 1) {
+      const candidate = `${base.slice(0, 24)}${String(index).padStart(2, '0')}`;
+      if (!(await this.cUsersService.findByUsername(candidate))) {
+        return candidate;
+      }
+    }
+    return `user${Date.now()}`;
   }
 
   async getCuserProfile(userId: number) {
@@ -283,9 +408,9 @@ export class AuthService implements OnModuleInit {
     const user = await this.cUsersService.findOne(userId);
     const { password, ...safeUser } = user as any;
 
-    let [profile, entitlements, lastEditedResume] = await Promise.all([
+    let [profile, entitlementSummary, lastEditedResume] = await Promise.all([
       this.cUserProfileRepository.findOne({ where: { userId } }),
-      this.cUserEntitlementRepository.findOne({ where: { userId } }),
+      this.entitlementsService.getSummary(userId),
       this.resumeRepository.findOne({
         where: { userId, status: 1 },
         order: { updateTime: 'DESC' },
@@ -296,27 +421,10 @@ export class AuthService implements OnModuleInit {
     if (!profile) {
       profile = await this.cUserProfileRepository.save({ userId });
     }
-    if (!entitlements) {
-      entitlements = await this.cUserEntitlementRepository.save({
-        userId,
-        planCode: 'free',
-        accountWeight: 0,
-        aiFreeTotal: 20,
-        aiFreeUsed: 0,
-        aiFreeResetPolicy: 'never',
-        expireAt: null,
-      });
-    }
-
-    const aiFreeRemaining = Math.max((entitlements.aiFreeTotal ?? 0) - (entitlements.aiFreeUsed ?? 0), 0);
-
     return {
       user: safeUser,
       profile,
-      entitlements: {
-        ...entitlements,
-        aiFreeRemaining,
-      },
+      entitlements: entitlementSummary,
       lastEditedResume: lastEditedResume
         ? {
             id: lastEditedResume.id,

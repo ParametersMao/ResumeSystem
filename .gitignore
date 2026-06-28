@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.runtime-agent-venv/
 
 # Build output
 dist/
@@ -12,11 +13,25 @@ coverage/
 *.err.log
 runtime-logs/
 .playwright-cli/
+backups/
+uploads/
+backed-resume/uploads/
+
+# Generated TypeScript/Vue artifacts
+fronted-resume-web/src/**/*.js
+fronted-resume-web/vite.config.js
+fronted-resume-web/vite.config.d.ts
 
 # Local environment files
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+!.env.docker.example
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
+.cursor/
+.cursor.json

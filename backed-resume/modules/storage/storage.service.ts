@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as OSS from 'ali-oss';
-import { mkdir, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
+import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { dirname, join, resolve, sep } from 'path';
 
 export interface UploadObjectInput {
   key: string;
@@ -80,7 +80,7 @@ export class StorageService {
     }
 
     const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    const targetPath = join(process.cwd(), uploadRoot, key);
+    const targetPath = resolveLocalObjectPath(uploadRoot, key);
     await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(targetPath, input.body);
 
@@ -91,6 +91,37 @@ export class StorageService {
       url: publicBaseUrl ? `${publicBaseUrl}${localUrl}` : localUrl,
       provider: 'local',
     };
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    const safeKey = sanitizeObjectKey(key);
+    if (this.r2Client && this.r2Bucket) {
+      await this.r2Client.send(new DeleteObjectCommand({ Bucket: this.r2Bucket, Key: safeKey }));
+      return;
+    }
+    if (this.ossClient) {
+      await this.ossClient.delete(safeKey);
+      return;
+    }
+    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
+    await rm(resolveLocalObjectPath(uploadRoot, safeKey), { force: true });
+  }
+
+  async downloadObject(key: string): Promise<Buffer> {
+    const safeKey = sanitizeObjectKey(key);
+    if (this.r2Client && this.r2Bucket) {
+      const result = await this.r2Client.send(
+        new GetObjectCommand({ Bucket: this.r2Bucket, Key: safeKey }),
+      );
+      if (!result.Body) throw new Error('对象存储未返回文件内容');
+      return Buffer.from(await result.Body.transformToByteArray());
+    }
+    if (this.ossClient) {
+      const result = await this.ossClient.get(safeKey);
+      return Buffer.isBuffer(result.content) ? result.content : Buffer.from(result.content);
+    }
+    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
+    return readFile(resolveLocalObjectPath(uploadRoot, safeKey));
   }
 }
 
@@ -124,11 +155,26 @@ function normalizeS3Endpoint(endpoint: string, bucket: string): string {
 }
 
 function sanitizeObjectKey(key: string): string {
-  return key
+  const safeKey = key
     .replace(/\\/g, '/')
     .replace(/^\/+/, '')
     .split('/')
     .filter(Boolean)
     .map((part) => part.replace(/[^a-zA-Z0-9._-]/g, '-'))
     .join('/');
+
+  if (!safeKey) {
+    throw new Error('Invalid object key');
+  }
+
+  return safeKey;
+}
+
+function resolveLocalObjectPath(uploadRoot: string, key: string): string {
+  const root = resolve(process.cwd(), uploadRoot);
+  const target = resolve(root, key);
+  if (target !== root && !target.startsWith(root + sep)) {
+    throw new Error('Invalid object key path');
+  }
+  return target;
 }

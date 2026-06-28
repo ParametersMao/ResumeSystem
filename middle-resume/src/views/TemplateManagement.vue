@@ -611,92 +611,55 @@ const handleEdit = (row: Template) => {
   dialogVisible.value = true
 }
 
-// 褰撳墠棰勮鐨勬ā鏉挎暟鎹?
+// 当前预览的模板数据
 const currentTemplateData = ref({})
-// 鐢熸垚鐨?HTML 鍐呭
+// 生成的 HTML 内容
 const generatedHtml = ref('')
 const currentSpecJson = computed(() => JSON.stringify(TEMPLATE_SPEC_MAP[specVariant.value], null, 2))
 
-// 棰勮妯℃澘
+function parseTemplateData(templateData: unknown): Record<string, any> {
+  if (!templateData) {
+    return {}
+  }
+
+  if (typeof templateData !== 'string') {
+    return templateData as Record<string, any>
+  }
+
+  const candidates = [
+    templateData,
+    templateData
+      .replace(/^\s+/, '')
+      .replace(/\s+$/, '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000\ufeff]/g, ' ')
+      .trim(),
+  ]
+
+  const firstBraceIndex = templateData.indexOf('{')
+  if (firstBraceIndex > 0) {
+    candidates.push(templateData.substring(firstBraceIndex))
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      // Try the next tolerant parsing strategy.
+    }
+  }
+
+  throw new Error('模板 JSON 解析失败')
+}
+
+// 预览模板
 const handlePreview = async (row: Template) => {
   try {
-    // 通过API鑾峰彇瀹屾暣鐨勬ā鏉胯鎯呮暟鎹?
     const response = await getTemplateDetail(row.id)
-    console.log('API响应数据:', response) // 调试日志
-    
-    // 根据API响应格式解析数据
     const templateDetail = response.data?.data || response.data
-    console.log('模板详情:', templateDetail) // 调试日志
-    
-    // 解析模板数据
-    let templateDataObj
-    if (templateDetail.templateData) {
-      console.log('鍘熷templateData:', templateDetail.templateData) // 调试日志
-      console.log('templateData类型:', typeof templateDetail.templateData) // 调试日志
-      console.log('templateData长度:', templateDetail.templateData.length) // 调试日志
-      
-      if (typeof templateDetail.templateData === 'string') {
-        try {
-          // 鍏堝皾璇曠洿鎺ヨВ鏋?
-          templateDataObj = JSON.parse(templateDetail.templateData)
-          console.log('绗竴娆¤В鏋愭垚鍔?', templateDataObj) // 调试日志
-        } catch (parseError) {
-          console.error('绗竴娆SON解析失败:', parseError)
-          console.error('瑙ｆ瀽澶辫触鐨勫瓧绗︿覆鍓?00涓瓧绗?', templateDetail.templateData.substring(0, 100)) // 调试日志
-          
-          // 灏濊瘯娓呯悊瀛楃涓插悗鍐嶈В鏋?
-          try {
-            let cleanedString = templateDetail.templateData
-              .replace(/^\s+/, '') // 绉婚櫎寮€澶寸殑鎵€鏈夌┖鐧藉瓧绗?
-              .replace(/\s+$/, '') // 绉婚櫎缁撳熬鐨勬墍鏈夌┖鐧藉瓧绗?
-              .replace(/[\u200B-\u200D\uFEFF]/g, '') // 绉婚櫎闆跺瀛楃
-              .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000\ufeff]/g, ' ') // 绉婚櫎鍚勭绌烘牸瀛楃
-              .trim() // 鍐嶆绉婚櫎棣栧熬绌烘牸
-            
-            console.log('娓呯悊鍚庣殑瀛楃涓插墠100涓瓧绗?', cleanedString.substring(0, 100)) // 调试日志
-            console.log('娓呯悊鍚庣殑瀛楃涓插墠10涓瓧绗︾殑ASCII鐮?', Array.from(cleanedString.substring(0, 10)).map((c: any) => (c as string).charCodeAt(0))) // 调试日志
-            
-            templateDataObj = JSON.parse(cleanedString)
-            console.log('娓呯悊鍚庤В鏋愭垚鍔?', templateDataObj) // 调试日志
-          } catch (cleanParseError) {
-            console.error('清理后JSON解析仍然失败:', cleanParseError)
-            
-            // 鏈€鍚庡皾璇曪細鎵惧埌绗竴涓?{ 瀛楃锛屼粠閭ｉ噷寮€濮嬫埅鍙?
-            try {
-              const firstBraceIndex = templateDetail.templateData.indexOf('{')
-              if (firstBraceIndex > 0) {
-                console.log('鎵惧埌绗竴涓獅瀛楃浣嶇疆:', firstBraceIndex) // 调试日志
-                const truncatedString = templateDetail.templateData.substring(firstBraceIndex)
-                console.log('鎴彇鍚庣殑瀛楃涓插墠100涓瓧绗?', truncatedString.substring(0, 100)) // 调试日志
-                templateDataObj = JSON.parse(truncatedString)
-                console.log('鎴彇鍚庤В鏋愭垚鍔?', templateDataObj) // 调试日志
-              } else {
-                templateDataObj = {}
-              }
-            } catch (truncateParseError) {
-              console.error('鎴彇鍚嶫SON解析仍然失败:', truncateParseError)
-              templateDataObj = {}
-            }
-          }
-        }
-      } else {
-        templateDataObj = templateDetail.templateData
-      }
-    } else {
-      templateDataObj = {}
-    }
-    
-    console.log('解析后的模板数据:', templateDataObj) // 调试日志
-    console.log('模板数据类型:', typeof templateDataObj) // 调试日志
-    console.log('模板数据keys:', Object.keys(templateDataObj)) // 调试日志
+    const templateDataObj = parseTemplateData(templateDetail.templateData)
     currentTemplateData.value = templateDataObj
-    
-    // 鐢熸垚棰勮 HTML - 浼犻€掕В鏋愬悗鐨則emplateData锛岃€屼笉鏄暣涓ā鏉垮璞?
     generatePreviewHtml(templateDataObj)
-    
-    console.log('生成的HTML长度:', generatedHtml.value.length) // 调试日志
-    console.log('currentTemplateData keys:', Object.keys(currentTemplateData.value)) // 调试日志
-    
     previewVisible.value = true
   } catch (error) {
     ElMessage.error('获取模板详情失败，无法预览')
@@ -704,19 +667,14 @@ const handlePreview = async (row: Template) => {
   }
 }
 
-// 鐢熸垚棰勮 HTML
+// 生成预览 HTML
 const generatePreviewHtml = (templateData: any) => {
   try {
-    // 鏀寔鏂版棫涓ょ鏁版嵁缁撴瀯
+    // 支持新旧两种模板数据结构
     let profile: any, sections, globalStyles, colors: { primary: string; text: string; secondary: string; background: string }, fonts, spacing: any;
-    
-    console.log('generatePreviewHtml 接收到的数据:', templateData) // 调试日志
-    console.log('profile 存在:', !!templateData?.profile) // 调试日志
-    console.log('sections 存在:', !!templateData?.sections) // 调试日志
-    console.log('sections 类型:', Array.isArray(templateData?.sections)) // 调试日志
-    
+
     if (templateData?.profile && Array.isArray(templateData?.sections)) {
-      // 鏂版暟鎹粨鏋勶細profile + sections数组
+      // 新数据结构：profile + sections 数组
       profile = templateData.profile;
       sections = templateData.sections;
       globalStyles = templateData.globalStyles || {};
@@ -725,13 +683,8 @@ const generatePreviewHtml = (templateData: any) => {
         : { primary: '#3498db', text: '#2c3e50', secondary: '#f0f8ff', background: '#ffffff' };
       fonts = globalStyles.fontFamily ? { body: globalStyles.fontFamily } : { body: 'Arial, sans-serif' };
       spacing = globalStyles.paragraphSpacing ? { sectionMargin: globalStyles.paragraphSpacing, elementMargin: globalStyles.elementSpacing || '10px' } : { sectionMargin: '25px', elementMargin: '15px' };
-      
-      console.log('using new template schema') // 调试日志
-      console.log('profile:', profile) // 调试日志
-      console.log('sections:', sections) // 调试日志
-      console.log('globalStyles:', globalStyles) // 调试日志
     } else {
-      // 鏃ф暟鎹粨鏋勶細styles + sections对象
+      // 旧数据结构：styles + sections 对象
       const styles = templateData?.styles || {};
       sections = templateData?.sections || {};
       colors = styles.colors || { primary: '#3498db', secondary: '#f0f8ff', text: '#2c3e50', background: '#ffffff' };
@@ -752,7 +705,7 @@ const generatePreviewHtml = (templateData: any) => {
         summary: '拥有5年前端开发经验，专注 React 和 Vue，擅长构建高性能、可扩展的 Web 应用。',
         experience: [
           {
-            company: 'ABC绉戞妧鏈夐檺鍏徃',
+            company: 'ABC科技有限公司',
             role: '高级前端工程师',
             start: '2020-06',
             end: '至今',
@@ -798,7 +751,7 @@ const generatePreviewHtml = (templateData: any) => {
       };
     }
 
-    // 从profile涓彁鍙栨暟鎹?
+    // 从 profile 中提取数据
     const basic = profile?.basic || {};
     const contacts = basic.contacts || {};
     const summary = profile?.summary || '';
@@ -810,7 +763,7 @@ const generatePreviewHtml = (templateData: any) => {
     // 澶勭悊鏂版暟鎹粨鏋勭殑sections数组
     let sectionsConfig: Record<string, any> = {};
     if (Array.isArray(sections)) {
-      // 新结构：sections鏄暟缁勶紝杞崲涓洪厤缃璞?
+      // 新结构：sections 是数组，转换为配置对象
       sections.forEach(section => {
         if (section.type && section.config) {
           sectionsConfig[section.type] = section.config;
@@ -821,7 +774,7 @@ const generatePreviewHtml = (templateData: any) => {
       sectionsConfig = sections as Record<string, any>;
     }
     
-    // 鑾峰彇鍚勯儴鍒嗛厤缃?
+    // 获取各部分配置
     const headerConfig = sectionsConfig.header || {};
     const summaryConfig = sectionsConfig.summary || {};
     const skillsConfig = sectionsConfig.skills || {};
@@ -842,7 +795,7 @@ const generatePreviewHtml = (templateData: any) => {
        color: ${headerConfig.elements[1].color || colors.text};` :
       `font-size: 18px; font-weight: 400; color: ${colors.text};`;
 
-    // 鐢熸垚鏍囬鏍峰紡鍑芥暟
+    // 生成标题样式函数
     const getSectionTitleStyle = (sectionConfig: any) => {
       const titleStyle = sectionConfig.titleStyle || {};
       return `font-size: ${titleStyle.fontSize || '22px'}; 
@@ -853,20 +806,20 @@ const generatePreviewHtml = (templateData: any) => {
               margin-bottom: ${spacing.elementMargin || '15px'};`;
     };
     
-        // 生成HTML鍐呭
+    // 生成 HTML 内容
     let htmlContent = '';
     
-    // 澶勭悊鏂版暟鎹粨鏋勶細閬嶅巻sections数组，按order排序
+    // 处理新数据结构：遍历 sections 数组，按 order 排序
     if (Array.isArray(sections)) {
       const sortedSections = [...sections].sort((a, b) => (a.order || 0) - (b.order || 0));
       
       sortedSections.forEach(section => {
-        if (section.visible === false) return; // 璺宠繃闅愯棌鐨勬ā鍧?
+        if (section.visible === false) return; // 跳过隐藏模块
         
         const sectionStyle = section.style || {};
         const sectionConfig = section.config || {};
         
-        // 鏍规嵁妯″潡绫诲瀷鐢熸垚鍐呭
+        // 根据模块类型生成内容
         switch (section.type) {
           case 'basic':
             if (profile?.basic) {
@@ -874,11 +827,11 @@ const generatePreviewHtml = (templateData: any) => {
               const contacts = basic.contacts || {};
               htmlContent += `
                 <div style="margin: ${spacing.sectionMargin || '25px'} 0; ${sectionStyle.gridColumn ? `grid-column: ${sectionStyle.gridColumn};` : ''}">
-                  <div style="${getSectionTitleStyle(sectionConfig)}">${sectionConfig.title || '涓汉淇℃伅'}</div>
+                  <div style="${getSectionTitleStyle(sectionConfig)}">${sectionConfig.title || '个人信息'}</div>
                   <div style="padding: ${sectionStyle.padding || '0'};">
                     <div style="text-align: center; margin-bottom: 15px;">
                       <div style="font-size: 24px; font-weight: 600; color: ${colors.primary}; margin-bottom: 8px;">${basic.name || '姓名'}</div>
-                      <div style="font-size: 18px; color: ${colors.text || '#333'}; margin-bottom: 8px;">${basic.title || 'ְλ'}</div>
+                      <div style="font-size: 18px; color: ${colors.text || '#333'}; margin-bottom: 8px;">${basic.title || '职位'}</div>
                     </div>
                     <div style="text-align: center; font-size: 14px; color: ${colors.text || '#333'}; opacity: 0.8;">
                       ${contacts.email || ''} ${contacts.phone ? '· ' + contacts.phone : ''} ${contacts.site ? '· ' + contacts.site : ''}
@@ -886,11 +839,11 @@ const generatePreviewHtml = (templateData: any) => {
                   </div>
                 </div>`;
               
-              // 如果有summary，也在basic妯″潡涓樉绀?
+              // 如果有 summary，也在 basic 模块中显示
               if (profile.summary) {
                 htmlContent += `
                   <div style="margin: ${spacing.sectionMargin || '25px'} 0; ${sectionStyle.gridColumn ? `grid-column: ${sectionStyle.gridColumn};` : ''}">
-                    <div style="${getSectionTitleStyle({ title: '涓汉姒傝堪' })}">涓汉姒傝堪</div>
+                    <div style="${getSectionTitleStyle({ title: '个人概述' })}">个人概述</div>
                     <div style="padding: ${sectionStyle.padding || '0'}; font-size: 15px; line-height: 1.6; color: ${colors.text || '#333'};">
                       ${profile.summary}
                     </div>
@@ -946,7 +899,7 @@ const generatePreviewHtml = (templateData: any) => {
                           ${edu.school || '学校名称'}
                         </div>
                         <div style="font-size: 16px; color: ${colors.text || '#333'}; margin: 5px 0;">
-                          ${edu.degree || 'ѧλרҵ'}
+                          ${edu.degree || '学位专业'}
                         </div>
                         <div style="font-size: 14px; color: ${colors.text || '#333'}; opacity: 0.7;">
                           ${edu.duration?.start || ''} - ${edu.duration?.end || ''}
@@ -967,10 +920,10 @@ const generatePreviewHtml = (templateData: any) => {
                     ${section.items.map((exp: any) => `
                       <div style="margin: ${spacing.elementMargin || '15px'} 0;">
                         <div style="font-size: 18px; font-weight: 600; color: ${colors.text || '#333'};">
-                          ${exp.company || '鍏徃鍚嶇О'}
+                          ${exp.company || '公司名称'}
                         </div>
                         <div style="font-size: 16px; color: ${colors.primary}; margin: 5px 0;">
-                          ${exp.role || 'ְλ'}
+                          ${exp.role || '职位'}
                         </div>
                         <div style="font-size: 14px; color: ${colors.text || '#333'}; opacity: 0.7; margin: 5px 0;">
                           ${exp.duration?.start || ''} - ${exp.duration?.end || ''}
@@ -1014,7 +967,7 @@ const generatePreviewHtml = (templateData: any) => {
             
           case 'awards':
             if (section.items && section.items.length > 0) {
-              // 妫€鏌ユ槸鍚﹂厤缃簡缃戞牸鍒楁暟
+              // 检查是否配置了网格列数
               const gridCols = sectionConfig.gridTemplateColumns || 'repeat(2, 1fr)';
               htmlContent += `
                 <div style="margin: ${spacing.sectionMargin || '25px'} 0; ${sectionStyle.gridColumn ? `grid-column: ${sectionStyle.gridColumn};` : ''}">
@@ -1067,7 +1020,7 @@ const generatePreviewHtml = (templateData: any) => {
       });
     }
     
-    // 濡傛灉娌℃湁鏂版暟鎹粨鏋勶紝浣跨敤鏃х殑HTML生成逻辑
+    // 如果没有新数据结构，使用旧的 HTML 生成逻辑
     if (!htmlContent) {
       htmlContent = `
         <!-- 头部信息 -->
@@ -1080,10 +1033,10 @@ const generatePreviewHtml = (templateData: any) => {
             </div>
         </div>` : ''}
 
-        <!-- 涓汉姒傝堪 -->
+        <!-- 个人概述 -->
         ${summaryConfig.enabled !== false && summary ? `
         <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
-          <div style="${getSectionTitleStyle(summaryConfig)}">${summaryConfig.title || '涓汉姒傝堪'}</div>
+          <div style="${getSectionTitleStyle(summaryConfig)}">${summaryConfig.title || '个人概述'}</div>
           <div style="font-size: ${summaryConfig.contentStyle?.fontSize || '15px'}; 
                       line-height: ${summaryConfig.contentStyle?.lineHeight || '1.6'}; 
                       color: ${colors.text};">
@@ -1091,7 +1044,7 @@ const generatePreviewHtml = (templateData: any) => {
           </div>
         </div>` : ''}
 
-        <!-- 涓撲笟鎶€鑳?-->
+        <!-- 专业技能 -->
         ${skillsConfig.enabled !== false && skills.length ? `
         <div style="margin: ${spacing.sectionMargin || '25px'} 0;">
           <div style="${getSectionTitleStyle(skillsConfig)}">${skillsConfig.title || '专业技能'}</div>
@@ -1119,7 +1072,7 @@ const generatePreviewHtml = (templateData: any) => {
               <div style="font-size: ${experienceConfig.itemStyle?.company?.fontSize || '18px'}; 
                           font-weight: ${experienceConfig.itemStyle?.company?.fontWeight || '600'}; 
                           color: ${experienceConfig.itemStyle?.company?.color || colors.text};">
-                ${e.company || '绀轰緥鍏徃A'}
+                ${e.company || '示例公司 A'}
               </div>
               <div style="font-size: ${experienceConfig.itemStyle?.position?.fontSize || '16px'}; 
                           font-weight: ${experienceConfig.itemStyle?.position?.fontWeight || '500'}; 
@@ -1179,12 +1132,12 @@ const generatePreviewHtml = (templateData: any) => {
               <div style="font-size: ${educationConfig.itemStyle?.institution?.fontSize || '18px'}; 
                           font-weight: ${educationConfig.itemStyle?.institution?.fontWeight || '600'}; 
                           color: ${educationConfig.itemStyle?.institution?.color || colors.text};">
-                ${ed.school || '鍖椾含澶у'}
+                ${ed.school || '北京大学'}
               </div>
               <div style="font-size: ${educationConfig.itemStyle?.degree?.fontSize || '16px'}; 
                           font-weight: ${educationConfig.itemStyle?.degree?.fontWeight || '500'}; 
                           color: ${educationConfig.itemStyle?.degree?.color || colors.primary};">
-                ${ed.degree || '璁＄畻鏈虹瀛?鏈'}
+                ${ed.degree || '计算机科学 本科'}
             </div>
               <div style="font-size: ${educationConfig.itemStyle?.date?.fontSize || '14px'}; 
                           color: ${educationConfig.itemStyle?.date?.color || colors.text}; 
@@ -1197,7 +1150,7 @@ const generatePreviewHtml = (templateData: any) => {
       `;
     }
     
-    // 鍒ゆ柇鏄惁浣跨敤缃戞牸甯冨眬锛堝彧鏈夋柊鏁版嵁缁撴瀯涓旀槑纭缃簡gridColumn鐨勬ā鍧楁墠浣跨敤锛?
+    // 判断是否使用网格布局：只有新数据结构且明确设置 gridColumn 的模块才使用
     const useGridLayout = Array.isArray(sections) && sections.some(section => section.style?.gridColumn);
     
     const html = `
@@ -1220,7 +1173,7 @@ const generatePreviewHtml = (templateData: any) => {
   }
 }
 
-// 鏄剧ず棰勮鍥?
+// 显示预览图
 const showPreviewImage = (row: Template) => {
   if (row.previewImage) {
     currentPreviewImage.value = row.previewImage
@@ -1228,7 +1181,7 @@ const showPreviewImage = (row: Template) => {
   }
 }
 
-// 鍒囨崲鐘舵€?
+// 切换状态
 const handleToggleStatus = async (row: Template) => {
   try {
     await ElMessageBox.confirm(

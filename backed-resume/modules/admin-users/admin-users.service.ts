@@ -115,7 +115,6 @@ export class AdminUsersService {
   }
 
   async findByUsername(username: string): Promise<AdminUser | null> {
-    console.log('findByUsername called', username);
     return this.adminUserRepository.findOne({ where: { username } });
   }
 

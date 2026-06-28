@@ -56,7 +56,7 @@ export interface AiOperation {
   id: number
   userId: number
   username: string
-  operationType: 'polish' | 'generate'
+  operationType: 'polish' | 'generate' | 'diagnose' | 'agent-polish' | 'agent-generate' | 'agent-diagnose'
   inputData: string
   outputData: string
   status: 'success' | 'failed' | 'processing'
@@ -183,10 +183,24 @@ export interface EmailConfig {
   fromName: string
   fromEmail: string
   encryption: 'none' | 'ssl' | 'tls'
+  smtpPassConfigured?: boolean
 }
 
 export interface AiConfig {
-  provider: string
+  executionEngine: 'direct' | 'agent'
+  agentBaseUrl: string
+  provider:
+    | 'mock'
+    | 'openai-compatible'
+    | 'openai'
+    | 'deepseek'
+    | 'qwen'
+    | 'glm'
+    | 'moonshot'
+    | 'doubao'
+    | 'langgraph-agent'
+    | 'custom'
+    | string
   apiBaseUrl: string
   apiKey: string
   apiModel: string
@@ -196,6 +210,7 @@ export interface AiConfig {
   enabled: boolean
   polishPromptTemplate: string
   generatePromptTemplate: string
+  apiKeyConfigured?: boolean
 }
 
 export interface SystemConfigData {

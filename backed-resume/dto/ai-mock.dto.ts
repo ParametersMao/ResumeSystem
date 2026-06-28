@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class AiPolishDto {
   @IsString()
@@ -30,5 +30,46 @@ export class AiGenerateDto {
   @IsString()
   @MaxLength(4000)
   contextText?: string;
+}
+
+export class AiDiagnoseDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  resumeId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sectionType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  jobTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  templateVariant?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  selectedText?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  contentText?: string;
+
+  @IsOptional()
+  @IsObject()
+  content?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  userInstruction?: string;
 }
 

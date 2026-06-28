@@ -1,9 +1,12 @@
-import { Controller, Get, Post, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AiOperationsService } from './ai-operations.service';
 import { CreateAiOperationDto, AiOperationQueryDto, AiOperationResponseDto } from '../../dto/ai-operation.dto';
 import { PaginatedApiResponse, ApiResponse } from '../../common/interfaces/pagination.interface';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminOnlyGuard } from '../auth/admin-only.guard';
 
 @Controller('api/ai-operations')
+@UseGuards(JwtAuthGuard, AdminOnlyGuard)
 export class AiOperationsController {
   constructor(private readonly aiOperationsService: AiOperationsService) {}
 
@@ -74,4 +77,4 @@ export class AiOperationsController {
       data: statistics,
     };
   }
-} 
+}

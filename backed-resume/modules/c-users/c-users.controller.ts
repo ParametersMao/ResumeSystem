@@ -1,10 +1,13 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Patch, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { CUsersService } from './c-users.service';
 import { CreateCUserDto, UpdateCUserDto, UpdateCUserStatusDto, CUserResponseDto } from '../../dto/c-user.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedApiResponse, ApiResponse } from '../../common/interfaces/pagination.interface';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminOnlyGuard } from '../auth/admin-only.guard';
 
 @Controller('api/cusers')
+@UseGuards(JwtAuthGuard, AdminOnlyGuard)
 export class CUsersController {
   constructor(private readonly cUsersService: CUsersService) {}
 
@@ -90,4 +93,4 @@ export class CUsersController {
       data: null,
     };
   }
-} 
+}

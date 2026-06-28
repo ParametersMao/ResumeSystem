@@ -9,6 +9,8 @@ import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { Resume } from '../../entities/resume.entity';
 import { CUserProfile } from '../../entities/c-user-profile.entity';
 import { CUserEntitlement } from '../../entities/c-user-entitlement.entity';
+import { EmailAuthService } from './email-auth.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import * as bcrypt from 'bcrypt';
 
 // Mock bcrypt
@@ -64,6 +66,15 @@ describe('AuthService', () => {
     save: jest.fn(),
   };
 
+  const mockEmailAuthService = {
+    consumeCode: jest.fn(),
+    bindEmailIdentity: jest.fn(),
+  };
+
+  const mockEntitlementsService = {
+    getSummary: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -91,6 +102,14 @@ describe('AuthService', () => {
         {
           provide: getRepositoryToken(CUserEntitlement),
           useValue: mockRepository,
+        },
+        {
+          provide: EmailAuthService,
+          useValue: mockEmailAuthService,
+        },
+        {
+          provide: EntitlementsService,
+          useValue: mockEntitlementsService,
         },
       ],
     }).compile();

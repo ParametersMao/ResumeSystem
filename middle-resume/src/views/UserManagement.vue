@@ -120,6 +120,9 @@
         <el-form-item label="用户名" prop="username">
           <el-input v-model="form.username" placeholder="请输入用户名" />
         </el-form-item>
+        <el-form-item v-if="form.id === 0" label="密码" prop="password">
+          <el-input v-model="form.password" type="password" placeholder="请输入初始密码" show-password />
+        </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="请输入邮箱" />
         </el-form-item>
@@ -229,6 +232,7 @@ const formRef = ref<FormInstance>()
 const form = reactive({
   id: 0,
   username: '',
+  password: '',
   email: '',
   phone: '',
   role: 'viewer' as const,
@@ -239,6 +243,14 @@ const form = reactive({
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入初始密码', trigger: 'blur' },
+    {
+      pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+      message: '密码至少 8 位，并包含大小写字母和数字',
+      trigger: 'blur'
+    }
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
@@ -299,6 +311,7 @@ const handleAdd = () => {
   Object.assign(form, {
     id: 0,
     username: '',
+    password: '',
     email: '',
     phone: '',
     role: 'viewer' as const,
@@ -310,7 +323,7 @@ const handleAdd = () => {
 // 编辑用户
 const handleEdit = (row: User) => {
   dialogTitle.value = '编辑用户'
-  Object.assign(form, row)
+  Object.assign(form, row, { password: '' })
   dialogVisible.value = true
 }
 
@@ -359,7 +372,7 @@ const handleSubmit = async () => {
       // 新增
       await createUser({
         username: form.username,
-        password: '123456', // 默认密码
+        password: form.password,
         email: form.email,
         phone: form.phone, // 补充手机号
         user_type: form.role

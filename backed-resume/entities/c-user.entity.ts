@@ -28,4 +28,7 @@ export class CUser {
 
   @Column({ type: 'int', default: 0, name: 'ai_operation_count' })
   aiOperationCount: number;
-} 
+
+  @Column({ type: 'int', default: 0, name: 'token_version' })
+  tokenVersion: number;
+}

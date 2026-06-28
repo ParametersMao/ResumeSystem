@@ -1,18 +1,19 @@
-import { IsString, IsOptional, IsNumber, IsInt, Min } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class CreateResumeDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
   title: string;
 
   @IsString()
+  @IsNotEmpty()
   content: string;
 
   @IsOptional()
   @IsInt()
+  @Min(1)
   templateId?: number;
-
-  @IsInt()
-  userId: number;
 
   @IsOptional()
   @IsString()
@@ -22,6 +23,7 @@ export class CreateResumeDto {
 export class UpdateResumeDto {
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   title?: string;
 
   @IsOptional()
@@ -30,6 +32,7 @@ export class UpdateResumeDto {
 
   @IsOptional()
   @IsInt()
+  @Min(1)
   templateId?: number;
 
   @IsOptional()
@@ -38,6 +41,7 @@ export class UpdateResumeDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
   version?: number;
 }
 

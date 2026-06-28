@@ -35,7 +35,6 @@ export function useTable<T>(options: UseTableOptions<T>) {
         ...searchParams.value
       }
       
-      console.log('发送的请求参数:', params);
       const response = await fetchData(params)
       // 响应拦截器已解包，response 就是 ApiResponse<T>
       const data = response.data as any

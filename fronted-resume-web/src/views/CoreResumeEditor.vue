@@ -261,6 +261,7 @@
           <el-button @click="createManualVersion" :loading="creatingVersion">保存为版本</el-button>
           <el-button @click="openVersionDrawer" :disabled="!currentResume">版本记录</el-button>
           <el-button @click="openTemplateCenter">更换模板</el-button>
+          <el-button @click="openAiDiagnose" :loading="aiDiagnosing">AI 深度诊断</el-button>
           <el-button @click="saveResume" :loading="saveStatus === 'saving'">保存</el-button>
           <el-button type="primary" @click="exportPdf" :loading="exportingPdf">导出为 PDF</el-button>
         </div>
@@ -422,6 +423,89 @@
           </div>
         </div>
       </div>
+    </el-dialog>
+
+    <el-dialog
+      v-model="aiDiagnoseVisible"
+      title="AI 深度诊断"
+      width="880px"
+      destroy-on-close
+    >
+      <div v-loading="aiDiagnosing" class="ai-diagnose-dialog">
+        <div class="ai-mode-tip">
+          <span class="ai-mode-tag">Agent Loop</span>
+          <p>系统会按“感知、分析、规划、执行、校验”的流程诊断当前简历，结果会进入 AI 操作日志并消耗一次 AI 权益。</p>
+        </div>
+
+        <el-empty
+          v-if="!aiDiagnosing && !aiDiagnoseResult"
+          description="点击重新诊断生成当前简历的深度分析"
+        />
+
+        <template v-if="aiDiagnoseResult">
+          <div class="ai-runtime-meta ai-diagnose-meta">
+            <span class="card-badge">{{ aiDiagnoseResult.provider || 'Agent' }}</span>
+            <span v-if="aiDiagnoseResult.model" class="card-badge ai-runtime-badge">{{ aiDiagnoseResult.model }}</span>
+            <span v-if="aiDiagnoseResult.executionMode" class="card-badge ai-runtime-badge">{{ aiDiagnoseResult.executionMode }}</span>
+            <span class="card-badge">消耗 {{ aiDiagnoseResult.tokenUsed || 0 }} tokens</span>
+          </div>
+
+          <section class="ai-diagnose-section">
+            <h4>诊断结论</h4>
+            <ul v-if="aiDiagnoseResult.diagnostics?.length" class="ai-diagnose-list">
+              <li v-for="item in aiDiagnoseResult.diagnostics" :key="item">{{ item }}</li>
+            </ul>
+            <p v-else class="ai-runtime-tip">Agent 暂未返回明确诊断结论。</p>
+          </section>
+
+          <section v-if="aiDiagnoseResult.sources?.length" class="ai-diagnose-section">
+            <h4>知识库依据</h4>
+            <div class="ai-diagnose-suggestions">
+              <div
+                v-for="source in aiDiagnoseResult.sources"
+                :key="`${source.documentId}-${source.chunkIndex}`"
+                class="ai-diagnose-suggestion"
+              >
+                <strong>{{ source.documentName }}</strong>
+                <p>{{ source.text }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="ai-diagnose-section">
+            <h4>优化建议</h4>
+            <div v-if="aiDiagnoseResult.suggestions?.length" class="ai-diagnose-suggestions">
+              <div
+                v-for="(suggestion, suggestionIndex) in aiDiagnoseResult.suggestions"
+                :key="suggestionIndex"
+                class="ai-diagnose-suggestion"
+              >
+                <strong>建议 {{ suggestionIndex + 1 }}</strong>
+                <p>{{ formatDiagnoseSuggestion(suggestion) }}</p>
+              </div>
+            </div>
+            <p v-else class="ai-runtime-tip">暂无可展示的优化建议。</p>
+          </section>
+
+          <section class="ai-diagnose-section">
+            <h4>工作流轨迹</h4>
+            <div class="ai-diagnose-steps">
+              <div
+                v-for="step in aiDiagnoseResult.steps || []"
+                :key="step.name"
+                class="ai-diagnose-step"
+              >
+                <span>{{ step.title || step.name }}</span>
+                <p>{{ step.summary }}</p>
+              </div>
+            </div>
+          </section>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="aiDiagnoseVisible = false">关闭</el-button>
+        <el-button type="primary" @click="openAiDiagnose" :loading="aiDiagnosing">重新诊断</el-button>
+      </template>
     </el-dialog>
 
     <el-drawer
@@ -642,7 +726,7 @@ import {
   uploadResumePhoto,
 } from '@/api/resume'
 import { getTemplateDetail } from '@/api/template'
-import { aiGenerate, aiPolish, type AiGenerateResponse, type PolishSuggestion } from '@/api/ai'
+import { aiDiagnose, aiGenerate, aiPolish, type AiDiagnoseResponse, type AiGenerateResponse, type PolishSuggestion } from '@/api/ai'
 import { useUserStore } from '@/store/user'
 
 interface ResumeRecord {
@@ -741,6 +825,9 @@ const versionCompareVisible = ref(false)
 const versionCompareTarget = ref<ResumeVersionRecord | null>(null)
 const versionCompareData = ref<VersionComparePayload | null>(null)
 const aiDialogVisible = ref(false)
+const aiDiagnoseVisible = ref(false)
+const aiDiagnosing = ref(false)
+const aiDiagnoseResult = ref<AiDiagnoseResponse | null>(null)
 const aiLoading = ref(false)
 const aiApplying = ref(false)
 const aiSuggestions = ref<AiSuggestionOption[]>([])
@@ -1223,6 +1310,30 @@ async function requestAiGenerate(sectionType: CoreSectionType) {
   }
 }
 
+async function openAiDiagnose() {
+  aiDiagnoseVisible.value = true
+  aiDiagnosing.value = true
+  aiDiagnoseResult.value = null
+
+  try {
+    const response = await aiDiagnose({
+      resumeId: resumeId.value || undefined,
+      jobTitle: documentState.value.profile.title || '目标岗位',
+      templateVariant: resolveTemplateVariant(documentState.value as VariantAwareDocument),
+      content: buildAiDiagnoseContent(),
+      contentText: buildAiDiagnoseText(),
+      userInstruction: '请诊断这份简历的岗位匹配度、表达质量、内容完整度、模板适配度和下一步优化方向。',
+    })
+
+    aiDiagnoseResult.value = response.data
+  } catch (error) {
+    console.error('AI 深度诊断失败:', error)
+    ElMessage.error('AI 深度诊断失败，请稍后重试')
+  } finally {
+    aiDiagnosing.value = false
+  }
+}
+
 function buildAiGenerateContext() {
   const state = aiDialogState.value
   const section = documentState.value.sections.find((item) => item.id === state.sectionId)
@@ -1246,6 +1357,92 @@ function buildAiGenerateContext() {
     .filter(Boolean)
 
   return parts.join('\n')
+}
+
+function buildAiDiagnoseContent() {
+  return {
+    profile: {
+      name: documentState.value.profile.name,
+      title: documentState.value.profile.title,
+      phone: documentState.value.profile.phone,
+      email: documentState.value.profile.email,
+      yearsOfExperience: documentState.value.profile.yearsOfExperience,
+    },
+    template: {
+      id: documentState.value.templateId || templateId.value || undefined,
+      name: documentState.value.templateName || '默认模板',
+      variant: resolveTemplateVariant(documentState.value as VariantAwareDocument),
+    },
+    sections: documentState.value.sections
+      .filter((section) => section.visible)
+      .map((section) => ({
+        type: section.type,
+        title: section.title,
+        items: section.items.map((item) => buildAiDiagnoseItem(section, item)),
+      })),
+  }
+}
+
+function buildAiDiagnoseItem(section: CoreResumeSection, item: CoreResumeItem) {
+  const definition = getSectionDefinition(section.type)
+  return definition.fields.reduce<Record<string, string>>((payload, field) => {
+    if (field.type === 'dateRange') {
+      const value = formatDurationText(normalizeDuration(item[field.key]))
+      if (value) {
+        payload[field.label] = value
+      }
+      return payload
+    }
+
+    const value = readTextValue(item, field.key).trim()
+    if (value) {
+      payload[field.label] = value
+    }
+    return payload
+  }, {})
+}
+
+function buildAiDiagnoseText() {
+  const lines = [
+    `姓名：${documentState.value.profile.name || '未填写'}`,
+    `目标岗位：${documentState.value.profile.title || '未填写'}`,
+    `工作年限：${documentState.value.profile.yearsOfExperience || '未填写'}`,
+  ]
+
+  documentState.value.sections
+    .filter((section) => section.visible)
+    .forEach((section) => {
+      lines.push(`\n【${section.title}】`)
+      section.items.forEach((item, index) => {
+        const itemText = Object.values(buildAiDiagnoseItem(section, item)).filter(Boolean).join('；')
+        if (itemText) {
+          lines.push(`${index + 1}. ${itemText}`)
+        }
+      })
+    })
+
+  return lines.join('\n')
+}
+
+function formatDiagnoseSuggestion(suggestion: Record<string, any>) {
+  const candidates = [
+    suggestion.reason,
+    suggestion.summary,
+    suggestion.text,
+    suggestion.action,
+    suggestion.recommendation,
+    suggestion.title,
+  ].filter((value) => typeof value === 'string' && value.trim())
+
+  if (candidates.length) {
+    return candidates.join('：')
+  }
+
+  try {
+    return JSON.stringify(suggestion)
+  } catch {
+    return 'Agent 返回了一条结构化建议，请在 AI 操作日志中查看详情。'
+  }
 }
 
 function getAiApplyLabel(suggestion: AiSuggestionOption) {
@@ -3145,6 +3342,87 @@ function hasSectionContent(item: CoreResumeItem) {
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.ai-diagnose-dialog {
+  display: grid;
+  gap: 16px;
+  min-height: 280px;
+}
+
+.ai-diagnose-meta {
+  justify-content: flex-start;
+}
+
+.ai-diagnose-section {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.ai-diagnose-section h4 {
+  margin: 0 0 12px;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.ai-diagnose-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.ai-diagnose-suggestions {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-diagnose-suggestion {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.ai-diagnose-suggestion strong,
+.ai-diagnose-step span {
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.ai-diagnose-suggestion p,
+.ai-diagnose-step p {
+  margin: 6px 0 0;
+  color: #475569;
+  line-height: 1.7;
+}
+
+.ai-diagnose-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-diagnose-step {
+  position: relative;
+  padding: 12px 12px 12px 18px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.ai-diagnose-step::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 999px;
+  background: #2563eb;
 }
 
 @media (max-width: 1280px) {

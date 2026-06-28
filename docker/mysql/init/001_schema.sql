@@ -25,8 +25,10 @@ CREATE TABLE IF NOT EXISTS c_users (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   ai_operation_count INT NOT NULL DEFAULT 0,
+  token_version INT NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   UNIQUE KEY uq_c_users_phone (phone),
+  UNIQUE KEY uq_c_users_email (email),
   KEY idx_c_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -47,12 +49,48 @@ CREATE TABLE IF NOT EXISTS c_user_entitlements (
   account_weight INT NOT NULL DEFAULT 0,
   ai_free_total INT NOT NULL DEFAULT 20,
   ai_free_used INT NOT NULL DEFAULT 0,
-  ai_free_reset_policy VARCHAR(16) NOT NULL DEFAULT 'never',
+  ai_free_reset_policy VARCHAR(16) NOT NULL DEFAULT 'monthly',
+  resume_limit INT NOT NULL DEFAULT 2,
+  version_limit INT NOT NULL DEFAULT 5,
+  pdf_monthly_total INT NOT NULL DEFAULT 3,
+  pdf_monthly_used INT NOT NULL DEFAULT 0,
+  storage_limit_bytes BIGINT NOT NULL DEFAULT 104857600,
+  storage_used_bytes BIGINT NOT NULL DEFAULT 0,
+  usage_period_start DATETIME NULL,
   expire_at DATETIME NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (user_id),
   CONSTRAINT fk_c_user_entitlements_user FOREIGN KEY (user_id) REFERENCES c_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_identities (
+  id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  provider_subject VARCHAR(255) NOT NULL,
+  verified TINYINT NOT NULL DEFAULT 1,
+  provider_data JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_identity_provider_subject (provider, provider_subject),
+  KEY idx_user_identity_user (user_id),
+  CONSTRAINT fk_user_identity_user FOREIGN KEY (user_id) REFERENCES c_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id INT NOT NULL AUTO_INCREMENT,
+  email VARCHAR(255) NOT NULL,
+  purpose VARCHAR(32) NOT NULL,
+  code_hash VARCHAR(64) NOT NULL,
+  expire_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  request_ip VARCHAR(64) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_email_code_lookup (email, purpose, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS templates (
@@ -206,6 +244,10 @@ INSERT INTO c_user_profiles (user_id, real_name, avatar, bio)
 VALUES (1, '测试用户', NULL, NULL)
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);
 
-INSERT INTO c_user_entitlements (user_id, plan_code, account_weight, ai_free_total, ai_free_used, ai_free_reset_policy)
-VALUES (1, 'free', 0, 20, 0, 'never')
+INSERT INTO c_user_entitlements (
+  user_id, plan_code, account_weight, ai_free_total, ai_free_used,
+  ai_free_reset_policy, resume_limit, version_limit, pdf_monthly_total,
+  pdf_monthly_used, storage_limit_bytes, storage_used_bytes, usage_period_start
+)
+VALUES (1, 'free', 0, 10, 0, 'monthly', 2, 5, 3, 0, 104857600, 0, NOW())
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);

@@ -21,6 +21,9 @@ import { ResumeVersion } from '../entities/resume-version.entity';
 import { SystemLog } from '../entities/system-log.entity';
 import { TemplateFavorite } from '../entities/template-favorite.entity';
 import { SystemConfig } from '../entities/system-config.entity';
+import { KnowledgeDocument } from '../entities/knowledge-document.entity';
+import { EmailVerificationCode } from '../entities/email-verification-code.entity';
+import { UserIdentity } from '../entities/user-identity.entity';
 
 // 导入功能模块
 import { AdminUsersModule } from '../modules/admin-users/admin-users.module';
@@ -31,9 +34,11 @@ import { AiOperationsModule } from '../modules/ai-operations/ai-operations.modul
 import { StatisticsModule } from '../modules/statistics/statistics.module';
 import { ResumesModule } from '../modules/resumes/resumes.module';
 import { CuserProfileModule } from '../modules/cuser-profile/cuser-profile.module';
+import { EntitlementsModule } from '../modules/entitlements/entitlements.module';
 import { SystemLogsModule } from '../modules/system-logs/system-logs.module';
 import { AiModule } from '../modules/ai/ai.module';
 import { SystemConfigModule } from '../modules/system-config/system-config.module';
+import { KnowledgeModule } from '../modules/knowledge/knowledge.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 
@@ -80,6 +85,9 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
         SystemLog,
         TemplateFavorite,
         SystemConfig,
+        KnowledgeDocument,
+        EmailVerificationCode,
+        UserIdentity,
       ],
       synchronize: false,
       // 生产环境禁用日志记录
@@ -93,9 +101,11 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
     StatisticsModule,
     ResumesModule,
     CuserProfileModule,
+    EntitlementsModule,
     SystemLogsModule,
     AiModule,
     SystemConfigModule,
+    KnowledgeModule,
   ],
   controllers: [AppController],
   providers: [
