@@ -2264,6 +2264,7 @@ async function saveResumeInternal(notify: boolean) {
     await refreshVersions()
     saveStatus.value = 'saved'
     lastSavedSnapshot.value = serializeDocument()
+    persistDraft(true)
     if (notify) {
       ElMessage.success('简历已保存')
     }
@@ -2517,8 +2518,15 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
-function persistDraft() {
-  localStorage.setItem(draftStorageKey.value, serializeDocument())
+function persistDraft(synced = false) {
+  localStorage.setItem(draftStorageKey.value, JSON.stringify({
+    schema: 'core-resume-draft/v1',
+    resumeId: currentResume.value?.id || Number(resumeId.value || 0) || null,
+    baseVersion: currentResume.value?.version ?? null,
+    synced,
+    updatedAt: new Date().toISOString(),
+    content: serializeDocument(),
+  }))
 }
 
 function restoreDraft() {
@@ -2527,7 +2535,20 @@ function restoreDraft() {
     return
   }
   try {
-    const parsed = JSON.parse(raw)
+    const stored = JSON.parse(raw)
+    const isVersionedDraft = stored?.schema === 'core-resume-draft/v1'
+      && typeof stored.content === 'string'
+
+    if (currentResume.value) {
+      const matchesResume = Number(stored?.resumeId) === Number(currentResume.value.id)
+      const matchesVersion = Number(stored?.baseVersion) === Number(currentResume.value.version)
+      if (!isVersionedDraft || stored.synced || !matchesResume || !matchesVersion) {
+        localStorage.removeItem(draftStorageKey.value)
+        return
+      }
+    }
+
+    const parsed = isVersionedDraft ? JSON.parse(stored.content) : stored
     const restored = ensureAllSections(parsed)
     const shouldPreserveSelectedTemplate = Boolean(templateId.value)
     isApplyingDraft.value = true

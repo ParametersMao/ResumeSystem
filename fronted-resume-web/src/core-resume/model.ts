@@ -489,6 +489,8 @@ export function parseResumeContent(rawContent: unknown): Partial<CoreResumeDocum
 
   return {
     schema: 'core-resume/v1',
+    documentTitle: typeof source.documentTitle === 'string' ? source.documentTitle : '',
+    slogan: typeof source.slogan === 'string' ? source.slogan : '',
     profile: {
       ...DEFAULT_CORE_PROFILE,
       ...normalizeProfile(source.profile),

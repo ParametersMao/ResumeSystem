@@ -26,7 +26,10 @@ async function main() {
       page.click('.submit-btn'),
     ])
 
-    await page.waitForSelector('.resume-card, .resume-list, button', { timeout: 10000 })
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === '继续编辑'),
+      { timeout: 15000 },
+    )
     const opened = await page.evaluate(() => {
       const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === '继续编辑')
       button?.click()
