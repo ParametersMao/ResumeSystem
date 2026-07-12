@@ -9,8 +9,8 @@ services:
       - --default-time-zone=+08:00
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_DATABASE:-resume_system}
-      MYSQL_USER: ${DB_USERNAME:-resume_app}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
@@ -32,34 +32,34 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      FRONTEND_URL: ${FRONTEND_URL:-https://aidana.top,https://www.aidana.top,https://admin.aidana.top,http://aidana.top,http://www.aidana.top,http://admin.aidana.top}
+      FRONTEND_URL: ${FRONTEND_URL}
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_USERNAME: ${DB_USERNAME:-resume_app}
+      DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE: ${DB_DATABASE:-resume_system}
+      DB_DATABASE: ${DB_DATABASE}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-1h}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
       EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET}
-      EMAIL_ALLOW_DEV_CODE: ${EMAIL_ALLOW_DEV_CODE:-false}
-      AI_ENABLED: ${AI_ENABLED:-true}
-      AI_PROVIDER: ${AI_PROVIDER:-deepseek}
-      AI_EXECUTION_ENGINE: ${AI_EXECUTION_ENGINE:-agent}
-      OPENAI_API_URL: ${OPENAI_API_URL:-https://api.deepseek.com}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
-      AGENT_SERVICE_URL: ${AGENT_SERVICE_URL:-http://agent:8000}
-      AGENT_REQUEST_TIMEOUT_MS: ${AGENT_REQUEST_TIMEOUT_MS:-150000}
+      EMAIL_ALLOW_DEV_CODE: ${EMAIL_ALLOW_DEV_CODE}
+      AI_ENABLED: ${AI_ENABLED}
+      AI_PROVIDER: ${AI_PROVIDER}
+      AI_EXECUTION_ENGINE: ${AI_EXECUTION_ENGINE}
+      OPENAI_API_URL: ${OPENAI_API_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      AGENT_SERVICE_URL: ${AGENT_SERVICE_URL}
+      AGENT_REQUEST_TIMEOUT_MS: ${AGENT_REQUEST_TIMEOUT_MS}
       AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET}
-      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES:-true}
-      R2_ENDPOINT: ${R2_ENDPOINT:-}
-      R2_REGION: ${R2_REGION:-auto}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      R2_BUCKET: ${R2_BUCKET:-}
-      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_REGION: ${R2_REGION}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-headless-shell
     volumes:
       - backend_uploads:/app/uploads
@@ -108,8 +108,8 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
+      - "${HTTP_PORT}:80"
+      - "${HTTPS_PORT}:443"
     volumes:
       - ./deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
@@ -123,24 +123,24 @@ services:
       qdrant:
         condition: service_started
     environment:
-      AGENT_EXECUTION_MODE: ${AGENT_EXECUTION_MODE:-live}
+      AGENT_EXECUTION_MODE: ${AGENT_EXECUTION_MODE}
       AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET}
-      OPENAI_API_URL: ${OPENAI_API_URL:-https://api.deepseek.com}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
-      RAG_ENABLED: ${RAG_ENABLED:-true}
+      OPENAI_API_URL: ${OPENAI_API_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      RAG_ENABLED: ${RAG_ENABLED}
       QDRANT_URL: http://qdrant:6333
-      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-resume_knowledge_bge_zh_v1_5}
-      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
-      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-fastembed}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION}
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       FASTEMBED_CACHE_PATH: /models/fastembed
-      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
-      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.35}
-      RAG_CANDIDATE_LIMIT: ${RAG_CANDIDATE_LIMIT:-120}
-      RAG_DENSE_WEIGHT: ${RAG_DENSE_WEIGHT:-0.68}
-      RAG_LEXICAL_WEIGHT: ${RAG_LEXICAL_WEIGHT:-0.27}
-      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES:-true}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS}
+      RAG_MIN_SCORE: ${RAG_MIN_SCORE}
+      RAG_CANDIDATE_LIMIT: ${RAG_CANDIDATE_LIMIT}
+      RAG_DENSE_WEIGHT: ${RAG_DENSE_WEIGHT}
+      RAG_LEXICAL_WEIGHT: ${RAG_LEXICAL_WEIGHT}
+      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
       interval: 15s
