@@ -30,6 +30,10 @@ async function main() {
       [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === '继续编辑'),
       { timeout: 15000 },
     )
+    const resumeLoadPromise = page.waitForResponse((response) =>
+      response.request().method() === 'GET' && /\/api\/resumes\/\d+$/.test(response.url()) && response.status() === 200,
+      { timeout: 15000 },
+    )
     const opened = await page.evaluate(() => {
       const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === '继续编辑')
       button?.click()
@@ -37,7 +41,12 @@ async function main() {
     })
     if (!opened) throw new Error('没有找到可用于 QA 的简历。')
     await page.waitForFunction(() => location.pathname === '/resume-editor', { timeout: 15000 })
+    await resumeLoadPromise
     await page.waitForSelector("input[placeholder='留空则使用模板默认标题']", { timeout: 15000 })
+    await page.waitForFunction(
+      () => !document.querySelector('.core-editor-page > .el-loading-mask'),
+      { timeout: 15000 },
+    )
 
     original = await page.evaluate(() => ({
       title: document.querySelector("input[placeholder='留空则使用模板默认标题']")?.value || '',
@@ -50,6 +59,12 @@ async function main() {
     await clickToolbarAndWait(page, '保存', (response) =>
       response.request().method() === 'PUT' && /\/api\/resumes\/\d+/.test(response.url()) && response.status() === 200,
     )
+    await page.waitForFunction(() => {
+      const status = document.querySelector('.preview-toolbar p')?.textContent.trim() || ''
+      return status !== '正在保存...'
+    }, { timeout: 10000 })
+    const saveState = await page.$eval('.preview-toolbar p', (item) => item.textContent.trim())
+    if (saveState !== '已保存') throw new Error(`保存请求结束后状态异常：${saveState}`)
 
     await page.reload({ waitUntil: 'networkidle2', timeout: 30000 })
     await page.waitForSelector("input[placeholder='留空则使用模板默认标题']", { timeout: 15000 })

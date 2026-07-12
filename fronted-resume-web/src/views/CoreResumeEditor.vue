@@ -1,5 +1,10 @@
 <template>
-  <div class="core-editor-page" :class="{ 'style-panel-is-collapsed': stylePanelCollapsed }">
+  <div
+    v-loading="isBootstrapping"
+    element-loading-text="正在加载简历..."
+    class="core-editor-page"
+    :class="{ 'style-panel-is-collapsed': stylePanelCollapsed }"
+  >
     <aside class="editor-panel">
       <div class="panel-header">
         <div>
@@ -2213,6 +2218,21 @@ async function saveResumeInternal(notify: boolean) {
     return
   }
 
+  if (saveStatus.value === 'saving') {
+    if (!saveTimer.value) {
+      saveTimer.value = setTimeout(() => {
+        saveTimer.value = null
+        saveResumeInternal(false)
+      }, 500)
+    }
+    return
+  }
+
+  if (saveTimer.value) {
+    clearTimeout(saveTimer.value)
+    saveTimer.value = null
+  }
+
   const title = buildResumeTitle(documentState.value.profile)
   const content = JSON.stringify({
     ...documentState.value,
@@ -2262,9 +2282,13 @@ async function saveResumeInternal(notify: boolean) {
       window.history.replaceState({}, '', url.toString())
     }
     await refreshVersions()
-    saveStatus.value = 'saved'
-    lastSavedSnapshot.value = serializeDocument()
-    persistDraft(true)
+    lastSavedSnapshot.value = content
+    const changedDuringSave = serializeDocument() !== content
+    saveStatus.value = changedDuringSave ? 'idle' : 'saved'
+    persistDraft(!changedDuringSave)
+    if (changedDuringSave) {
+      queueAutoSave()
+    }
     if (notify) {
       ElMessage.success('简历已保存')
     }
@@ -2506,6 +2530,7 @@ function queueAutoSave() {
     clearTimeout(saveTimer.value)
   }
   saveTimer.value = setTimeout(() => {
+    saveTimer.value = null
     saveResumeInternal(false)
   }, 1200)
 }
