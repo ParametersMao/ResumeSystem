@@ -94,6 +94,7 @@
       <section
         v-for="(section, sectionIndex) in documentState.sections"
         :key="section.id"
+        :id="`editor-section-${section.type}`"
         class="editor-card"
       >
         <div class="card-title-row">
@@ -261,7 +262,7 @@
           <el-button @click="createManualVersion" :loading="creatingVersion">保存为版本</el-button>
           <el-button @click="openVersionDrawer" :disabled="!currentResume">版本记录</el-button>
           <el-button @click="openTemplateCenter">更换模板</el-button>
-          <el-button @click="openAiDiagnose" :loading="aiDiagnosing">AI 深度诊断</el-button>
+          <el-button @click="openJobWorkspace">岗位定向诊断</el-button>
           <el-button @click="saveResume" :loading="saveStatus === 'saving'">保存</el-button>
           <el-button type="primary" @click="exportPdf" :loading="exportingPdf">导出为 PDF</el-button>
         </div>
@@ -293,7 +294,27 @@
           <el-button size="small" @click="resetThemeOverrides" :disabled="!hasThemeOverrides">恢复模板默认</el-button>
         </div>
         <label class="field-block">
+          <span>简历标题</span>
+          <el-input v-model="documentState.documentTitle" maxlength="30" show-word-limit placeholder="留空则使用模板默认标题" />
+        </label>
+        <label class="field-block">
+          <span>Slogan</span>
+          <el-input v-model="documentState.slogan" maxlength="60" show-word-limit placeholder="可选，例如：用数据驱动产品增长" />
+        </label>
+        <label class="field-block">
           <span>主题颜色</span>
+          <div class="theme-swatches" aria-label="推荐主题色">
+            <button
+              v-for="color in THEME_COLOR_PRESETS"
+              :key="color"
+              type="button"
+              class="theme-swatch"
+              :class="{ active: documentState.theme.primaryColor.toLowerCase() === color.toLowerCase() }"
+              :style="{ backgroundColor: color }"
+              :title="color"
+              @click="updateThemeValue('primaryColor', color)"
+            />
+          </div>
           <input :value="documentState.theme.primaryColor" class="native-color" type="color" @input="updateThemeValue('primaryColor', ($event.target as HTMLInputElement).value)" />
         </label>
         <label class="field-block">
@@ -302,6 +323,10 @@
             <el-option label="微软雅黑" value="'Microsoft YaHei', 'PingFang SC', sans-serif" />
             <el-option label="思源黑体" value="'Source Han Sans SC', 'Microsoft YaHei', sans-serif" />
             <el-option label="苹方" value="'PingFang SC', 'Microsoft YaHei', sans-serif" />
+            <el-option label="宋体" value="SimSun, 'Microsoft YaHei', serif" />
+            <el-option label="黑体" value="SimHei, 'Microsoft YaHei', sans-serif" />
+            <el-option label="楷体" value="KaiTi, 'Microsoft YaHei', serif" />
+            <el-option label="Arial" value="Arial, 'Microsoft YaHei', sans-serif" />
           </el-select>
         </label>
         <label class="field-block">
@@ -310,6 +335,10 @@
             <el-option label="微软雅黑" value="'Microsoft YaHei', 'PingFang SC', sans-serif" />
             <el-option label="思源黑体" value="'Source Han Sans SC', 'Microsoft YaHei', sans-serif" />
             <el-option label="苹方" value="'PingFang SC', 'Microsoft YaHei', sans-serif" />
+            <el-option label="宋体" value="SimSun, 'Microsoft YaHei', serif" />
+            <el-option label="黑体" value="SimHei, 'Microsoft YaHei', sans-serif" />
+            <el-option label="楷体" value="KaiTi, 'Microsoft YaHei', serif" />
+            <el-option label="Arial" value="Arial, 'Microsoft YaHei', sans-serif" />
           </el-select>
         </label>
         <label class="field-block">
@@ -328,6 +357,36 @@
           <span>行高</span>
           <el-input-number :model-value="documentState.theme.lineHeight" :min="1.4" :max="2" :step="0.1" @update:model-value="updateThemeValue('lineHeight', $event)" />
         </label>
+        <label class="field-block">
+          <span>页面边距</span>
+          <el-input-number :model-value="documentState.theme.pageMargin" :min="20" :max="72" :step="2" @update:model-value="updateThemeValue('pageMargin', $event)" />
+        </label>
+        <div class="density-control">
+          <span>信息密度</span>
+          <div class="density-buttons">
+            <el-button size="small" @click="applyDensityPreset('compact')">紧凑</el-button>
+            <el-button size="small" @click="applyDensityPreset('standard')">标准</el-button>
+            <el-button size="small" @click="applyDensityPreset('spacious')">宽松</el-button>
+          </div>
+        </div>
+        <div class="one-page-control">
+          <div>
+            <strong>一页适配</strong>
+            <p>按模块间距、条目间距、行高、字号的顺序逐级压缩，不删除内容。</p>
+          </div>
+          <el-button type="primary" plain size="small" :loading="fittingOnePage" @click="fitResumeToOnePage">
+            智能压缩为一页
+          </el-button>
+        </div>
+        <el-alert
+          v-if="longItemWarnings.length"
+          class="long-item-warning"
+          type="warning"
+          show-icon
+          :closable="false"
+          :title="`发现 ${longItemWarnings.length} 个超长条目，可能被浏览器强制跨页`"
+          :description="longItemWarnings.slice(0, 3).join('；')"
+        />
       </div>
     </aside>
 
@@ -427,14 +486,77 @@
 
     <el-dialog
       v-model="aiDiagnoseVisible"
-      title="AI 深度诊断"
-      width="880px"
+      title="岗位定向投递工作区"
+      width="1040px"
       destroy-on-close
     >
       <div v-loading="aiDiagnosing" class="ai-diagnose-dialog">
+        <div class="job-workspace-form">
+          <label class="field-block">
+            <span>目标公司（可选）</span>
+            <el-input v-model="jobTargetCompany" placeholder="例如：某企业服务公司" clearable />
+          </label>
+          <label class="field-block">
+            <span>目标岗位</span>
+            <el-input v-model="jobTargetTitle" placeholder="例如：产品运营 / 用户增长" clearable />
+          </label>
+          <label class="field-block field-block-full">
+            <span>职位描述 JD</span>
+            <el-input
+              v-model="jobDescription"
+              type="textarea"
+              :rows="8"
+              maxlength="8000"
+              show-word-limit
+              placeholder="粘贴岗位职责和任职要求。系统只会基于 JD 与当前简历提供建议，不会自动编造经历。"
+            />
+          </label>
+        </div>
+
+        <section v-if="jobWorkspaceAnalysis" class="job-analysis-overview">
+          <div class="job-score-card">
+            <span>关键词覆盖</span>
+            <strong>{{ jobWorkspaceAnalysis.coverage }}%</strong>
+            <p>{{ jobWorkspaceAnalysis.matchedCount }}/{{ jobWorkspaceAnalysis.requirements.length }} 个要求在当前简历中有直接证据</p>
+          </div>
+          <div class="job-keyword-panel">
+            <div class="job-analysis-heading">
+              <h4>JD 要求与简历证据</h4>
+              <span>匹配仅代表文字证据，不等同于虚构的“岗位匹配分”</span>
+            </div>
+            <div class="job-keyword-list">
+              <span
+                v-for="requirement in jobWorkspaceAnalysis.requirements"
+                :key="requirement.keyword"
+                class="job-keyword"
+                :class="requirement.matched ? 'matched' : 'missing'"
+              >
+                {{ requirement.keyword }} · {{ requirement.matched ? requirement.sectionTitle : '未找到证据' }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="jobWorkspaceAnalysis?.actions.length" class="ai-diagnose-section">
+          <div class="job-analysis-heading">
+            <h4>优先修改清单</h4>
+            <span>定位只展开对应模块，不会自动写入 AI 内容</span>
+          </div>
+          <div class="job-action-list">
+            <article v-for="action in jobWorkspaceAnalysis.actions" :key="`${action.sectionType}-${action.keyword}`" class="job-action-card">
+              <div>
+                <span class="card-badge">{{ action.priority }}</span>
+                <strong>{{ action.title }}</strong>
+                <p>{{ action.reason }}</p>
+              </div>
+              <el-button size="small" @click="locateJobAction(action.sectionType)">定位修改</el-button>
+            </article>
+          </div>
+        </section>
+
         <div class="ai-mode-tip">
-          <span class="ai-mode-tag">Agent Loop</span>
-          <p>系统会按“感知、分析、规划、执行、校验”的流程诊断当前简历，结果会进入 AI 操作日志并消耗一次 AI 权益。</p>
+          <span class="ai-mode-tag">事实优先</span>
+          <p>本地覆盖分析不消耗 AI 权益；深度诊断会把 JD 与当前简历一并发送给已配置的 AI/Agent，并保留运行记录。</p>
         </div>
 
         <el-empty
@@ -456,6 +578,20 @@
               <li v-for="item in aiDiagnoseResult.diagnostics" :key="item">{{ item }}</li>
             </ul>
             <p v-else class="ai-runtime-tip">Agent 暂未返回明确诊断结论。</p>
+          </section>
+
+          <section v-if="aiDiagnoseResult.strategy?.length" class="ai-diagnose-section">
+            <h4>深度优化策略</h4>
+            <ul class="ai-diagnose-list">
+              <li v-for="item in aiDiagnoseResult.strategy" :key="item">{{ item }}</li>
+            </ul>
+          </section>
+
+          <section v-if="aiDiagnoseResult.warnings?.length" class="ai-diagnose-section job-warning-section">
+            <h4>事实与可信度风险</h4>
+            <ul class="ai-diagnose-list">
+              <li v-for="item in aiDiagnoseResult.warnings" :key="item">{{ item }}</li>
+            </ul>
           </section>
 
           <section v-if="aiDiagnoseResult.sources?.length" class="ai-diagnose-section">
@@ -504,7 +640,8 @@
       </div>
       <template #footer>
         <el-button @click="aiDiagnoseVisible = false">关闭</el-button>
-        <el-button type="primary" @click="openAiDiagnose" :loading="aiDiagnosing">重新诊断</el-button>
+        <el-button :disabled="!jobWorkspaceAnalysis" :loading="savingJobVersion" @click="saveJobTargetVersion">保存岗位版本</el-button>
+        <el-button type="primary" @click="runJobDiagnosis" :loading="aiDiagnosing">生成岗位诊断</el-button>
       </template>
     </el-dialog>
 
@@ -691,7 +828,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import CoreResumePreview from '@/components/core-resume/CoreResumePreview.vue'
@@ -788,6 +925,28 @@ interface AiDialogState {
   actionType: 'polish' | 'generate'
 }
 
+interface JobRequirementMatch {
+  keyword: string
+  matched: boolean
+  sectionType?: CoreSectionType
+  sectionTitle: string
+}
+
+interface JobWorkspaceAction {
+  keyword: string
+  sectionType: CoreSectionType
+  priority: '高' | '中'
+  title: string
+  reason: string
+}
+
+interface JobWorkspaceAnalysis {
+  coverage: number
+  matchedCount: number
+  requirements: JobRequirementMatch[]
+  actions: JobWorkspaceAction[]
+}
+
 const AI_POLISH_FIELD_MAP: Partial<Record<CoreSectionType, string>> = {
   intention: 'intention',
   education: 'desc',
@@ -804,6 +963,13 @@ const AI_POLISH_FIELD_MAP: Partial<Record<CoreSectionType, string>> = {
 
 type VariantAwareDocument = CoreResumeDocument & { templateVariant?: string }
 
+const THEME_COLOR_PRESETS = [
+  '#333333', '#545969', '#284967', '#4e7282',
+  '#3978a3', '#1575bf', '#0e88ad', '#5695c3',
+  '#609ef3', '#a08f75', '#c19f67', '#ed7d31',
+  '#67a886', '#76ba31', '#f36c6c', '#a05fca',
+]
+
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -812,6 +978,7 @@ const previewRef = ref<InstanceType<typeof CoreResumePreview> | null>(null)
 const documentState = ref<CoreResumeDocument>(createEmptyDocument())
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const exportingPdf = ref(false)
+const fittingOnePage = ref(false)
 const uploadingAvatar = ref(false)
 const creatingVersion = ref(false)
 const stylePanelCollapsed = ref(false)
@@ -828,6 +995,11 @@ const aiDialogVisible = ref(false)
 const aiDiagnoseVisible = ref(false)
 const aiDiagnosing = ref(false)
 const aiDiagnoseResult = ref<AiDiagnoseResponse | null>(null)
+const jobTargetCompany = ref('')
+const jobTargetTitle = ref('')
+const jobDescription = ref('')
+const jobWorkspaceAnalysis = ref<JobWorkspaceAnalysis | null>(null)
+const savingJobVersion = ref(false)
 const aiLoading = ref(false)
 const aiApplying = ref(false)
 const aiSuggestions = ref<AiSuggestionOption[]>([])
@@ -862,6 +1034,18 @@ const hasUnsavedChanges = computed(() => serializeDocument() !== lastSavedSnapsh
 const currentVersionSummary = computed(() => summarizeVersionContent(serializeDocument()))
 const activeTemplatePreset = computed(() => resolveTemplatePreset(documentState.value))
 const hasThemeOverrides = computed(() => Object.keys(documentState.value.themeOverrides || {}).length > 0)
+const longItemWarnings = computed(() => documentState.value.sections
+  .filter((section) => section.visible)
+  .flatMap((section) => section.items.map((item, index) => {
+    const text = [item.description, item.content, item.summary, item.details]
+      .filter((value) => typeof value === 'string')
+      .join('\n')
+      .trim()
+    const lineCount = text ? text.split(/\n+/).length : 0
+    if (text.length < 520 && lineCount < 12) return ''
+    return `${section.title || '未命名模块'}第 ${index + 1} 条（${text.length} 字）`
+  }))
+  .filter(Boolean))
 const aiDialogTitle = computed(() => (aiDialogState.value.actionType === 'generate' ? 'AI补全建议' : 'AI润色建议'))
 const aiDialogSubtitle = computed(() =>
   aiDialogState.value.actionType === 'generate'
@@ -961,6 +1145,7 @@ async function initializeEditor() {
   }
 
   restoreDraft()
+  hydrateJobWorkspace()
   lastSavedSnapshot.value = serializeDocument()
   isBootstrapping.value = false
 }
@@ -1273,7 +1458,7 @@ async function requestAiPolish(inputText: string, sectionType: CoreSectionType) 
     aiPromptPreview.value = response.data.promptPreview || ''
   } catch (error) {
     console.error('AI 润色失败:', error)
-    ElMessage.error('AI 润色失败，请稍后重试')
+    ElMessage.error(resolveAiErrorMessage(error, 'AI 润色失败，请稍后重试'))
   } finally {
     aiLoading.value = false
   }
@@ -1304,33 +1489,186 @@ async function requestAiGenerate(sectionType: CoreSectionType) {
     aiPromptPreview.value = response.data.promptPreview || ''
   } catch (error) {
     console.error('AI 生成失败:', error)
-    ElMessage.error('AI 生成失败，请稍后重试')
+    ElMessage.error(resolveAiErrorMessage(error, 'AI 生成失败，请稍后重试'))
   } finally {
     aiLoading.value = false
   }
 }
 
-async function openAiDiagnose() {
+function openJobWorkspace() {
   aiDiagnoseVisible.value = true
+  if (!jobTargetTitle.value) {
+    jobTargetTitle.value = documentState.value.targeting?.jobTitle || documentState.value.profile.title || ''
+  }
+}
+
+async function runJobDiagnosis() {
+  aiDiagnoseVisible.value = true
+  const jobTitle = jobTargetTitle.value.trim()
+  const jdText = jobDescription.value.trim()
+  if (!jobTitle) {
+    ElMessage.warning('请先填写目标岗位')
+    return
+  }
+  if (jdText.length < 40) {
+    ElMessage.warning('请粘贴更完整的 JD，至少包含岗位职责或任职要求')
+    return
+  }
+
+  jobWorkspaceAnalysis.value = analyzeJobWorkspace(jdText)
+  documentState.value.targeting = {
+    jobTitle,
+    company: jobTargetCompany.value.trim() || undefined,
+    jdText,
+    keywords: jobWorkspaceAnalysis.value.requirements.map((item) => item.keyword),
+    analyzedAt: Date.now(),
+  }
   aiDiagnosing.value = true
   aiDiagnoseResult.value = null
 
   try {
     const response = await aiDiagnose({
       resumeId: resumeId.value || undefined,
-      jobTitle: documentState.value.profile.title || '目标岗位',
+      jobTitle,
       templateVariant: resolveTemplateVariant(documentState.value as VariantAwareDocument),
       content: buildAiDiagnoseContent(),
-      contentText: buildAiDiagnoseText(),
-      userInstruction: '请诊断这份简历的岗位匹配度、表达质量、内容完整度、模板适配度和下一步优化方向。',
+      contentText: `【职位描述 JD】\n${jdText}\n\n【当前简历】\n${buildAiDiagnoseText()}`,
+      userInstruction: '请逐条对照 JD 与简历证据，指出已匹配项、缺口和应修改的简历模块。不得编造经历、工具、公司、学校、证书或量化结果。',
     })
 
     aiDiagnoseResult.value = response.data
   } catch (error) {
     console.error('AI 深度诊断失败:', error)
-    ElMessage.error('AI 深度诊断失败，请稍后重试')
+    ElMessage.warning('本地岗位覆盖分析已完成；AI 深度诊断暂不可用')
   } finally {
     aiDiagnosing.value = false
+  }
+}
+
+function hydrateJobWorkspace() {
+  const targeting = documentState.value.targeting
+  jobTargetCompany.value = targeting?.company || ''
+  jobTargetTitle.value = targeting?.jobTitle || documentState.value.profile.title || ''
+  jobDescription.value = targeting?.jdText || ''
+  jobWorkspaceAnalysis.value = targeting?.jdText ? analyzeJobWorkspace(targeting.jdText) : null
+}
+
+function analyzeJobWorkspace(jdText: string): JobWorkspaceAnalysis {
+  const requirements = extractJobKeywords(jdText).map((keyword) => {
+    const evidence = findKeywordEvidence(keyword)
+    return {
+      keyword,
+      matched: Boolean(evidence),
+      sectionType: evidence?.type,
+      sectionTitle: evidence?.title || '未找到证据',
+    }
+  })
+  const matchedCount = requirements.filter((item) => item.matched).length
+  const coverage = requirements.length ? Math.round((matchedCount / requirements.length) * 100) : 0
+  const actions = requirements
+    .filter((item) => !item.matched)
+    .slice(0, 6)
+    .map((item, index) => buildJobAction(item.keyword, index))
+
+  return { coverage, matchedCount, requirements, actions }
+}
+
+function extractJobKeywords(jdText: string) {
+  const dictionary = [
+    '用户增长', '用户运营', '产品运营', '内容运营', '活动运营', '商业化', '用户研究',
+    '需求分析', '竞品分析', '数据分析', '经营分析', '指标体系', '复盘', '转化率',
+    '留存率', '活跃度', 'A/B 测试', 'SQL', 'Excel', 'Python', 'Tableau', 'Power BI',
+    'Axure', 'Figma', '项目管理', '跨团队协作', '沟通协调', '策略制定', '流程优化',
+    '市场调研', '品牌营销', '渠道运营', '新媒体', '文案策划', '增长策略',
+    'Vue', 'React', 'TypeScript', 'JavaScript', 'Node.js', 'Java', 'Go',
+  ]
+  const normalizedJd = jdText.toLowerCase()
+  const matched = dictionary.filter((keyword) =>
+    normalizedJd.includes(keyword.toLowerCase().replace(/\s+/g, ''))
+    || normalizedJd.includes(keyword.toLowerCase()),
+  )
+  const englishTokens = jdText.match(/\b[A-Za-z][A-Za-z0-9.+#/-]{1,24}\b/g) || []
+  const ignored = new Set(['and', 'the', 'with', 'for', 'or', 'to', 'of', 'in', 'job', 'plus'])
+  const matchedNormalized = matched.map((item) => normalizeMatchText(item))
+  const additions = englishTokens.filter((token) => {
+    if (ignored.has(token.toLowerCase())) return false
+    const normalized = normalizeMatchText(token)
+    return !matchedNormalized.some((item) => item.includes(normalized) || normalized.includes(item))
+  })
+  return [...new Set([...matched, ...additions])].slice(0, 18)
+}
+
+function findKeywordEvidence(keyword: string) {
+  const normalizedKeyword = normalizeMatchText(keyword)
+  for (const section of documentState.value.sections.filter((item) => item.visible)) {
+    const text = normalizeMatchText(JSON.stringify(section.items))
+    if (text.includes(normalizedKeyword)) {
+      return { type: section.type, title: section.title }
+    }
+  }
+  return null
+}
+
+function normalizeMatchText(value: string) {
+  return value.toLowerCase().replace(/[\s·/._-]+/g, '')
+}
+
+function buildJobAction(keyword: string, index: number): JobWorkspaceAction {
+  const sectionType = inferTargetSection(keyword)
+  const sectionTitle = getSectionDefinition(sectionType).title
+  return {
+    keyword,
+    sectionType,
+    priority: index < 3 ? '高' : '中',
+    title: `在${sectionTitle}核实“${keyword}”证据`,
+    reason: `JD 明确出现“${keyword}”，当前简历没有直接文字证据。若确有相关经历，请补充场景、个人行动和可验证结果；没有则不要硬写。`,
+  }
+}
+
+function inferTargetSection(keyword: string): CoreSectionType {
+  if (/SQL|Excel|Python|Tableau|Power BI|Axure|Figma|Vue|React|TypeScript|JavaScript|Node|Java|Go|测试/i.test(keyword)) return 'skills'
+  if (/项目|需求|竞品|用户研究|A\/B|流程优化|指标体系/.test(keyword)) return 'projects'
+  if (/协作|沟通|管理|策略|运营|增长|转化|留存|活跃|复盘|商业化/.test(keyword)) return 'experience'
+  if (/证书|英语|学历|专业/.test(keyword)) return 'education'
+  return 'summary'
+}
+
+async function locateJobAction(sectionType: CoreSectionType) {
+  const section = documentState.value.sections.find((item) => item.type === sectionType)
+  if (!section) return
+  section.visible = true
+  collapsedSections.value.delete(section.id)
+  aiDiagnoseVisible.value = false
+  await nextTick()
+  document.getElementById(`editor-section-${sectionType}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function saveJobTargetVersion() {
+  const jobTitle = jobTargetTitle.value.trim()
+  if (!jobWorkspaceAnalysis.value || !jobTitle) return
+  savingJobVersion.value = true
+  try {
+    documentState.value.profile.title = jobTitle
+    documentState.value.targeting = {
+      jobTitle,
+      company: jobTargetCompany.value.trim() || undefined,
+      jdText: jobDescription.value.trim(),
+      keywords: jobWorkspaceAnalysis.value.requirements.map((item) => item.keyword),
+      analyzedAt: Date.now(),
+    }
+    await saveResumeInternal(false)
+    if (!currentResume.value || !userStore.user?.id) {
+      throw new Error('保存简历后未获得有效简历记录')
+    }
+    const label = [jobTargetCompany.value.trim(), jobTitle].filter(Boolean).join(' · ')
+    await createResumeVersionSnapshot(String(currentResume.value.id), userStore.user.id, `岗位版本：${label}`)
+    await refreshVersions()
+    ElMessage.success(`已保存岗位版本：${label}`)
+  } catch (error) {
+    console.error('保存岗位版本失败:', error)
+    ElMessage.error('岗位版本保存失败，请稍后重试')
+  } finally {
+    savingJobVersion.value = false
   }
 }
 
@@ -1422,6 +1760,30 @@ function buildAiDiagnoseText() {
     })
 
   return lines.join('\n')
+}
+
+function resolveAiErrorMessage(error: unknown, fallback: string) {
+  const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response
+  const message = response?.data?.message
+  if (message) {
+    return message
+  }
+
+  if (!response) {
+    return 'AI 请求失败，请检查网络连接后重试'
+  }
+
+  if (response.status === 503) {
+    return 'AI 服务暂不可用，请稍后重试或联系管理员检查后台配置'
+  }
+  if (response.status === 429) {
+    return 'AI 请求过于频繁，请稍后再试'
+  }
+  if (response.status === 401) {
+    return '登录状态已过期，请重新登录后再使用 AI 功能'
+  }
+
+  return fallback
 }
 
 function formatDiagnoseSuggestion(suggestion: Record<string, any>) {
@@ -1758,6 +2120,82 @@ function resetThemeOverrides() {
   ElMessage.success('已恢复模板默认样式')
 }
 
+function applyDensityPreset(preset: 'compact' | 'standard' | 'spacious') {
+  const values = {
+    compact: { sectionSpacing: 16, itemSpacing: 9, fontSize: 13, lineHeight: 1.5 },
+    standard: { sectionSpacing: 22, itemSpacing: 12, fontSize: 14, lineHeight: 1.7 },
+    spacious: { sectionSpacing: 30, itemSpacing: 18, fontSize: 15, lineHeight: 1.85 },
+  }[preset]
+  applyThemePatch(values)
+}
+
+async function fitResumeToOnePage() {
+  const sheet = previewRef.value?.sheetRef
+  if (!sheet) {
+    ElMessage.warning('预览内容尚未准备好')
+    return
+  }
+
+  fittingOnePage.value = true
+  try {
+    const targetHeight = 1123
+    const readabilityFloor = {
+      sectionSpacing: 12,
+      itemSpacing: 8,
+      fontSize: 12,
+      lineHeight: 1.4,
+    } as const
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await nextTick()
+      await nextAnimationFrame()
+      if (sheet.scrollHeight <= targetHeight + 2) {
+        ElMessage.success(attempt === 0 ? '当前内容已经适合一页' : '已在不删除内容的前提下压缩为一页')
+        return
+      }
+
+      const theme = documentState.value.theme
+      const next = {
+        sectionSpacing: Math.max(readabilityFloor.sectionSpacing, theme.sectionSpacing - 2),
+        itemSpacing: Math.max(readabilityFloor.itemSpacing, theme.itemSpacing - 1),
+        fontSize: Math.max(readabilityFloor.fontSize, theme.fontSize - (attempt % 3 === 2 ? 1 : 0)),
+        lineHeight: Math.max(readabilityFloor.lineHeight, Math.round((theme.lineHeight - 0.05) * 100) / 100),
+      }
+      if (
+        next.sectionSpacing === theme.sectionSpacing &&
+        next.itemSpacing === theme.itemSpacing &&
+        next.fontSize === theme.fontSize &&
+        next.lineHeight === theme.lineHeight
+      ) break
+      applyThemePatch(next)
+    }
+
+    await nextTick()
+    await nextAnimationFrame()
+    if (sheet.scrollHeight <= 1125) {
+      ElMessage.success('已在不删除内容的前提下压缩为一页')
+    } else {
+      const estimatedPages = Math.max(2, Math.ceil(sheet.scrollHeight / targetHeight))
+      ElMessage.warning(`已压缩到可读性下限（12px / 1.4 行高），当前约 ${estimatedPages} 页；系统不会继续缩小字号，请精简低相关内容`)
+    }
+  } finally {
+    fittingOnePage.value = false
+  }
+}
+
+function applyThemePatch(patch: Partial<CoreResumeTheme>) {
+  const nextOverrides = { ...(documentState.value.themeOverrides || {}), ...patch }
+  documentState.value.themeOverrides = nextOverrides
+  documentState.value.theme = mergeResumeTheme(
+    documentState.value.templateTheme,
+    nextOverrides,
+    documentState.value.theme,
+  )
+}
+
+function nextAnimationFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+}
+
 async function saveResume() {
   await saveResumeInternal(true)
 }
@@ -1809,14 +2247,18 @@ async function saveResumeInternal(notify: boolean) {
         userStore.user.id,
         content,
       )
+      const createdId = Number(created.id ?? created.resumeId)
+      if (!Number.isFinite(createdId) || createdId <= 0) {
+        throw new Error('创建简历接口未返回有效 ID')
+      }
       currentResume.value = {
-        id: Number(created.resumeId),
-        title,
-        version: 1,
-        templateId: documentState.value.templateId ? Number(documentState.value.templateId) : undefined,
+        id: createdId,
+        title: created.title || title,
+        version: Number(created.version ?? 1),
+        templateId: created.templateId ?? (documentState.value.templateId ? Number(documentState.value.templateId) : undefined),
       }
       const url = new URL(window.location.href)
-      url.searchParams.set('resumeId', created.resumeId)
+      url.searchParams.set('resumeId', String(createdId))
       window.history.replaceState({}, '', url.toString())
     }
     await refreshVersions()
@@ -1965,8 +2407,9 @@ async function exportPdf() {
     const exportTitle = buildResumeTitle(documentState.value.profile)
     const exportFilename = buildResumePdfFilename()
     const html = buildCoreResumePrintHtml(sheet.outerHTML, exportTitle)
-    const { url } = await exportResumePdfByHtml(html)
+    const { url, pageCount } = await exportResumePdfByHtml(html)
     await downloadPdf(url, exportFilename)
+    ElMessage.success(`PDF 已导出，共 ${pageCount} 页`)
   } catch (error) {
     console.error('导出 PDF 失败:', error)
     ElMessage.error('导出失败，请稍后重试')
@@ -2009,6 +2452,46 @@ function openTemplateCenter() {
 function applyTemplateVariant(templateData?: unknown) {
   const next = resolveTemplateVariant(documentState.value as VariantAwareDocument, templateData)
   ;(documentState.value as VariantAwareDocument).templateVariant = next
+  applyTemplateSectionDefaults(templateData)
+}
+
+function applyTemplateSectionDefaults(templateData?: unknown) {
+  if (!templateData || typeof templateData !== 'object') {
+    return
+  }
+
+  const defaults = (templateData as {
+    sectionDefaults?: { order?: unknown; visible?: unknown; hidden?: unknown }
+  }).sectionDefaults
+  if (!defaults) {
+    return
+  }
+
+  const order = Array.isArray(defaults.order)
+    ? defaults.order.map((item) => String(item))
+    : []
+  const visible = new Set(
+    Array.isArray(defaults.visible)
+      ? defaults.visible.map((item) => String(item))
+      : [],
+  )
+  const hidden = new Set(
+    Array.isArray(defaults.hidden)
+      ? defaults.hidden.map((item) => String(item))
+      : [],
+  )
+  const orderMap = new Map(order.map((type, index) => [type, index]))
+
+  documentState.value.sections = [...documentState.value.sections]
+    .map((section) => {
+      if (visible.has(section.type)) return { ...section, visible: true }
+      if (hidden.has(section.type)) return { ...section, visible: false }
+      return section
+    })
+    .sort((left, right) =>
+      (orderMap.get(left.type) ?? Number.MAX_SAFE_INTEGER)
+      - (orderMap.get(right.type) ?? Number.MAX_SAFE_INTEGER),
+    )
 }
 
 function queueAutoSave() {
@@ -2873,6 +3356,66 @@ function hasSectionContent(item: CoreResumeItem) {
   padding: 4px;
 }
 
+.theme-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.theme-swatch {
+  position: relative;
+  height: 28px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #cbd5e1;
+  cursor: pointer;
+}
+
+.theme-swatch.active::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, .3);
+}
+
+.density-control,
+.one-page-control {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid #dbe4ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.density-control > span,
+.one-page-control strong {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.density-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.density-buttons :deep(.el-button) {
+  margin: 0;
+}
+
+.one-page-control p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .version-drawer {
   display: flex;
   flex-direction: column;
@@ -3350,6 +3893,119 @@ function hasSectionContent(item: CoreResumeItem) {
   min-height: 280px;
 }
 
+.job-workspace-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbff, #eef6ff);
+  border: 1px solid #cfe1ff;
+}
+
+.job-analysis-overview {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.job-score-card,
+.job-keyword-panel {
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.job-score-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.job-score-card strong {
+  display: block;
+  margin: 6px 0;
+  color: #0f3d7a;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.job-score-card p,
+.job-analysis-heading span,
+.job-action-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.job-analysis-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.job-analysis-heading h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.job-keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.job-keyword {
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.job-keyword.matched {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.job-keyword.missing {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.job-action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.job-action-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.job-action-card strong {
+  display: inline-block;
+  margin-left: 8px;
+  color: #1e293b;
+}
+
+@media (max-width: 720px) {
+  .job-workspace-form,
+  .job-analysis-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
 .ai-diagnose-meta {
   justify-content: flex-start;
 }
@@ -3365,6 +4021,11 @@ function hasSectionContent(item: CoreResumeItem) {
   margin: 0 0 12px;
   color: #0f172a;
   font-size: 16px;
+}
+
+.job-warning-section {
+  border-color: #fed7aa;
+  background: #fffaf5;
 }
 
 .ai-diagnose-list {

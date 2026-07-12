@@ -77,6 +77,12 @@ export class KnowledgeController {
     };
   }
 
+  @Get('metrics')
+  async metrics(@Request() req) {
+    ensureAdmin(req);
+    return { code: 200, message: 'success', data: await this.knowledgeService.metrics() };
+  }
+
   @Get(':id/file')
   async download(
     @Request() req,

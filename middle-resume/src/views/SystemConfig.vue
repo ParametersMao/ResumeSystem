@@ -504,7 +504,9 @@ async function handleTestConnection() {
 
     connectionState.message = data.message || ''
     connectionState.badge =
-      data.status === 'success'
+      data.status === 'disabled'
+        ? 'AI 已停用'
+        : data.status === 'success'
         ? '连通正常'
         : data.status === 'mock'
           ? 'Mock 模式'
@@ -512,7 +514,11 @@ async function handleTestConnection() {
             ? '待补配置'
             : '连接失败'
 
-    if (data.success) {
+    if (data.status === 'disabled') {
+      connectionState.title = 'AI 已停用'
+      connectionState.type = 'info'
+      ElMessage.info('AI 已停用，开启后台 AI 开关后再测试连接')
+    } else if (data.success) {
       connectionState.title = '连接测试通过'
       connectionState.type = 'success'
       ElMessage.success('AI 连接测试通过')

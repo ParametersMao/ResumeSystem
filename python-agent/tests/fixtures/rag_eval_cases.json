@@ -1,0 +1,22 @@
+[
+  {
+    "query": "Vue TypeScript 前端性能优化",
+    "expected_document_id": 101,
+    "category": "job-guide"
+  },
+  {
+    "query": "预算审计 税务合规 成本控制",
+    "expected_document_id": 102,
+    "category": "job-guide"
+  },
+  {
+    "query": "用户增长 A/B 测试 留存率",
+    "expected_document_id": 103,
+    "category": "job-guide"
+  },
+  {
+    "query": "校园活动 新媒体 内容运营",
+    "expected_document_id": 104,
+    "category": "campus-guide"
+  }
+]

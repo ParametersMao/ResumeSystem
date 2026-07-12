@@ -1,0 +1,163 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: resume-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${DB_DATABASE:-resume_system}
+      MYSQL_USER: ${DB_USERNAME:-resume_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backed-resume
+    container_name: resume-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      FRONTEND_URL: ${FRONTEND_URL:-https://aidana.top,https://www.aidana.top,https://admin.aidana.top,http://aidana.top,http://www.aidana.top,http://admin.aidana.top}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: ${DB_USERNAME:-resume_app}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_DATABASE: ${DB_DATABASE:-resume_system}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-1h}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET:?EMAIL_CODE_SECRET is required}
+      EMAIL_ALLOW_DEV_CODE: ${EMAIL_ALLOW_DEV_CODE:-false}
+      AI_ENABLED: ${AI_ENABLED:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-deepseek}
+      AI_EXECUTION_ENGINE: ${AI_EXECUTION_ENGINE:-agent}
+      OPENAI_API_URL: ${OPENAI_API_URL:-https://api.deepseek.com}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
+      AGENT_SERVICE_URL: ${AGENT_SERVICE_URL:-http://agent:8000}
+      AGENT_REQUEST_TIMEOUT_MS: ${AGENT_REQUEST_TIMEOUT_MS:-150000}
+      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
+      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES:-true}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-headless-shell
+    volumes:
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ./fronted-resume-web
+      args:
+        VITE_API_BASE: /api
+        VITE_USE_MOCK: "false"
+    container_name: resume-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  admin:
+    build:
+      context: ./middle-resume
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_APP_ENV: production
+        VITE_DEBUG: "false"
+        VITE_USE_MOCK: "false"
+        VITE_BASE: /admin/
+    container_name: resume-admin
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: resume-proxy
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+      admin:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+  agent:
+    build:
+      context: ./python-agent
+    container_name: resume-agent
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_started
+    environment:
+      AGENT_EXECUTION_MODE: ${AGENT_EXECUTION_MODE:-live}
+      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
+      OPENAI_API_URL: ${OPENAI_API_URL:-https://api.deepseek.com}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-resume_knowledge_bge_zh_v1_5}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-fastembed}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      FASTEMBED_CACHE_PATH: /models/fastembed
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
+      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.35}
+      RAG_CANDIDATE_LIMIT: ${RAG_CANDIDATE_LIMIT:-120}
+      RAG_DENSE_WEIGHT: ${RAG_DENSE_WEIGHT:-0.68}
+      RAG_LEXICAL_WEIGHT: ${RAG_LEXICAL_WEIGHT:-0.27}
+      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES:-true}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - fastembed_models:/models/fastembed
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: resume-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  mysql_data:
+  backend_uploads:
+  qdrant_data:
+  fastembed_models:

@@ -53,5 +53,8 @@ export const deleteKnowledgeDocument = (id: number) =>
 export const searchKnowledge = (data: { query: string; category?: string; limit?: number }) =>
   request.post('/admin/knowledge-documents/search', data, { timeout: 60000 })
 
+export const getKnowledgeMetrics = () =>
+  request.get('/admin/knowledge-documents/metrics')
+
 export const downloadKnowledgeDocument = (id: number) =>
   request.get(`/admin/knowledge-documents/${id}/file`, { responseType: 'blob' } as any)

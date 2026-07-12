@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Post,
   Request,
+  ServiceUnavailableException,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -37,6 +38,7 @@ export class AiController {
   async polish(@Request() req, @Body() dto: AiPolishDto): Promise<ApiResponse<any>> {
     const userId = ensureCuser(req);
     const aiConfig = await this.systemConfigService.getAiConfig();
+    this.assertAiEnabled(aiConfig);
     if (!aiConfig.enabled) {
       throw new ForbiddenException('AI 功能已停用');
     }
@@ -69,6 +71,7 @@ export class AiController {
   async generate(@Request() req, @Body() dto: AiGenerateDto): Promise<ApiResponse<any>> {
     const userId = ensureCuser(req);
     const aiConfig = await this.systemConfigService.getAiConfig();
+    this.assertAiEnabled(aiConfig);
     if (!aiConfig.enabled) {
       throw new ForbiddenException('AI 功能已停用');
     }
@@ -101,6 +104,7 @@ export class AiController {
   async diagnose(@Request() req, @Body() dto: AiDiagnoseDto): Promise<ApiResponse<any>> {
     const userId = ensureCuser(req);
     const aiConfig = await this.systemConfigService.getAiConfig();
+    this.assertAiEnabled(aiConfig);
     if (!aiConfig.enabled) {
       throw new ForbiddenException('AI 功能已停用');
     }
@@ -146,6 +150,12 @@ export class AiController {
     } catch (error) {
       await this.entitlementsService.refundAi(userId);
       throw error;
+    }
+  }
+
+  private assertAiEnabled(config: { enabled?: boolean }) {
+    if (!config.enabled) {
+      throw new ServiceUnavailableException('AI 功能已停用，请稍后再试或联系管理员开启。');
     }
   }
 

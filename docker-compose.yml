@@ -31,12 +31,10 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      agent:
-        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173,http://localhost:3030}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:3030,http://127.0.0.1:3030}
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USERNAME: ${DB_USERNAME:-resume_app}
@@ -54,6 +52,7 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-mock}
       AI_EXECUTION_ENGINE: ${AI_EXECUTION_ENGINE:-direct}
       AGENT_SERVICE_URL: ${AGENT_SERVICE_URL:-http://agent:8000}
+      AGENT_REQUEST_TIMEOUT_MS: ${AGENT_REQUEST_TIMEOUT_MS:-150000}
       AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
       R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_REGION: ${R2_REGION:-auto}
@@ -61,7 +60,7 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       R2_BUCKET: ${R2_BUCKET:-}
       R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
-      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-headless-shell
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     volumes:
@@ -122,6 +121,8 @@ services:
     build:
       context: ./python-agent
     container_name: resume-agent
+    profiles:
+      - rag
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -134,20 +135,30 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
       RAG_ENABLED: ${RAG_ENABLED:-true}
       QDRANT_URL: http://qdrant:6333
-      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-resume_knowledge}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-resume_knowledge_bge_zh_v1_5}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-fastembed}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      FASTEMBED_CACHE_PATH: /models/fastembed
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
       RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.35}
+      RAG_CANDIDATE_LIMIT: ${RAG_CANDIDATE_LIMIT:-120}
+      RAG_DENSE_WEIGHT: ${RAG_DENSE_WEIGHT:-0.68}
+      RAG_LEXICAL_WEIGHT: ${RAG_LEXICAL_WEIGHT:-0.27}
+      RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES:-true}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
       interval: 15s
       timeout: 5s
       retries: 20
+    volumes:
+      - fastembed_models:/models/fastembed
 
   qdrant:
     image: qdrant/qdrant:v1.13.2
     container_name: resume-qdrant
+    profiles:
+      - rag
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
@@ -156,3 +167,4 @@ volumes:
   mysql_data:
   backend_uploads:
   qdrant_data:
+  fastembed_models:

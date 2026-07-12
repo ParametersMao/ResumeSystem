@@ -12,6 +12,7 @@ export interface TemplateMeta {
   recommendWeight?: number;
   status?: 'online' | 'offline';
   presetKey?: CoreTemplatePreset['key'];
+  layoutKey?: CoreTemplatePreset['layoutKey'];
   templateVariant?: CoreTemplatePreset['variant'];
   variantLabel?: string;
   variantDescription?: string;
@@ -23,8 +24,8 @@ export interface TemplateDetail extends TemplateMeta {
 
 // 后端字段为 id/templateName/previewImage/...，此处做一层映射到前端 TemplateMeta
 type TemplateSortBy = 'recommended' | 'latest' | 'popular'
-type BackendTemplateList = { id: number; templateName: string; templateVariant?: CoreTemplatePreset['variant']; previewImage?: string; description?: string; industryTags?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; recommendWeight?: number; downloadCount?: number }
-type BackendTemplateDetail = { id: number; templateName: string; templateVariant?: CoreTemplatePreset['variant']; templateData: string; previewImage?: string; description?: string; industryTags?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; recommendWeight?: number; downloadCount?: number }
+type BackendTemplateList = { id: number; templateName: string; templateVariant?: CoreTemplatePreset['variant']; layoutKey?: CoreTemplatePreset['layoutKey']; previewImage?: string; description?: string; industryTags?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; recommendWeight?: number; downloadCount?: number }
+type BackendTemplateDetail = { id: number; templateName: string; templateVariant?: CoreTemplatePreset['variant']; layoutKey?: CoreTemplatePreset['layoutKey']; templateData: string; previewImage?: string; description?: string; industryTags?: string; status?: boolean; createTime?: string; updateTime?: string; useCount?: number; recommendWeight?: number; downloadCount?: number }
 type FavoriteListResponse = { templateIds: number[] }
 
 export async function fetchTemplates(page = 1, limit = 20, keyword = '', industryTags: string[] = [], sortBy: TemplateSortBy = 'recommended') {
@@ -35,7 +36,7 @@ export async function fetchTemplates(page = 1, limit = 20, keyword = '', industr
   })
   const mapped: PageResult<TemplateMeta> = {
     list: data.data.list.map((t) => ({
-      ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant }),
+      ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant, layoutKey: t.layoutKey }),
       templateId: String(t.id),
       name: t.templateName,
       coverUrl: t.previewImage || '',
@@ -57,7 +58,7 @@ export async function getTemplate(templateId: string) {
   const { data } = await http.get<ApiResponse<BackendTemplateList>>(`/api/templates`, { params: { id: templateId } })
   const t = Array.isArray((data as any).data?.list) ? (data as any).data.list.find((x: any) => String(x.id) === templateId) : (data as any).data
   const mapped: TemplateMeta = {
-    ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant }),
+    ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant, layoutKey: t.layoutKey }),
     templateId: String(t.id),
     name: t.templateName,
     coverUrl: t.previewImage || '',
@@ -76,7 +77,7 @@ export async function getTemplateDetail(templateId: string): Promise<TemplateDet
   const { data } = await http.get<ApiResponse<BackendTemplateDetail>>(`/api/templates/${templateId}`)
   const t: any = (data as any).data
   const mapped: TemplateDetail = {
-    ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant }, t.templateData ? safeParseTemplateData(t.templateData) : undefined),
+    ...toTemplatePresetMeta({ templateName: t.templateName, templateVariant: t.templateVariant, layoutKey: t.layoutKey }, t.templateData ? safeParseTemplateData(t.templateData) : undefined),
     templateId: String(t.id),
     name: t.templateName,
     coverUrl: t.previewImage || '',
@@ -91,10 +92,14 @@ export async function getTemplateDetail(templateId: string): Promise<TemplateDet
   return mapped
 }
 
-function toTemplatePresetMeta(source: { templateName?: string; templateVariant?: CoreTemplatePreset['variant'] }, templateData?: unknown) {
-  const preset = resolveTemplatePreset(source, templateData)
+function toTemplatePresetMeta(source: { templateName?: string; templateVariant?: CoreTemplatePreset['variant']; layoutKey?: CoreTemplatePreset['layoutKey'] }, templateData?: unknown) {
+  const preset = resolveTemplatePreset(
+    source.layoutKey ? { ...source, templateLayout: { key: source.layoutKey } } : source,
+    templateData,
+  )
   return {
     presetKey: preset.key,
+    layoutKey: preset.layoutKey,
     templateVariant: preset.variant,
     variantLabel: preset.label,
     variantDescription: preset.description,

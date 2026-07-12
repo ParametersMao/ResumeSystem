@@ -2,8 +2,8 @@
   <div class="templates-page">
     <header class="page-header">
       <div>
-        <h1>简历库</h1>
-        <p>选择一个适合当前求职方向的版式，进入编辑器后可继续调整内容。</p>
+        <h1>选择信息结构</h1>
+        <p>先看岗位场景和内容密度，再决定颜色。当前版式均可继续调整字体、主题色和间距。</p>
       </div>
       <el-button type="primary" @click="openEditor()">使用默认模板</el-button>
     </header>
@@ -47,7 +47,7 @@
     <section class="list-header">
       <div>
         <h2>{{ listTitle }}</h2>
-        <p>{{ visibleTemplates.length }} 个模板可用</p>
+        <p>{{ visibleTemplates.length }} 个版式可用 · 预览、编辑器与 PDF 使用同一渲染结构</p>
       </div>
     </section>
 
@@ -62,6 +62,11 @@
         }"
       >
         <div class="template-cover">
+          <div class="template-renderer-preview" aria-hidden="true">
+            <div class="template-renderer-stage">
+              <CoreResumePreview :document="getCardPreviewDocument(item)" />
+            </div>
+          </div>
           <img v-if="item.coverUrl" :src="item.coverUrl" :alt="`${item.name} 预览图`" />
           <div v-else class="template-cover-placeholder">
             {{ item.variantLabel || '模板预览' }}
@@ -77,7 +82,11 @@
 
           <div class="template-meta">
             <span>{{ item.variantLabel || '默认版式' }}</span>
-            <span>使用 {{ item.useCount || 0 }} 次</span>
+            <span>{{ getTemplateScenario(item) }}</span>
+          </div>
+          <p class="template-description">{{ item.variantDescription || '结构清晰，适合中文简历编辑与 PDF 投递。' }}</p>
+          <div v-if="getVisibleTags(item).length" class="template-tags">
+            <span v-for="tag in getVisibleTags(item)" :key="tag">{{ tag }}</span>
           </div>
         </div>
 
@@ -118,7 +127,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CoreResumePreview from '@/components/core-resume/CoreResumePreview.vue'
-import { createDemoDocument, extractThemeFromTemplate, type CoreResumeDocument } from '@/core-resume/model'
+import { createDemoDocument, ensureAllSections, extractLayoutFromTemplate, extractThemeFromTemplate, type CoreResumeDocument, type CoreTemplateLayoutKey, type CoreTemplateVariant } from '@/core-resume/model'
 import { getTemplateVariantLabel, resolveTemplateVariant } from '@/core-resume/templates'
 import {
   addFavoriteTemplate,
@@ -138,6 +147,32 @@ type ScopeFilter = 'all' | 'favorites' | 'recent'
 const FAVORITE_TEMPLATE_STORAGE_KEY = 'resume-favorite-template-ids'
 const RECENT_TEMPLATE_STORAGE_KEY = 'resume-recent-template-ids'
 const RECENT_TEMPLATE_LIMIT = 8
+const CARD_PREVIEW_THEME_BY_LAYOUT: Partial<Record<CoreTemplateLayoutKey, string>> = {
+  'qm-blue-top-photo': '#5272b7',
+  'qm-sidebar-profile': '#5aa1d6',
+  'qm-classic-centered': '#173e5f',
+  'qm-ribbon-compact': '#1f4868',
+  'qm-timeline-icons': '#5aa1d6',
+  'qm-minimal-ats': '#163a59',
+  'qm-executive-business': '#26364d',
+  'qm-student-editorial': '#2f80a7',
+  'qm-spotlight-featured': '#2e6cff',
+  'qm-asymmetric-profile': '#386b78',
+}
+
+const TEMPLATE_SCENARIO_BY_VARIANT: Partial<Record<NonNullable<TemplateMeta['templateVariant']>, string>> = {
+  classic: '通用职能 / 正式投递',
+  sidebar: '信息丰富 / 资深候选人',
+  timeline: '技术产品 / 项目经历',
+  spotlight: '产品运营 / 成果导向',
+  ats: 'ATS 系统 / 稳定解析',
+  executive: '管理咨询 / 中高层',
+  compact: '财务行政 / 一页高密度',
+  editorial: '校招教育 / 应届生',
+}
+const TEMPLATE_SCENARIO_BY_LAYOUT: Partial<Record<CoreTemplateLayoutKey, string>> = {
+  'qm-asymmetric-profile': '专业人才 / 资深职能',
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -154,13 +189,14 @@ const recentTemplateIds = ref<string[]>(readStoredTemplateIds(RECENT_TEMPLATE_ST
 
 const previewVisible = ref(false)
 const previewDocument = ref<CoreResumeDocument | null>(null)
+const cardPreviewCache = new Map<string, CoreResumeDocument>()
 
 const variantOptions: Array<{ value: VariantFilter; label: string }> = [
   { value: 'all', label: '全部版式' },
   { value: 'classic', label: '经典单栏' },
   { value: 'sidebar', label: '侧栏双栏' },
   { value: 'timeline', label: '时间轴版' },
-  { value: 'spotlight', label: '聚焦封面' },
+  { value: 'spotlight', label: '成果导向' },
   { value: 'ats', label: 'ATS 极简' },
   { value: 'executive', label: '高管黑金' },
   { value: 'compact', label: '紧凑信息流' },
@@ -293,13 +329,16 @@ async function openPreview(templateId: string) {
     const templateData = typeof detail.templateData === 'string'
       ? JSON.parse(detail.templateData)
       : detail.templateData
-    previewDocument.value = createDemoDocument(extractThemeFromTemplate(templateData))
+    const resolvedVariant = resolveTemplateVariant(detail, templateData)
+    const extractedLayout = extractLayoutFromTemplate(templateData)
+    const resolvedLayoutKey = detail.layoutKey || extractedLayout?.key
+    previewDocument.value = createTemplatePreviewDocument(resolvedVariant, extractThemeFromTemplate(templateData), resolvedLayoutKey)
+    previewDocument.value.templateLayout = detail.layoutKey
+      ? { ...extractedLayout, key: detail.layoutKey }
+      : extractedLayout
     previewDocument.value.templateId = templateId
     previewDocument.value.templateName = detail.name
-    ;(previewDocument.value as VariantAwareDocument).templateVariant = resolveTemplateVariant(
-      previewDocument.value as VariantAwareDocument,
-      templateData,
-    )
+    ;(previewDocument.value as VariantAwareDocument).templateVariant = resolvedVariant
   } catch (error) {
     console.error('模板预览加载失败:', error)
   }
@@ -352,6 +391,18 @@ function getScopeCount(scope: ScopeFilter) {
   return variantFilteredTemplates.value.length
 }
 
+function getTemplateScenario(item: TemplateCard) {
+  if (item.layoutKey && TEMPLATE_SCENARIO_BY_LAYOUT[item.layoutKey]) {
+    return TEMPLATE_SCENARIO_BY_LAYOUT[item.layoutKey]
+  }
+  return TEMPLATE_SCENARIO_BY_VARIANT[item.templateVariant || 'classic'] || '中文简历 / PDF 投递'
+}
+
+function getVisibleTags(item: TemplateCard) {
+  const ignored = new Set(['全民简历', '蓝色', '深色', '正式', '简洁'])
+  return (item.industryTags || []).filter((tag) => !ignored.has(tag)).slice(0, 3)
+}
+
 function handlePageChange(nextPage: number) {
   page.value = nextPage
 }
@@ -395,6 +446,245 @@ function isFavorite(templateId: string) {
 
 function isRecent(templateId: string) {
   return recentTemplateIds.value.includes(templateId)
+}
+
+function getCardPreviewDocument(template: TemplateCard) {
+  const cacheKey = [
+    template.templateId,
+    template.layoutKey || '',
+    template.templateVariant || '',
+    template.themeColor || '',
+  ].join(':')
+  const cached = cardPreviewCache.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const primaryColor = template.layoutKey
+    ? CARD_PREVIEW_THEME_BY_LAYOUT[template.layoutKey] || template.themeColor
+    : template.themeColor
+  const variant = template.templateVariant || resolveTemplateVariant({
+    templateName: template.name,
+    templateLayout: template.layoutKey ? { key: template.layoutKey } : undefined,
+  })
+  const document = createTemplatePreviewDocument(variant, primaryColor ? { primaryColor } : undefined, template.layoutKey)
+  document.templateId = template.templateId
+  document.templateName = template.name
+  document.templateLayout = template.layoutKey ? { key: template.layoutKey } : undefined
+  document.templateVariant = variant
+
+  cardPreviewCache.set(cacheKey, document)
+  return document
+}
+
+function createTemplatePreviewDocument(
+  variant: CoreTemplateVariant,
+  themeOverrides?: Partial<CoreResumeDocument['theme']>,
+  layoutKey?: CoreTemplateLayoutKey,
+) {
+  const document = ensureAllSections(createDemoDocument(themeOverrides))
+
+  if (layoutKey === 'qm-asymmetric-profile') {
+    document.profile = {
+      ...document.profile,
+      name: '沈清和',
+      title: '品牌策略负责人',
+      yearsOfExperience: '8年',
+      email: 'qinghe@example.com',
+      site: '',
+    }
+    updatePreviewSection(document, 'intention', '职业定位', [{ intention: '品牌策略 / 内容增长 / 杭州' }])
+    updatePreviewSection(document, 'summary', '个人陈述', [{ text: '擅长从商业目标出发构建品牌叙事，并把策略转化为跨渠道内容与可衡量的增长成果。' }])
+    updatePreviewSection(document, 'skills', '核心能力', [
+      { name: '品牌策略', proficiency: '94', level: '精通' },
+      { name: '内容增长', proficiency: '88', level: '熟练' },
+      { name: '用户研究', proficiency: '82', level: '熟练' },
+    ])
+    updatePreviewSection(document, 'awards', '荣誉证书', [{ name: '年度品牌营销案例奖', org: '行业协会', date: '2024' }])
+    updatePreviewSection(document, 'experience', '工作经历', [{
+      company: '某消费科技公司', role: '品牌策略负责人', duration: { start: '2021-04', end: '至今' },
+      desc: '重构品牌定位与年度内容矩阵，协调产品、市场和渠道团队完成 4 次重点发布，品牌搜索量提升 46%。',
+    }])
+    updatePreviewSection(document, 'projects', '代表项目', [{
+      name: '新品类品牌升级', role: '项目负责人', duration: { start: '2023-02', end: '2023-10' },
+      desc: '完成用户研究、价值主张与传播方案，推动核心渠道转化率提升 21%，沉淀可复用的品牌表达规范。',
+    }])
+    for (const section of document.sections) {
+      section.visible = ['intention', 'education', 'skills', 'awards', 'summary', 'experience', 'projects'].includes(section.type)
+    }
+    return document
+  }
+
+  if (variant === 'editorial') {
+    document.profile = {
+      ...document.profile,
+      name: '李妍',
+      title: '产品运营实习生',
+      yearsOfExperience: '应届生',
+      email: 'liyan@example.com',
+      site: '',
+    }
+    updatePreviewSection(document, 'intention', '求职意向', [{ intention: '产品运营 / 用户增长 / 上海' }])
+    updatePreviewSection(document, 'education', '教育背景', [{
+      school: '华东理工大学',
+      degree: '信息管理与信息系统 本科',
+      duration: { start: '2022-09', end: '2026-06' },
+      desc: 'GPA 3.7/4.0（专业前 15%），主修数据分析、用户研究与产品设计。',
+    }])
+    updatePreviewSection(document, 'projects', '代表项目', [{
+      name: '校园二手交易小程序',
+      role: '产品负责人',
+      duration: { start: '2024-09', end: '2025-01' },
+      desc: '完成 42 名学生访谈、需求分层和原型测试，组织 4 人团队交付核心交易流程。',
+    }])
+    updatePreviewSection(document, 'internship', '实习经历', [{
+      company: '某互联网教育平台',
+      role: '产品运营实习生',
+      duration: { start: '2025-03', end: '2025-09' },
+      desc: '参与新用户激活流程优化，负责活动配置、数据复盘和用户访谈，形成 3 项可执行改进建议。',
+    }])
+    updatePreviewSection(document, 'campus', '校园经历', [{
+      org: '校学生会新媒体中心',
+      role: '内容组负责人',
+      duration: { start: '2023-09', end: '2024-07' },
+      desc: '统筹选题、排期与复盘，协调 6 名成员完成迎新季内容项目。',
+    }])
+    updatePreviewSection(document, 'skills', '技能工具', [
+      { name: 'Excel / SQL', proficiency: '88', level: '熟练' },
+      { name: 'Axure / Figma', proficiency: '82', level: '熟练' },
+      { name: '英语 CET-6', proficiency: '76', level: '良好' },
+    ])
+    updatePreviewSection(document, 'awards', '荣誉证书', [{
+      name: '全国大学生市场调查大赛 省级二等奖',
+      org: '中国商业统计学会',
+      date: '2025-05',
+    }])
+    updatePreviewSection(document, 'summary', '个人优势', [{ text: '能从用户研究和数据分析中提炼问题，并把结论转化为可执行的产品与运营方案。' }])
+    const experienceSection = document.sections.find((section) => section.type === 'experience')
+    if (experienceSection) experienceSection.visible = false
+    const studentOrder = ['education', 'projects', 'internship', 'campus', 'skills', 'awards', 'summary', 'intention']
+    document.sections.sort((left, right) =>
+      studentOrder.indexOf(left.type) - studentOrder.indexOf(right.type),
+    )
+    return document
+  }
+
+  if (variant === 'spotlight') {
+    document.profile = {
+      ...document.profile,
+      name: '周宁',
+      title: '产品运营 / 用户增长',
+      avatar: '',
+      yearsOfExperience: '4年',
+      email: 'zhouning@example.com',
+      site: '',
+    }
+    updatePreviewSection(document, 'intention', '职业定位', [{ intention: '产品运营 / 用户增长 / 企业服务' }])
+    updatePreviewSection(document, 'summary', '成果摘要', [{
+      text: '围绕用户激活、留存和产品采用推进增长项目，擅长把用户研究、数据分析与跨团队落地连接起来。',
+    }])
+    updatePreviewSection(document, 'projects', '代表成果', [
+      {
+        name: '新用户激活链路重构', role: '项目负责人', duration: { start: '2024-03', end: '2024-08' },
+        desc: '针对注册后首周流失问题，拆解关键行为并完成 3 轮 A/B 测试，推动产品与研发上线分层引导，首周激活率提升 18%。',
+      },
+      {
+        name: '企业客户内容增长计划', role: '运营负责人', duration: { start: '2023-06', end: '2023-12' },
+        desc: '重构选题、生产和复盘机制，联合销售沉淀行业案例，内容带来的有效线索增长 32%。',
+      },
+    ])
+    updatePreviewSection(document, 'experience', '工作经历', [{
+      company: '某企业服务公司', role: '高级产品运营', duration: { start: '2022-04', end: '至今' },
+      desc: '负责核心产品采用与用户生命周期运营，搭建周度指标看板，协同产品、销售和客户成功推进增长实验。',
+    }])
+    updatePreviewSection(document, 'skills', '核心能力', [
+      { name: '用户增长' }, { name: '数据分析' }, { name: 'A/B 测试' }, { name: '跨团队协作' },
+    ])
+    updatePreviewSection(document, 'education', '教育背景', [{
+      school: '暨南大学', degree: '市场营销 本科', duration: { start: '2014-09', end: '2018-06' }, desc: '',
+    }])
+    return document
+  }
+
+  if (variant === 'executive') {
+    document.profile = {
+      ...document.profile,
+      name: '陈哲',
+      title: '业务运营总监',
+      yearsOfExperience: '12年',
+      email: 'chenzhe@example.com',
+      site: '',
+    }
+    updatePreviewSection(document, 'intention', '职业定位', [{ intention: '业务运营总监 / 企业服务' }])
+    updatePreviewSection(document, 'education', '教育背景', [{
+      school: '中山大学',
+      degree: '工商管理 硕士',
+      duration: { start: '2010-09', end: '2013-06' },
+      desc: '聚焦组织管理、商业分析与企业战略。',
+    }])
+    updatePreviewSection(document, 'experience', '管理经历', [
+      {
+        company: '某企业服务集团', role: '业务运营总监', duration: { start: '2020-06', end: '至今' },
+        desc: '负责全国业务运营与经营分析，管理跨区域团队，推动交付流程标准化。',
+      },
+      {
+        company: '某数字科技公司', role: '运营负责人', duration: { start: '2015-04', end: '2020-05' },
+        desc: '从 0 到 1 建设运营体系，协同销售、产品与交付团队提升客户续约。',
+      },
+    ])
+    updatePreviewSection(document, 'projects', '核心业绩', [{
+      name: '全国交付体系升级', role: '项目负责人', duration: { start: '2023-02', end: '2023-12' },
+      desc: '统一关键流程和经营看板，缩短跨部门协作链路并提升交付可预测性。',
+    }])
+    updatePreviewSection(document, 'skills', '核心能力', [
+      { name: '经营分析' }, { name: '组织管理' }, { name: '流程建设' }, { name: '业务增长' },
+    ])
+    updatePreviewSection(document, 'summary', '管理理念', [{ text: '擅长将战略目标拆解为组织机制、过程指标和可复用的执行体系。' }])
+    return document
+  }
+
+  if (variant === 'ats' || variant === 'timeline') {
+    document.profile = {
+      ...document.profile,
+      name: '王晨',
+      title: '前端工程师',
+      yearsOfExperience: '5年',
+      email: 'wangchen@example.com',
+      site: 'github.com/wangchen',
+    }
+    updatePreviewSection(document, 'intention', '求职意向', [{ intention: '前端工程师 / Web 应用架构' }])
+    updatePreviewSection(document, 'education', '教育背景', [{
+      school: '南京邮电大学', degree: '软件工程 本科', duration: { start: '2015-09', end: '2019-06' },
+      desc: '主修数据结构、计算机网络、数据库和软件工程。',
+    }])
+    updatePreviewSection(document, 'experience', '工作经历', [{
+      company: '某企业服务公司', role: '高级前端工程师', duration: { start: '2021-05', end: '至今' },
+      desc: '负责核心管理平台架构与性能治理，建设组件规范并推动前端工程化落地。',
+    }])
+    updatePreviewSection(document, 'projects', '项目经历', [{
+      name: '企业级工作台重构', role: '前端负责人', duration: { start: '2023-03', end: '2024-01' },
+      desc: '完成 Vue 3 与 TypeScript 技术升级，拆分公共模块并建立质量检查流程。',
+    }])
+    updatePreviewSection(document, 'skills', '专业技能', [
+      { name: 'Vue 3 / TypeScript' }, { name: '工程化与性能优化' }, { name: 'Node.js' }, { name: '前端架构' },
+    ])
+    updatePreviewSection(document, 'summary', '个人优势', [{ text: '关注复杂业务的可维护性和交付效率，具备从需求拆解到稳定上线的完整经验。' }])
+  }
+
+  return document
+}
+
+function updatePreviewSection(
+  document: CoreResumeDocument,
+  type: CoreResumeDocument['sections'][number]['type'],
+  title: string,
+  items: CoreResumeDocument['sections'][number]['items'],
+) {
+  const section = document.sections.find((item) => item.type === type)
+  if (!section) return
+  section.title = title
+  section.visible = true
+  section.items = items
 }
 
 function persistRecentTemplate(templateId: string) {
@@ -556,7 +846,7 @@ function writeStoredTemplateIds(storageKey: string, templateIds: string[]) {
 .template-card {
   display: flex;
   flex-direction: column;
-  min-height: 390px;
+  min-height: 430px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 24px;
   overflow: hidden;
@@ -576,20 +866,57 @@ function writeStoredTemplateIds(storageKey: string, templateIds: string[]) {
 }
 
 .template-cover {
-  height: 178px;
-  padding: 18px;
+  position: relative;
+  height: 220px;
+  padding: 14px;
   background: linear-gradient(180deg, #f1f5f9, #ffffff);
+  overflow: hidden;
 }
 
-.template-cover img {
+.template-renderer-preview {
+  position: relative;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 16px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #ffffff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
 }
 
+.template-renderer-stage {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 820px;
+  height: 1120px;
+  pointer-events: none;
+  transform: translateX(-50%) scale(0.23);
+  transform-origin: top center;
+}
+
+.template-renderer-stage :deep(.core-preview-shell) {
+  width: 820px;
+  padding: 0;
+  background: #ffffff;
+}
+
+.template-renderer-stage :deep(.resume-sheet) {
+  margin: 0;
+  box-shadow: none;
+}
+
+.template-cover img {
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
 .template-cover-placeholder {
+  display: none;
   width: 100%;
   height: 100%;
   display: flex;
@@ -599,6 +926,11 @@ function writeStoredTemplateIds(storageKey: string, templateIds: string[]) {
   background: #e2e8f0;
   color: #64748b;
   font-weight: 700;
+}
+
+.template-cover > img,
+.template-cover > .template-cover-placeholder {
+  display: none;
 }
 
 .template-body {
@@ -650,6 +982,31 @@ function writeStoredTemplateIds(storageKey: string, templateIds: string[]) {
   color: #475569;
   font-size: 12px;
   font-weight: 600;
+}
+
+.template-description {
+  min-height: 44px;
+  margin: 13px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.template-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.template-tags span {
+  padding: 4px 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .template-actions {

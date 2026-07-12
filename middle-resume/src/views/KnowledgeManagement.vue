@@ -11,6 +11,14 @@
       </div>
     </div>
 
+    <div class="metric-grid">
+      <el-card v-for="item in metricCards" :key="item.label" shadow="never" class="metric-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <small>{{ item.hint }}</small>
+      </el-card>
+    </div>
+
     <el-card shadow="never" class="filter-card">
       <el-form inline>
         <el-form-item label="关键词">
@@ -137,6 +145,11 @@
             <strong>{{ item.documentName }}</strong>
             <el-tag size="small">{{ item.score }}</el-tag>
           </div>
+          <div class="score-breakdown">
+            <span>{{ item.retrievalMethod || 'dense' }}</span>
+            <span>Dense {{ item.denseScore ?? '-' }}</span>
+            <span>Lexical {{ item.lexicalScore ?? '-' }}</span>
+          </div>
           <p>{{ item.text }}</p>
         </div>
       </div>
@@ -146,11 +159,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import {
   deleteKnowledgeDocument,
   downloadKnowledgeDocument,
+  getKnowledgeMetrics,
   getKnowledgeDocuments,
   reindexKnowledgeDocument,
   searchKnowledge,
@@ -182,6 +196,13 @@ const selectedFile = ref<File | null>(null)
 const filters = reactive({ search: '', category: '', status: '' })
 const uploadForm = reactive({ name: '', category: 'general', description: '' })
 const searchForm = reactive({ query: '', category: '' })
+const metrics = ref<Record<string, number | string>>({})
+const metricCards = computed(() => [
+  { label: '知识文档', value: total.value, hint: '后台持久化文档' },
+  { label: '向量切块', value: Number(metrics.value.collection_points || 0), hint: 'Qdrant 当前存量' },
+  { label: '检索次数', value: Number(metrics.value.searches || 0), hint: `命中 ${Number(metrics.value.search_hits || 0)} 条` },
+  { label: '最近检索延迟', value: `${Number(metrics.value.last_search_ms || 0)} ms`, hint: Number(metrics.value.failures || 0) ? `失败 ${metrics.value.failures}` : '运行正常' }
+])
 
 async function loadDocuments() {
   loading.value = true
@@ -197,6 +218,15 @@ async function loadDocuments() {
     total.value = Number(response.data.total || 0)
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMetrics() {
+  try {
+    const response = await getKnowledgeMetrics()
+    metrics.value = response.data.rag || {}
+  } catch {
+    metrics.value = {}
   }
 }
 
@@ -272,6 +302,7 @@ async function handleSearch() {
     })
     searchResults.value = response.data.results || []
     searched.value = true
+    await loadMetrics()
   } finally {
     searching.value = false
   }
@@ -305,7 +336,7 @@ function formatSize(value: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
-onMounted(loadDocuments)
+onMounted(() => Promise.all([loadDocuments(), loadMetrics()]))
 </script>
 
 <style scoped>
@@ -314,10 +345,16 @@ onMounted(loadDocuments)
 .page-header h2 { margin: 0 0 8px; font-size: 28px; }
 .page-header p, .muted { margin: 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .header-actions { display: flex; gap: 10px; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.metric-card :deep(.el-card__body) { display: flex; min-height: 92px; flex-direction: column; gap: 7px; }
+.metric-card span, .metric-card small { color: var(--el-text-color-secondary); }
+.metric-card strong { color: var(--el-text-color-primary); font-size: 24px; }
+.score-breakdown { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
 .filter-card :deep(.el-card__body) { padding-bottom: 2px; }
 .pagination { display: flex; justify-content: flex-end; margin-top: 18px; }
 .search-results { display: grid; gap: 12px; margin-top: 18px; max-height: 420px; overflow: auto; }
 .result-card { padding: 14px 16px; border: 1px solid var(--el-border-color-light); border-radius: 10px; background: var(--el-fill-color-lighter); }
 .result-card p { margin: 8px 0 0; line-height: 1.7; white-space: pre-wrap; }
 .result-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+@media (max-width: 1000px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

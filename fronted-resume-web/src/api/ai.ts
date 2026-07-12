@@ -40,6 +40,8 @@ export interface AiDiagnoseResponse extends AiRuntimeMeta {
   steps: AiAgentStep[]
   suggestions: Array<Record<string, any>>
   diagnostics: string[]
+  strategy?: string[]
+  warnings?: string[]
   patch: Record<string, any>
   sources: Array<{
     documentId: number

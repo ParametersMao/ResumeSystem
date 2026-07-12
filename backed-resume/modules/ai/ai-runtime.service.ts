@@ -85,7 +85,7 @@ export interface AiConnectionTestResult {
   executionMode: LiveExecutionMode;
   configReady: boolean;
   success: boolean;
-  status: 'mock' | 'incomplete' | 'success' | 'failed';
+  status: 'disabled' | 'mock' | 'incomplete' | 'success' | 'failed';
   message: string;
   endpoint?: string;
   responsePreview?: string;
@@ -111,6 +111,7 @@ export class AiRuntimeService {
       .filter(Boolean)
       .join('\n');
     const executionMode = this.resolveExecutionMode(config, false);
+    this.assertRuntimeCallable(executionMode);
 
     if (executionMode === 'live') {
       const liveResult = await this.callOpenAiCompatible<{
@@ -178,6 +179,7 @@ export class AiRuntimeService {
       jobTitle,
     });
     const executionMode = this.resolveExecutionMode(config, false);
+    this.assertRuntimeCallable(executionMode);
 
     if (executionMode === 'live') {
       const liveResult = await this.callOpenAiCompatible<{
@@ -230,6 +232,7 @@ export class AiRuntimeService {
       contextText,
     });
     const executionMode = this.resolveExecutionMode(config, false);
+    this.assertRuntimeCallable(executionMode);
 
     if (executionMode === 'live') {
       const liveResult = await this.callOpenAiCompatible<{
@@ -250,11 +253,9 @@ export class AiRuntimeService {
         sectionType: liveResult.payload.sectionType || sectionType,
         intention: this.toPlainText(liveResult.payload.intention || ''),
         summary: this.toPlainText(liveResult.payload.summary || ''),
-        skills: Array.isArray(liveResult.payload.skills)
-          ? liveResult.payload.skills.map((item) => this.toPlainText(String(item))).filter(Boolean)
-          : [],
-        experiences: Array.isArray(liveResult.payload.experiences) ? liveResult.payload.experiences : [],
-        projects: Array.isArray(liveResult.payload.projects) ? liveResult.payload.projects : [],
+        skills: this.sanitizeGeneratedSkills(liveResult.payload.skills, contextText, jobTitle),
+        experiences: this.sanitizeGeneratedRecords(liveResult.payload.experiences, contextText, 'experience'),
+        projects: this.sanitizeGeneratedRecords(liveResult.payload.projects, contextText, 'project'),
         provider: config.provider,
         model: config.apiModel,
         tokenUsed: liveResult.tokenUsed,
@@ -349,6 +350,19 @@ export class AiRuntimeService {
         : config.executionEngine === 'agent'
           ? `${this.normalizeApiBaseUrl(config.agentBaseUrl)}/health`
           : `${this.normalizeApiBaseUrl(config.apiBaseUrl)}/models`;
+
+    if (!config.enabled) {
+      return {
+        provider: config.provider,
+        model: config.apiModel,
+        executionMode,
+        configReady: false,
+        success: false,
+        status: 'disabled',
+        message: 'AI 功能已停用。开启后台 AI 开关后才会处理润色、生成和诊断请求。',
+        endpoint,
+      };
+    }
 
     if (config.provider === 'mock') {
       return {
@@ -452,6 +466,12 @@ export class AiRuntimeService {
     }
 
     return forPreview ? 'prepared' : 'live';
+  }
+
+  private assertRuntimeCallable(executionMode: LiveExecutionMode) {
+    if (executionMode === 'prepared') {
+      throw new ServiceUnavailableException('AI 外部服务尚未配置完整，请先在后台补齐 API Base URL、API Key 和模型名称。');
+    }
   }
 
   private isExternalConfigReady(config: AiConfigDto) {
@@ -583,6 +603,87 @@ export class AiRuntimeService {
     return `<p>${this.escapeHtml(text)}</p>`;
   }
 
+  private sanitizeGeneratedSkills(values: unknown, contextText: string, jobTitle: string) {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+
+    const context = this.toPlainText(`${contextText} ${jobTitle}`).toLowerCase();
+    const allowedGeneric = ['沟通协作', '需求分析', '问题排查', '项目交付', '文档沉淀', '团队协作'];
+    return values
+      .map((item) => this.toPlainText(String(item || '')))
+      .filter(Boolean)
+      .filter((skill) => {
+        const normalized = skill.toLowerCase();
+        if (allowedGeneric.some((generic) => skill.includes(generic))) {
+          return true;
+        }
+        const tokens = normalized
+          .split(/[\/,，、\s]+/)
+          .map((token) => token.trim())
+          .filter((token) => token.length >= 2);
+        return tokens.length === 0 || tokens.some((token) => context.includes(token));
+      })
+      .slice(0, 8);
+  }
+
+  private sanitizeGeneratedRecords(values: unknown, contextText: string, kind: 'experience' | 'project') {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+
+    const context = this.toPlainText(contextText);
+    return values
+      .filter((item): item is Record<string, any> => Boolean(item) && typeof item === 'object')
+      .map((item) => {
+        const next: Record<string, any> = { ...item };
+        if (kind === 'experience') {
+          next.company = this.keepOnlyIfGrounded(next.company, context, '待补充公司');
+        } else {
+          next.name = this.keepOnlyIfGrounded(next.name, context, '待补充项目名称');
+        }
+        next.role = this.toPlainText(String(next.role || '')) || '待补充角色';
+        next.desc = this.stripUnsupportedMetrics(this.toPlainText(String(next.desc || '')), context);
+        next.duration = this.sanitizeDuration(next.duration, context);
+        return next;
+      })
+      .filter((item) => this.toPlainText(String(item.desc || '')).length > 0)
+      .slice(0, 3);
+  }
+
+  private keepOnlyIfGrounded(value: unknown, contextText: string, fallback: string) {
+    const text = this.toPlainText(String(value || ''));
+    if (!text || /待补充|示例|相关/.test(text)) {
+      return text || fallback;
+    }
+    return contextText.includes(text) ? text : fallback;
+  }
+
+  private sanitizeDuration(value: unknown, contextText: string) {
+    const duration = value && typeof value === 'object' ? (value as Record<string, any>) : {};
+    return {
+      start: this.keepDateOnlyIfGrounded(duration.start, contextText),
+      end: this.keepDateOnlyIfGrounded(duration.end, contextText),
+    };
+  }
+
+  private keepDateOnlyIfGrounded(value: unknown, contextText: string) {
+    const text = this.toPlainText(String(value || ''));
+    if (!text || /待补充/.test(text)) {
+      return '';
+    }
+    return contextText.includes(text) ? text : '';
+  }
+
+  private stripUnsupportedMetrics(value: string, contextText: string) {
+    if (!value) {
+      return '';
+    }
+    return value.replace(/\d+(?:\.\d+)?\s*(?:%|％|人|名|万|亿|ms|s|秒|分钟|小时|天|fps|FPS|\+)?/g, (match) =>
+      contextText.includes(match) ? match : '可量化成果',
+    );
+  }
+
   private async callOpenAiCompatible<T>({
     config,
     promptPreview,
@@ -661,8 +762,10 @@ export class AiRuntimeService {
             '你是专业简历生成助手。',
             '请只返回 JSON，不要添加 Markdown 代码块。',
             'JSON 结构必须为：{"sectionType":"...","intention":"...","summary":"...","skills":["..."],"experiences":[{"company":"...","role":"...","duration":{"start":"YYYY-MM","end":"YYYY-MM"},"desc":"..."}],"projects":[{"name":"...","role":"...","duration":{"start":"YYYY-MM","end":"YYYY-MM"},"desc":"..."}]}。',
-            'summary 要像可直接放进自我评价的中文初稿，intention 直接返回求职意向，skills 至少 4 项，experiences 和 projects 至少各 1 项。',
+            'summary 要像可直接放进自我评价的中文初稿，intention 直接返回求职意向；experiences 和 projects 可以为空数组。',
             '如果用户已经提供部分关键词、项目名、公司名、角色或时间，请优先沿用这些已知信息补全剩余字段，不要随意改写已有事实。',
+            '不得编造公司、学校、项目名、时间、证书、人数、金额、性能指标或百分比；缺失字段请返回空字符串、空数组或“待补充”。',
+            'skills 只能使用用户上下文中明确出现的具体技术栈；如果上下文不足，可返回偏通用的岗位能力，不要主动加入未出现的框架或工具名。',
             '经历和项目描述优先采用成果导向表达，尽量体现场景、动作和结果，可参考 STAR 思路，但不要机械写成字母缩写。',
           ].join('\n')
           : [

@@ -145,6 +145,10 @@ export class KnowledgeService {
     return this.agentClient.search(query, limit, category);
   }
 
+  async metrics() {
+    return this.agentClient.getMetrics();
+  }
+
   async getFile(id: number) {
     const document = await this.findOne(id);
     return {

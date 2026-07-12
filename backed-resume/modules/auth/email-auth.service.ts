@@ -163,6 +163,10 @@ export class EmailAuthService implements OnModuleInit {
       return false;
     }
 
+    if (String(config.smtpHost).includes('@')) {
+      throw new ServiceUnavailableException('邮件服务配置错误：SMTP 主机应填写 smtp.163.com、smtp.qq.com 这类服务器地址，不能填写邮箱账号。');
+    }
+
     const transporter = nodemailer.createTransport({
       host: config.smtpHost,
       port: config.smtpPort,

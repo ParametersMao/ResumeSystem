@@ -13,7 +13,7 @@ export class CreateResumeDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  templateId?: number;
+  templateId?: number | null;
 
   @IsOptional()
   @IsString()
@@ -33,7 +33,7 @@ export class UpdateResumeDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  templateId?: number;
+  templateId?: number | null;
 
   @IsOptional()
   @IsString()
@@ -49,7 +49,7 @@ export class ResumeResponseDto {
   id: number;
   title: string;
   content: string;
-  templateId?: number;
+  templateId?: number | null;
   templateName?: string;
   userId: number;
   userName?: string;
@@ -63,7 +63,7 @@ export class ResumeResponseDto {
 export class ResumeListResponseDto {
   id: number;
   title: string;
-  templateId?: number;
+  templateId?: number | null;
   templateName?: string;
   userId: number;
   userName?: string;

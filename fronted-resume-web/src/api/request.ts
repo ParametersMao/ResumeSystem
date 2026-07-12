@@ -38,9 +38,11 @@ function onRefreshFailed(error: unknown) {
 
 instance.interceptors.request.use((config) => {
   if (config.url) config.url = normalizeApiUrl(config.url)
+  config.headers = config.headers || {}
+  config.headers['Cache-Control'] = 'no-cache'
+  config.headers.Pragma = 'no-cache'
   const user = useUserStore()
   if (user.token) {
-    config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${user.token}`
   }
   return config
@@ -118,6 +120,9 @@ instance.interceptors.response.use(
       }
       case 500:
         ElMessage.error('服务器错误，请稍后重试')
+        break
+      case 503:
+        ElMessage.error((data as { message?: string })?.message || '服务暂不可用，请稍后重试')
         break
       default: {
         const message = (data as { message?: string })?.message

@@ -94,7 +94,8 @@ export class AiAgentClientService {
     const baseUrl = this.resolveAgentBaseUrl(config);
     const endpoint = `${baseUrl}/agent/${taskType}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeoutMs = Math.min(300_000, Math.max(30_000, Number(process.env.AGENT_REQUEST_TIMEOUT_MS || 150_000)));
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(endpoint, {
@@ -148,8 +149,10 @@ export class AiAgentClientService {
       source: 'resume-system',
       provider: config.provider || 'mock',
       api_base_url: config.apiBaseUrl || '',
+      api_key: config.apiKey || '',
       model: config.apiModel || '',
       temperature: config.temperature,
+      strict_sources: String(process.env.RAG_STRICT_SOURCES || 'false').toLowerCase() === 'true',
       execution_mode:
         config.provider !== 'mock' && config.apiBaseUrl && config.apiKey && config.apiModel
           ? 'live'

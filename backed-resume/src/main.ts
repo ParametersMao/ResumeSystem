@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
+import { buildAllowedOrigins, isOriginAllowed } from './cors';
 
 async function bootstrap() {
   // 全局异常监听，输出所有未捕获异常
@@ -23,15 +24,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: loggerLevels });
 
   // 全局 CORS 配置：允许指定前端域名
-  const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
-    .split(',')
-    .map((url) => url.trim())
-    .filter(Boolean);
+  const allowedOrigins = buildAllowedOrigins(process.env.FRONTEND_URL);
 
   app.enableCors({
     origin: (origin, callback) => {
       // 允许没有 origin 的请求（如 Postman）
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin, allowedOrigins)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: origin ${origin} not allowed`));

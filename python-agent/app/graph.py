@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, TypedDict
 
 from .llm import call_structured_llm
@@ -138,8 +139,13 @@ def retrieval_node(request: AgentRequest, perception: AgentStep) -> AgentStep:
         ]
         if part
     )[:3000]
+    strict_sources = bool(request.options.get("strict_sources")) or str(
+        os.getenv("RAG_STRICT_SOURCES", "false")
+    ).lower() in {"1", "true", "yes"}
     try:
         sources = search_documents(query, limit=5)
+        if strict_sources and not sources:
+            raise RuntimeError("严格来源模式下未检索到达到阈值的知识库依据。")
         return AgentStep(
             name="retrieval",
             title="知识检索",
@@ -147,6 +153,8 @@ def retrieval_node(request: AgentRequest, perception: AgentStep) -> AgentStep:
             output={"sources": sources, "enabled": True},
         )
     except Exception as error:
+        if strict_sources:
+            raise RuntimeError(f"严格来源模式阻止无依据生成：{str(error)[:240]}") from error
         return AgentStep(
             name="retrieval",
             title="知识检索",
@@ -242,6 +250,20 @@ def validation_node(
     warnings = _string_list(live_result.get("warnings"))
     if request.task_type != "diagnose" and not execution.output.get("suggestions"):
         warnings.append("当前任务未生成可应用建议。")
+    source_text = request.context.selected_text or _content_to_text(request.context.content)
+    suggested_text = " ".join(
+        str(item.get("text") or "")
+        for item in execution.output.get("suggestions", [])
+        if isinstance(item, dict)
+    )
+    unsupported_numbers = sorted(
+        set(re.findall(r"\d+(?:\.\d+)?%?", suggested_text))
+        - set(re.findall(r"\d+(?:\.\d+)?%?", source_text))
+    )
+    if unsupported_numbers:
+        warnings.append(
+            "建议中出现原简历未提供的数字证据：" + "、".join(unsupported_numbers[:8]) + "；应用前必须核实。"
+        )
     return AgentStep(
         name="validation",
         title="结果校验",

@@ -10,6 +10,18 @@ const DEFAULT_POLISH_PROMPT_TEMPLATE =
   '你是一名专业简历顾问。请基于目标岗位 {{jobTitle}} 和模块类型 {{sectionType}}，对下面的简历内容进行润色，输出更适合求职简历的版本：\n{{input}}';
 
 const DEFAULT_GENERATE_PROMPT_TEMPLATE =
+  [
+    '你是一名专业简历顾问。请围绕目标岗位 {{jobTitle}} 和模块类型 {{sectionType}} 生成简历内容初稿。',
+    '用户已提供的信息如下：',
+    '{{contextText}}',
+    '要求：',
+    '1. 只能基于用户已提供的信息进行改写、归纳和适度补全表达，不得编造公司、学校、项目名、时间、证书、人数、金额、性能指标或百分比。',
+    '2. 技能关键词优先从用户已提供的信息中提取；上下文没有出现的具体技术栈不要主动加入。',
+    '3. 如果经历、项目或时间信息不足，对应数组可以返回空数组，或用“待补充”标记缺失字段。',
+    '4. 输出内容要简洁、职业，可直接作为简历草稿继续编辑。',
+  ].join('\n');
+
+const LEGACY_DEFAULT_GENERATE_PROMPT_TEMPLATE =
   '你是一名专业简历顾问。请围绕目标岗位 {{jobTitle}} 生成简历摘要、技能关键词与项目示例，输出内容要简洁、职业，并可直接用于简历。';
 
 const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: string }> = {
@@ -25,7 +37,7 @@ const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: stri
     apiModel: 'gpt-4.1-mini',
   },
   deepseek: {
-    apiBaseUrl: 'https://api.deepseek.com/v1',
+    apiBaseUrl: 'https://api.deepseek.com',
     apiModel: 'deepseek-v4-pro',
   },
   qwen: {
@@ -51,6 +63,7 @@ const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: stri
 };
 
 const ENV_AI_PROVIDER = process.env.AI_PROVIDER || 'mock';
+const ENV_AI_ENABLED = String(process.env.AI_ENABLED ?? 'true').toLowerCase() !== 'false';
 const ENV_AI_BASE_URL =
   process.env.OPENAI_API_URL || (ENV_AI_PROVIDER === 'langgraph-agent' ? process.env.AGENT_SERVICE_URL || '' : '');
 const ENV_AI_MODEL = process.env.OPENAI_MODEL || AI_PROVIDER_PRESETS[ENV_AI_PROVIDER]?.apiModel || 'mock-resume-polish';
@@ -73,7 +86,7 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfigDto = {
     encryption: 'ssl',
   },
   ai: {
-    enabled: true,
+    enabled: ENV_AI_ENABLED,
     executionEngine: process.env.AI_EXECUTION_ENGINE === 'agent' ? 'agent' : 'direct',
     agentBaseUrl: process.env.AGENT_SERVICE_URL || 'http://agent:8000',
     provider: ENV_AI_PROVIDER,
@@ -286,13 +299,22 @@ export class SystemConfigService {
         ai?.generatePromptTemplate,
         DEFAULT_GENERATE_PROMPT_TEMPLATE,
         ['{{jobTitle}}'],
+        [LEGACY_DEFAULT_GENERATE_PROMPT_TEMPLATE],
       ),
     };
   }
 
-  private normalizePromptTemplate(value: string, fallback: string, requiredTokens: string[]) {
+  private normalizePromptTemplate(
+    value: string,
+    fallback: string,
+    requiredTokens: string[],
+    deprecatedTemplates: string[] = [],
+  ) {
     const normalized = this.toSafeString(value);
     if (!normalized) {
+      return fallback;
+    }
+    if (deprecatedTemplates.includes(normalized)) {
       return fallback;
     }
 

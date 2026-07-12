@@ -4,11 +4,18 @@ import os
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 
 from .graph import run_agent
-from .rag import delete_document, index_document, search_documents, set_document_enabled
+from .rag import (
+    delete_document,
+    get_rag_metrics,
+    get_rag_status,
+    index_document,
+    search_documents,
+    set_document_enabled,
+)
 from .schemas import AgentRequest, AgentResponse, RagEnabledRequest, RagSearchRequest
 
 
-app = FastAPI(title="Resume Agent Service", version="0.1.0")
+app = FastAPI(title="Resume Agent Service", version="1.0.0")
 MAX_RAG_FILE_BYTES = 10 * 1024 * 1024
 
 
@@ -23,8 +30,19 @@ def require_internal_secret(
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "resume-agent"}
+def health() -> dict:
+    rag = get_rag_status()
+    return {
+        "status": "ok" if rag.get("qdrant_reachable") else "degraded",
+        "service": "resume-agent",
+        "version": "1.0.0",
+        "rag": rag,
+    }
+
+
+@app.get("/metrics", dependencies=[Depends(require_internal_secret)])
+def metrics() -> dict:
+    return {"service": "resume-agent", "rag": get_rag_metrics()}
 
 
 @app.post(
@@ -33,7 +51,7 @@ def health() -> dict[str, str]:
     dependencies=[Depends(require_internal_secret)],
 )
 def diagnose(request: AgentRequest) -> AgentResponse:
-    return run_agent(request.model_copy(update={"task_type": "diagnose"}))
+    return run_agent_safely(request.model_copy(update={"task_type": "diagnose"}))
 
 
 @app.post(
@@ -42,7 +60,7 @@ def diagnose(request: AgentRequest) -> AgentResponse:
     dependencies=[Depends(require_internal_secret)],
 )
 def polish(request: AgentRequest) -> AgentResponse:
-    return run_agent(request.model_copy(update={"task_type": "polish"}))
+    return run_agent_safely(request.model_copy(update={"task_type": "polish"}))
 
 
 @app.post(
@@ -51,7 +69,17 @@ def polish(request: AgentRequest) -> AgentResponse:
     dependencies=[Depends(require_internal_secret)],
 )
 def generate(request: AgentRequest) -> AgentResponse:
-    return run_agent(request.model_copy(update={"task_type": "generate"}))
+    return run_agent_safely(request.model_copy(update={"task_type": "generate"}))
+
+
+def run_agent_safely(request: AgentRequest) -> AgentResponse:
+    try:
+        return run_agent(request)
+    except RuntimeError as error:
+        message = str(error)[:500]
+        if "严格来源模式" in message:
+            raise HTTPException(status_code=424, detail=message) from error
+        raise
 
 
 @app.post("/rag/index", dependencies=[Depends(require_internal_secret)])

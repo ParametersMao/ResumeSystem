@@ -46,6 +46,12 @@ export class KnowledgeAgentClientService {
     });
   }
 
+  async getMetrics() {
+    return this.request<{ service: string; rag: Record<string, number | string> }>('/metrics', {
+      method: 'GET',
+    });
+  }
+
   private async request<T = any>(path: string, init: RequestInit): Promise<T> {
     const baseUrl = String(process.env.AGENT_SERVICE_URL || '').trim().replace(/\/+$/, '');
     if (!baseUrl) {

@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { LoginDto, RefreshTokenDto } from '../../dto/admin-user.dto';
 import { CreateCUserDto } from '../../dto/c-user.dto';
 import {
@@ -31,7 +31,6 @@ export class AuthController {
   ) {}
 
   @Post('login')
-  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async login(@Body() loginDto: LoginDto): Promise<ApiResponse<any>> {
@@ -66,7 +65,6 @@ export class AuthController {
   }
 
   @Post('cuser/login')
-  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async cuserLogin(@Body() loginDto: LoginDto): Promise<ApiResponse<any>> {
@@ -91,7 +89,6 @@ export class AuthController {
   }
 
   @Post('email/send-code')
-  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async sendEmailCode(
@@ -107,7 +104,6 @@ export class AuthController {
   }
 
   @Post('email/register')
-  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async emailRegister(@Body() dto: EmailRegisterDto): Promise<ApiResponse<any>> {
@@ -116,7 +112,6 @@ export class AuthController {
   }
 
   @Post('email/login')
-  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async emailLogin(@Body() dto: EmailCodeLoginDto): Promise<ApiResponse<any>> {
@@ -125,7 +120,6 @@ export class AuthController {
   }
 
   @Post('email/reset-password')
-  @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   async resetPassword(@Body() dto: ResetPasswordByEmailDto): Promise<ApiResponse<any>> {
