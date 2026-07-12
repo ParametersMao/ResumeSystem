@@ -19,6 +19,8 @@ async function main() {
   let changed = false
   try {
     await page.goto(`${baseUrl}/login?qa=flow`, { waitUntil: 'networkidle2', timeout: 30000 })
+    await page.waitForSelector("input[placeholder='用户名或邮箱']", { timeout: 10000 })
+    await page.waitForSelector("input[placeholder='密码']", { timeout: 10000 })
     await page.type("input[placeholder='用户名或邮箱']", username)
     await page.type("input[placeholder='密码']", password)
     await Promise.all([
