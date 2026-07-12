@@ -8,10 +8,10 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+08:00
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE:-resume_system}
       MYSQL_USER: ${DB_USERNAME:-resume_app}
-      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
@@ -36,13 +36,13 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USERNAME: ${DB_USERNAME:-resume_app}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_PASSWORD: ${DB_PASSWORD}
       DB_DATABASE: ${DB_DATABASE:-resume_system}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-1h}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET:?EMAIL_CODE_SECRET is required}
+      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET}
       EMAIL_ALLOW_DEV_CODE: ${EMAIL_ALLOW_DEV_CODE:-false}
       AI_ENABLED: ${AI_ENABLED:-true}
       AI_PROVIDER: ${AI_PROVIDER:-deepseek}
@@ -52,7 +52,7 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
       AGENT_SERVICE_URL: ${AGENT_SERVICE_URL:-http://agent:8000}
       AGENT_REQUEST_TIMEOUT_MS: ${AGENT_REQUEST_TIMEOUT_MS:-150000}
-      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
+      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET}
       RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES:-true}
       R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_REGION: ${R2_REGION:-auto}
@@ -124,7 +124,7 @@ services:
         condition: service_started
     environment:
       AGENT_EXECUTION_MODE: ${AGENT_EXECUTION_MODE:-live}
-      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET:?AGENT_INTERNAL_SECRET is required}
+      AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET}
       OPENAI_API_URL: ${OPENAI_API_URL:-https://api.deepseek.com}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-pro}
