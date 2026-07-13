@@ -421,7 +421,12 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
 
   private toMetadata(document: KnowledgeDocument) {
     const { storageKey: _storageKey, storageUrl: _storageUrl, ...metadata } = document;
-    return metadata;
+    return {
+      ...metadata,
+      enabled: Boolean(document.enabled),
+      licensed: Boolean(document.licensed),
+      piiReviewed: Boolean(document.piiReviewed),
+    };
   }
 
   private async ensureTable() {

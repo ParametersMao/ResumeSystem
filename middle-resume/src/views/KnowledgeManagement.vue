@@ -82,9 +82,9 @@
         <el-table-column label="启用" width="80">
           <template #default="{ row }">
             <el-switch
-              :model-value="row.enabled"
+              :model-value="Boolean(row.enabled)"
               :disabled="!canWrite || row.status === 'indexing' || row.status === 'failed'"
-              @change="(value: string | number | boolean) => handleToggle(row, Boolean(value))"
+              @change="(value: string | number | boolean) => handleToggle(row, value === true)"
             />
           </template>
         </el-table-column>
@@ -273,7 +273,12 @@ async function loadDocuments() {
       status: filters.status || undefined,
       sourceType: filters.sourceType
     })
-    documents.value = response.data.list || []
+    documents.value = (response.data.list || []).map((document: KnowledgeDocument) => ({
+      ...document,
+      enabled: Boolean(document.enabled),
+      licensed: Boolean(document.licensed),
+      piiReviewed: Boolean(document.piiReviewed)
+    }))
     total.value = Number(response.data.total || 0)
   } finally {
     loading.value = false

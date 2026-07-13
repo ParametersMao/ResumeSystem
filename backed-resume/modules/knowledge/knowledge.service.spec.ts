@@ -157,6 +157,25 @@ describe('KnowledgeService v1.3 boundaries', () => {
     expect(storageService.deleteObject).toHaveBeenCalledWith('knowledge/private/expired.txt');
     expect(knowledgeRepository.remove).toHaveBeenCalled();
   });
+
+  it('serializes tinyint compliance and enabled fields as JSON booleans', () => {
+    const metadata = (service as any).toMetadata({
+      id: 1,
+      storageKey: 'knowledge/global/standard.md',
+      storageUrl: '/uploads/knowledge/global/standard.md',
+      enabled: 1,
+      licensed: 0,
+      piiReviewed: 1,
+    });
+
+    expect(metadata).toEqual(expect.objectContaining({
+      enabled: true,
+      licensed: false,
+      piiReviewed: true,
+    }));
+    expect(metadata).not.toHaveProperty('storageKey');
+    expect(metadata).not.toHaveProperty('storageUrl');
+  });
 });
 
 function textFile(name: string, text: string): Express.Multer.File {

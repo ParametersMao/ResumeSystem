@@ -248,7 +248,9 @@ node backed-resume/scripts/pagination-pdf-qa.js
 
 2026-07-11 历史实测：BGE 输出 512 维向量；标准知识库状态 ready、2 chunks；Hybrid 检索 2 hits；DeepSeek live 返回 sources 与 tokenUsed；严格来源无命中请求被结构化阻断。
 
-2026-07-13 发布前代码门禁：NestJS 134 项测试、Agent 15 项测试、三端生产构建和生产依赖审计通过。线上旧文档已恢复为 ready + enabled，但 v1.3 新 payload 过滤器不会读取缺少 `sourceType/scope` 的旧 points，因此部署必须无条件重建全部启用的全局文档，再执行真实 Hybrid、live DeepSeek 和私有 JD 租户 E2E；数据库状态不能替代这一步。
+2026-07-13 发布前代码门禁：NestJS 135 项测试、Agent 15 项测试、三端生产构建和生产依赖审计通过。线上旧文档已恢复为 ready + enabled，但 v1.3 新 payload 过滤器不会读取缺少 `sourceType/scope` 的旧 points，因此部署必须无条件重建全部启用的全局文档，再执行真实 Hybrid、live DeepSeek 和私有 JD 租户 E2E；数据库状态不能替代这一步。
+
+知识文档管理 API 必须把 MySQL `TINYINT` 元数据 `enabled/licensed/piiReviewed` 序列化为 JSON boolean，管理端加载后还要再次归一化。只读打开知识库页面不得产生 `PUT .../enabled` 等写请求；发布浏览器回归需要记录页面加载前后的审计日志和文档 enabled 状态，防止 UI 开关因 `1 !== true` 的类型差异在挂载时静默停用全局 RAG 来源。
 
 ## 9. 运维与故障排查
 
