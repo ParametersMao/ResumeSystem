@@ -232,22 +232,6 @@ CREATE TABLE IF NOT EXISTS system_configs (
   UNIQUE KEY uq_system_configs_key (config_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO admin_users (id, username, password, email, phone, user_type, status)
-VALUES (1, 'admin', '$2b$10$2rfKf1JICBrOaOzyRCwmXuRPKY3BRv4OZJkHt.p/rY89a6c5cQ6pO', 'admin@example.com', '13800138000', 'admin', 1)
-ON DUPLICATE KEY UPDATE username = VALUES(username);
-
-INSERT INTO c_users (id, username, password, email, phone, status)
-VALUES (1, 'testuser', '$2b$10$w4RY4Xyo6RDRqM6KYUjzq.Da/TH3W0aUVJGz1276uJsra.JSvsSee', 'testuser@example.com', '13900139000', 1)
-ON DUPLICATE KEY UPDATE username = VALUES(username);
-
-INSERT INTO c_user_profiles (user_id, real_name, avatar, bio)
-VALUES (1, '测试用户', NULL, NULL)
-ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);
-
-INSERT INTO c_user_entitlements (
-  user_id, plan_code, account_weight, ai_free_total, ai_free_used,
-  ai_free_reset_policy, resume_limit, version_limit, pdf_monthly_total,
-  pdf_monthly_used, storage_limit_bytes, storage_used_bytes, usage_period_start
-)
-VALUES (1, 'free', 0, 10, 0, 'monthly', 2, 5, 3, 0, 104857600, 0, NOW())
-ON DUPLICATE KEY UPDATE user_id = VALUES(user_id);
+-- Production accounts are intentionally not seeded with fixed credentials.
+-- For a fresh installation, provide BOOTSTRAP_ADMIN_USERNAME and
+-- BOOTSTRAP_ADMIN_PASSWORD to the backend for one start, then remove them.

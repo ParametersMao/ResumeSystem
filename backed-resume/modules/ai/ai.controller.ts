@@ -1,9 +1,11 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   ForbiddenException,
   Post,
   Request,
+  ServiceUnavailableException,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -15,6 +17,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AiRuntimeService } from './ai-runtime.service';
 import { AiAgentClientService } from './ai-agent-client.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
+import { ResumesService } from '../resumes/resumes.service';
 
 function ensureCuser(req: any) {
   if (!req.user?.id) throw new UnauthorizedException('用户信息无效');
@@ -30,13 +33,16 @@ export class AiController {
     private readonly aiRuntimeService: AiRuntimeService,
     private readonly aiAgentClientService: AiAgentClientService,
     private readonly entitlementsService: EntitlementsService,
+    private readonly resumesService: ResumesService,
   ) {}
 
   @Post('ai/polish')
   @UseGuards(JwtAuthGuard)
   async polish(@Request() req, @Body() dto: AiPolishDto): Promise<ApiResponse<any>> {
     const userId = ensureCuser(req);
+    await this.validateOptionalResume(dto.resumeId, userId);
     const aiConfig = await this.systemConfigService.getAiConfig();
+    this.assertAiEnabled(aiConfig);
     if (!aiConfig.enabled) {
       throw new ForbiddenException('AI 功能已停用');
     }
@@ -68,7 +74,9 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   async generate(@Request() req, @Body() dto: AiGenerateDto): Promise<ApiResponse<any>> {
     const userId = ensureCuser(req);
+    await this.validateOptionalResume(dto.resumeId, userId);
     const aiConfig = await this.systemConfigService.getAiConfig();
+    this.assertAiEnabled(aiConfig);
     if (!aiConfig.enabled) {
       throw new ForbiddenException('AI 功能已停用');
     }
@@ -100,7 +108,9 @@ export class AiController {
   @UseGuards(JwtAuthGuard)
   async diagnose(@Request() req, @Body() dto: AiDiagnoseDto): Promise<ApiResponse<any>> {
     const userId = ensureCuser(req);
+    await this.validateOptionalResume(dto.resumeId, userId);
     const aiConfig = await this.systemConfigService.getAiConfig();
+    this.assertAiEnabled(aiConfig);
     if (!aiConfig.enabled) {
       throw new ForbiddenException('AI 功能已停用');
     }
@@ -146,6 +156,21 @@ export class AiController {
     } catch (error) {
       await this.entitlementsService.refundAi(userId);
       throw error;
+    }
+  }
+
+  private async validateOptionalResume(resumeIdValue: string | undefined, userId: number) {
+    if (!resumeIdValue) return;
+    const resumeId = Number(resumeIdValue);
+    if (!Number.isInteger(resumeId) || resumeId < 1) {
+      throw new BadRequestException('resumeId 必须是有效的简历 ID');
+    }
+    await this.resumesService.findOne(resumeId, userId);
+  }
+
+  private assertAiEnabled(config: { enabled?: boolean }) {
+    if (!config.enabled) {
+      throw new ServiceUnavailableException('AI 功能已停用，请稍后再试或联系管理员开启。');
     }
   }
 

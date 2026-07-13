@@ -81,14 +81,21 @@ export class AuthService implements OnModuleInit {
     const refresh_token = this.buildRefreshToken({
       sub: userId,
       type,
-      ...(type === 'cuser'
-        ? { tokenVersion: Number(payload.tokenVersion || 0) }
-        : {}),
+      tokenVersion: Number(payload.tokenVersion || 0),
     });
     return { access_token, refresh_token };
   }
 
   async onModuleInit() {
+    const bootstrapUsername = String(process.env.BOOTSTRAP_ADMIN_USERNAME || '').trim();
+    const bootstrapPassword = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
+    if (bootstrapUsername || bootstrapPassword) {
+      if (!bootstrapUsername || !bootstrapPassword) {
+        throw new Error('BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD must be configured together');
+      }
+      await this.adminUsersService.ensureBootstrapAdminAccount(bootstrapUsername, bootstrapPassword);
+    }
+
     if (process.env.NODE_ENV === 'production') {
       return;
     }
@@ -142,7 +149,7 @@ export class AuthService implements OnModuleInit {
         throw new UnauthorizedException('用户已被禁用');
       }
 
-      const payload = { username: user.username, sub: user.id, role: user.role, type: 'admin' };
+      const payload = { username: user.username, sub: user.id, role: user.role, type: 'admin', tokenVersion: user.tokenVersion || 0 };
       const { access_token, refresh_token } = this.issueTokens(payload, user.id, 'admin');
 
       return {
@@ -175,7 +182,10 @@ export class AuthService implements OnModuleInit {
       if (!user || user.status === 0) {
         throw new UnauthorizedException('用户不存在或已被禁用');
       }
-      const newPayload = { username: user.username, sub: user.id, role: user.role, type: 'admin' };
+      if (Number(payload.tokenVersion || 0) !== Number(user.tokenVersion || 0)) {
+        throw new UnauthorizedException('登录状态已失效，请重新登录');
+      }
+      const newPayload = { username: user.username, sub: user.id, role: user.role, type: 'admin', tokenVersion: user.tokenVersion || 0 };
       const { access_token, refresh_token } = this.issueTokens(newPayload, user.id, 'admin');
       return { access_token, refresh_token };
     } else if (payload.type === 'cuser') {

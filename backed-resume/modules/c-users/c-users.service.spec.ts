@@ -5,6 +5,11 @@ import { CUser } from '../../entities/c-user.entity';
 import { Repository } from 'typeorm';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { KnowledgeService } from '../knowledge/knowledge.service';
+
+jest.mock('../knowledge/knowledge.service', () => ({
+  KnowledgeService: class KnowledgeService {},
+}));
 
 // Mock bcrypt
 jest.mock('bcrypt', () => ({
@@ -29,6 +34,14 @@ describe('CUsersService', () => {
     tokenVersion: 0,
   };
 
+  const mockQueryBuilder = {
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getManyAndCount: jest.fn(),
+  };
+
   const mockRepository = {
     findAndCount: jest.fn(),
     findOne: jest.fn(),
@@ -36,6 +49,10 @@ describe('CUsersService', () => {
     save: jest.fn(),
     remove: jest.fn(),
     increment: jest.fn(),
+    createQueryBuilder: jest.fn(() => mockQueryBuilder),
+  };
+  const mockKnowledgeService = {
+    deletePrivateKnowledgeForUser: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -45,6 +62,10 @@ describe('CUsersService', () => {
         {
           provide: getRepositoryToken(CUser),
           useValue: mockRepository,
+        },
+        {
+          provide: KnowledgeService,
+          useValue: mockKnowledgeService,
         },
       ],
     }).compile();
@@ -59,7 +80,7 @@ describe('CUsersService', () => {
 
   describe('findAll', () => {
     it('should return paginated users', async () => {
-      mockRepository.findAndCount.mockResolvedValue([[mockUser], 1]);
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[mockUser], 1]);
 
       const result = await service.findAll({ page: 1, limit: 10 });
 
@@ -71,12 +92,23 @@ describe('CUsersService', () => {
     });
 
     it('should return empty list when no users', async () => {
-      mockRepository.findAndCount.mockResolvedValue([[], 0]);
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
 
       const result = await service.findAll({ page: 1, limit: 10 });
 
       expect(result.list).toHaveLength(0);
       expect(result.total).toBe(0);
+    });
+
+    it('applies the numeric status filter from the admin contract', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[mockUser], 1]);
+
+      await service.findAll({ page: 1, limit: 10, status: 1, search: 'test' });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'user.status = :status',
+        { status: 1 },
+      );
     });
   });
 
@@ -187,6 +219,7 @@ describe('CUsersService', () => {
 
       await service.remove(1);
 
+      expect(mockKnowledgeService.deletePrivateKnowledgeForUser).toHaveBeenCalledWith(1);
       expect(mockRepository.remove).toHaveBeenCalledWith(mockUser);
     });
   });

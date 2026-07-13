@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SystemConfig } from '../../entities/system-config.entity';
 import { AiConfigDto, PartialSystemConfigDto, SystemConfigDto } from '../../dto/system-config.dto';
+import {
+  decryptConfigSecret,
+  encryptConfigSecret,
+  isEncryptedConfigSecret,
+} from '../../src/security/config-secret.crypto';
 
 const GLOBAL_CONFIG_KEY = 'global';
 
@@ -10,6 +15,18 @@ const DEFAULT_POLISH_PROMPT_TEMPLATE =
   '你是一名专业简历顾问。请基于目标岗位 {{jobTitle}} 和模块类型 {{sectionType}}，对下面的简历内容进行润色，输出更适合求职简历的版本：\n{{input}}';
 
 const DEFAULT_GENERATE_PROMPT_TEMPLATE =
+  [
+    '你是一名专业简历顾问。请围绕目标岗位 {{jobTitle}} 和模块类型 {{sectionType}} 生成简历内容初稿。',
+    '用户已提供的信息如下：',
+    '{{contextText}}',
+    '要求：',
+    '1. 只能基于用户已提供的信息进行改写、归纳和适度补全表达，不得编造公司、学校、项目名、时间、证书、人数、金额、性能指标或百分比。',
+    '2. 技能关键词优先从用户已提供的信息中提取；上下文没有出现的具体技术栈不要主动加入。',
+    '3. 如果经历、项目或时间信息不足，对应数组可以返回空数组，或用“待补充”标记缺失字段。',
+    '4. 输出内容要简洁、职业，可直接作为简历草稿继续编辑。',
+  ].join('\n');
+
+const LEGACY_DEFAULT_GENERATE_PROMPT_TEMPLATE =
   '你是一名专业简历顾问。请围绕目标岗位 {{jobTitle}} 生成简历摘要、技能关键词与项目示例，输出内容要简洁、职业，并可直接用于简历。';
 
 const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: string }> = {
@@ -25,7 +42,7 @@ const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: stri
     apiModel: 'gpt-4.1-mini',
   },
   deepseek: {
-    apiBaseUrl: 'https://api.deepseek.com/v1',
+    apiBaseUrl: 'https://api.deepseek.com',
     apiModel: 'deepseek-v4-pro',
   },
   qwen: {
@@ -51,6 +68,7 @@ const AI_PROVIDER_PRESETS: Record<string, { apiBaseUrl?: string; apiModel?: stri
 };
 
 const ENV_AI_PROVIDER = process.env.AI_PROVIDER || 'mock';
+const ENV_AI_ENABLED = String(process.env.AI_ENABLED ?? 'true').toLowerCase() !== 'false';
 const ENV_AI_BASE_URL =
   process.env.OPENAI_API_URL || (ENV_AI_PROVIDER === 'langgraph-agent' ? process.env.AGENT_SERVICE_URL || '' : '');
 const ENV_AI_MODEL = process.env.OPENAI_MODEL || AI_PROVIDER_PRESETS[ENV_AI_PROVIDER]?.apiModel || 'mock-resume-polish';
@@ -73,7 +91,7 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfigDto = {
     encryption: 'ssl',
   },
   ai: {
-    enabled: true,
+    enabled: ENV_AI_ENABLED,
     executionEngine: process.env.AI_EXECUTION_ENGINE === 'agent' ? 'agent' : 'direct',
     agentBaseUrl: process.env.AGENT_SERVICE_URL || 'http://agent:8000',
     provider: ENV_AI_PROVIDER,
@@ -89,13 +107,35 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfigDto = {
 };
 
 @Injectable()
-export class SystemConfigService {
+export class SystemConfigService implements OnModuleInit {
   private ensureTablePromise: Promise<void> | null = null;
 
   constructor(
     @InjectRepository(SystemConfig)
     private readonly systemConfigRepository: Repository<SystemConfig>,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureTable();
+    const record = await this.systemConfigRepository.findOne({
+      where: { configKey: GLOBAL_CONFIG_KEY },
+    });
+    if (!record) return;
+    let raw: any;
+    try {
+      raw = JSON.parse(record.configData || '{}');
+    } catch {
+      return;
+    }
+    const legacySecretPresent =
+      (Boolean(raw?.email?.smtpPass) && !isEncryptedConfigSecret(raw.email.smtpPass)) ||
+      (Boolean(raw?.ai?.apiKey) && !isEncryptedConfigSecret(raw.ai.apiKey));
+    if (!legacySecretPresent) return;
+
+    const config = this.mergeWithDefault(this.parseConfigData(record.configData));
+    record.configData = this.serializeConfigForStorage(config);
+    await this.systemConfigRepository.save(record);
+  }
 
   async getConfig(): Promise<SystemConfigDto> {
     await this.ensureTable();
@@ -106,7 +146,7 @@ export class SystemConfigService {
     if (!record) {
       const created = this.systemConfigRepository.create({
         configKey: GLOBAL_CONFIG_KEY,
-        configData: JSON.stringify(DEFAULT_SYSTEM_CONFIG),
+        configData: this.serializeConfigForStorage(DEFAULT_SYSTEM_CONFIG),
       });
       await this.systemConfigRepository.save(created);
       return this.cloneDefaultConfig();
@@ -127,12 +167,12 @@ export class SystemConfigService {
     });
 
     if (existing) {
-      existing.configData = JSON.stringify(next);
+      existing.configData = this.serializeConfigForStorage(next);
       await this.systemConfigRepository.save(existing);
     } else {
       const created = this.systemConfigRepository.create({
         configKey: GLOBAL_CONFIG_KEY,
-        configData: JSON.stringify(next),
+        configData: this.serializeConfigForStorage(next),
       });
       await this.systemConfigRepository.save(created);
     }
@@ -174,10 +214,36 @@ export class SystemConfigService {
 
   private parseConfigData(value: string): Partial<SystemConfigDto> {
     try {
-      return JSON.parse(value || '{}');
-    } catch {
-      return {};
+      const parsed = JSON.parse(value || '{}') as Partial<SystemConfigDto>;
+      if (parsed.email) {
+        parsed.email.smtpPass = decryptConfigSecret(
+          parsed.email.smtpPass,
+          'email.smtpPass',
+        ).value;
+      }
+      if (parsed.ai) {
+        parsed.ai.apiKey = decryptConfigSecret(parsed.ai.apiKey, 'ai.apiKey').value;
+      }
+      return parsed;
+    } catch (error) {
+      // Invalid JSON remains backward-compatible with the old empty-config fallback,
+      // but authentication/key failures must be visible rather than silently erasing secrets.
+      try {
+        JSON.parse(value || '{}');
+      } catch {
+        return {};
+      }
+      throw error;
     }
+  }
+
+  private serializeConfigForStorage(config: SystemConfigDto): string {
+    const stored: SystemConfigDto = JSON.parse(JSON.stringify(config));
+    stored.email.smtpPass = encryptConfigSecret(stored.email.smtpPass, 'email.smtpPass');
+    stored.ai.apiKey = encryptConfigSecret(stored.ai.apiKey, 'ai.apiKey');
+    delete stored.email.smtpPassConfigured;
+    delete stored.ai.apiKeyConfigured;
+    return JSON.stringify(stored);
   }
 
   private cloneDefaultConfig(): SystemConfigDto {
@@ -286,13 +352,22 @@ export class SystemConfigService {
         ai?.generatePromptTemplate,
         DEFAULT_GENERATE_PROMPT_TEMPLATE,
         ['{{jobTitle}}'],
+        [LEGACY_DEFAULT_GENERATE_PROMPT_TEMPLATE],
       ),
     };
   }
 
-  private normalizePromptTemplate(value: string, fallback: string, requiredTokens: string[]) {
+  private normalizePromptTemplate(
+    value: string,
+    fallback: string,
+    requiredTokens: string[],
+    deprecatedTemplates: string[] = [],
+  ) {
     const normalized = this.toSafeString(value);
     if (!normalized) {
+      return fallback;
+    }
+    if (deprecatedTemplates.includes(normalized)) {
       return fallback;
     }
 

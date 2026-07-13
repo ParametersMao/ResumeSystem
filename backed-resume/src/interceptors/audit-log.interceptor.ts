@@ -13,12 +13,29 @@ function safeStringify(input: any, maxLen = 2000): string {
   }
 }
 
-function maskSensitive(obj: any): any {
+const SENSITIVE_KEY_FRAGMENTS = [
+  'password',
+  'passwd',
+  'passphrase',
+  'smtppass',
+  'apikey',
+  'secret',
+  'token',
+  'authorization',
+  'credential',
+  'privatekey',
+];
+
+export function isSensitiveAuditKey(key: string): boolean {
+  const normalized = String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return SENSITIVE_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+}
+
+export function maskSensitive(obj: any): any {
   if (!obj || typeof obj !== 'object') return obj;
   const clone = Array.isArray(obj) ? [...obj] : { ...obj };
-  const keys = ['password', 'token', 'access_token', 'authorization', 'secret'];
   for (const k of Object.keys(clone)) {
-    if (keys.includes(k.toLowerCase())) {
+    if (isSensitiveAuditKey(k)) {
       clone[k] = '[masked]';
     } else if (typeof clone[k] === 'object' && clone[k] !== null) {
       clone[k] = maskSensitive(clone[k]);

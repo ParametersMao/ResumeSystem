@@ -30,4 +30,16 @@ export const getPopularTemplates = (params: { limit?: number; period?: number })
  */
 export const getUserActivity = (params: { limit?: number; period?: number }) => {
   return request.get('/statistics/user-activity', { params })
-} 
+}
+
+export const exportStatistics = (params: {
+  type: 'users' | 'resumes' | 'templates' | 'ai-operations'
+  format: 'csv' | 'json'
+  startDate?: string
+  endDate?: string
+}) => {
+  return request.get('/statistics/export', {
+    params,
+    responseType: 'blob',
+  } as any) as unknown as Promise<Blob>
+}

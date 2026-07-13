@@ -52,7 +52,7 @@
       <template #header>
         <div class="card-header">
           <span>模板列表</span>
-          <el-button type="primary" @click="handleAdd">新增模板</el-button>
+          <el-button v-if="canWrite" type="primary" @click="handleAdd">新增模板</el-button>
         </div>
       </template>
 
@@ -101,16 +101,17 @@
         <el-table-column label="操作" min-width="180">
           <template #default="{ row }">
             <div class="action-btns">
-              <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button v-if="canWrite" type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
               <el-button type="success" size="small" @click="handlePreview(row)">预览</el-button>
               <el-button
+                v-if="canWrite"
                 :type="row.status ? 'warning' : 'success'"
                 size="small"
                 @click="handleToggleStatus(row)"
               >
                 {{ row.status ? '禁用' : '启用' }}
               </el-button>
-              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+              <el-button v-if="canWrite" type="danger" size="small" @click="handleDelete(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -322,8 +323,12 @@ import type { Template } from '@/types'
 import { getTemplateList, getTemplateDetail, createTemplate, updateTemplate, deleteTemplate } from '@/api/template'
 import { useTable } from '@/hooks/useTable'
 import { formatDate } from '@/utils/common'
+import { useUserStore } from '@/store/modules/user'
 
 type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
+
+const userStore = useUserStore()
+const canWrite = computed(() => userStore.user?.role !== 'viewer')
 
 const TEMPLATE_AVATAR_PRESETS: Record<TemplateVariant, Record<string, any>> = {
   classic: { enabled: true, placement: 'header-right', shape: 'rounded', width: 86, height: 108 },

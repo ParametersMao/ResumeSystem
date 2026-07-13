@@ -1,0 +1,31 @@
+name: production-uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+    steps:
+      - name: Validate monitor configuration
+        run: test -n "$BASE_URL"
+      - name: Backend health
+        run: curl --fail --silent --show-error --max-time 15 "$BASE_URL/api/health"
+      - name: User application
+        run: curl --fail --silent --show-error --max-time 15 "$BASE_URL/" >/dev/null
+      - name: Admin entry and JavaScript
+        shell: bash
+        run: |
+          html="$(curl --fail --silent --show-error --max-time 15 "$BASE_URL/admin/")"
+          asset="$(grep -oE '/admin/js/main-[^"]+\.js' <<<"$html" | head -1)"
+          test -n "$asset"
+          curl --fail --silent --show-error --max-time 15 \
+            -I "${BASE_URL}${asset}" | grep -qi '^content-type:.*javascript'

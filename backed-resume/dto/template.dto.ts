@@ -1,6 +1,18 @@
 ﻿import { IsString, IsOptional, IsInt, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
+export type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+export type TemplateLayoutKey =
+  | 'qm-blue-top-photo'
+  | 'qm-sidebar-profile'
+  | 'qm-classic-centered'
+  | 'qm-ribbon-compact'
+  | 'qm-timeline-icons'
+  | 'qm-minimal-ats'
+  | 'qm-executive-business'
+  | 'qm-student-editorial'
+  | 'qm-spotlight-featured';
+
 export class CreateTemplateDto {
   @IsString()
   templateName: string;
@@ -18,7 +30,7 @@ export class CreateTemplateDto {
 
   @IsOptional()
   @IsString()
-  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+  templateVariant?: TemplateVariant;
 
   @IsOptional()
   @Type(() => Number)
@@ -50,7 +62,7 @@ export class UpdateTemplateDto {
 
   @IsOptional()
   @IsString()
-  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+  templateVariant?: TemplateVariant;
 
   @IsOptional()
   @Type(() => Number)
@@ -67,7 +79,8 @@ export class UpdateTemplateDto {
 export class TemplateListResponseDto {
   id: number;
   templateName: string;
-  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+  templateVariant?: TemplateVariant;
+  layoutKey?: TemplateLayoutKey;
   previewImage?: string;
   industryTags?: string;
   status?: boolean;
@@ -82,7 +95,8 @@ export class TemplateDetailResponseDto {
   id: number;
   templateName: string;
   templateData: string;
-  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+  templateVariant?: TemplateVariant;
+  layoutKey?: TemplateLayoutKey;
   previewImage?: string;
   industryTags?: string;
   status?: boolean;
@@ -97,7 +111,8 @@ export class TemplateResponseDto {
   id: number;
   templateName: string;
   templateData: string;
-  templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
+  templateVariant?: TemplateVariant;
+  layoutKey?: TemplateLayoutKey;
   previewImage?: string;
   industryTags?: string;
   status?: boolean;

@@ -4,11 +4,25 @@ import os
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 
 from .graph import run_agent
-from .rag import delete_document, index_document, search_documents, set_document_enabled
-from .schemas import AgentRequest, AgentResponse, RagEnabledRequest, RagSearchRequest
+from .rag import (
+    delete_document,
+    get_rag_metrics,
+    get_rag_status,
+    index_document,
+    search_documents,
+    set_document_enabled,
+)
+from .schemas import (
+    AgentRequest,
+    AgentResponse,
+    RagEnabledRequest,
+    RagScope,
+    RagSearchRequest,
+    RagSourceType,
+)
 
 
-app = FastAPI(title="Resume Agent Service", version="0.1.0")
+app = FastAPI(title="Resume Agent Service", version="1.3.0")
 MAX_RAG_FILE_BYTES = 10 * 1024 * 1024
 
 
@@ -23,8 +37,19 @@ def require_internal_secret(
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "resume-agent"}
+def health() -> dict:
+    rag = get_rag_status()
+    return {
+        "status": "ok" if rag.get("qdrant_reachable") else "degraded",
+        "service": "resume-agent",
+        "version": "1.3.0",
+        "rag": rag,
+    }
+
+
+@app.get("/metrics", dependencies=[Depends(require_internal_secret)])
+def metrics() -> dict:
+    return {"service": "resume-agent", "rag": get_rag_metrics()}
 
 
 @app.post(
@@ -33,7 +58,7 @@ def health() -> dict[str, str]:
     dependencies=[Depends(require_internal_secret)],
 )
 def diagnose(request: AgentRequest) -> AgentResponse:
-    return run_agent(request.model_copy(update={"task_type": "diagnose"}))
+    return run_agent_safely(request.model_copy(update={"task_type": "diagnose"}))
 
 
 @app.post(
@@ -42,7 +67,7 @@ def diagnose(request: AgentRequest) -> AgentResponse:
     dependencies=[Depends(require_internal_secret)],
 )
 def polish(request: AgentRequest) -> AgentResponse:
-    return run_agent(request.model_copy(update={"task_type": "polish"}))
+    return run_agent_safely(request.model_copy(update={"task_type": "polish"}))
 
 
 @app.post(
@@ -51,7 +76,17 @@ def polish(request: AgentRequest) -> AgentResponse:
     dependencies=[Depends(require_internal_secret)],
 )
 def generate(request: AgentRequest) -> AgentResponse:
-    return run_agent(request.model_copy(update={"task_type": "generate"}))
+    return run_agent_safely(request.model_copy(update={"task_type": "generate"}))
+
+
+def run_agent_safely(request: AgentRequest) -> AgentResponse:
+    try:
+        return run_agent(request)
+    except RuntimeError as error:
+        message = str(error)[:500]
+        if "严格来源模式" in message:
+            raise HTTPException(status_code=424, detail=message) from error
+        raise
 
 
 @app.post("/rag/index", dependencies=[Depends(require_internal_secret)])
@@ -59,24 +94,51 @@ async def rag_index(
     document_id: int = Form(...),
     name: str = Form(...),
     category: str = Form("general"),
+    source_type: RagSourceType = Form("standard"),
+    scope: RagScope = Form("global"),
+    owner_user_id: int | None = Form(None),
+    resume_id: str | None = Form(None),
+    licensed: bool = Form(False),
+    pii_reviewed: bool = Form(False),
+    expires_at: str | None = Form(None),
     file: UploadFile = File(...),
 ) -> dict:
     data = await file.read(MAX_RAG_FILE_BYTES + 1)
     if len(data) > MAX_RAG_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Knowledge document must not exceed 10MB")
-    return index_document(
-        document_id=document_id,
-        name=name,
-        category=category,
-        file_name=file.filename or "document.txt",
-        content_type=file.content_type or "application/octet-stream",
-        data=data,
-    )
+    try:
+        return index_document(
+            document_id=document_id,
+            name=name,
+            category=category,
+            file_name=file.filename or "document.txt",
+            content_type=file.content_type or "application/octet-stream",
+            data=data,
+            source_type=source_type,
+            scope=scope,
+            owner_user_id=owner_user_id,
+            resume_id=resume_id,
+            licensed=licensed,
+            pii_reviewed=pii_reviewed,
+            expires_at=expires_at,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)[:500]) from error
 
 
 @app.post("/rag/search", dependencies=[Depends(require_internal_secret)])
 def rag_search(request: RagSearchRequest) -> dict:
-    return {"results": search_documents(request.query, request.limit, request.category)}
+    return {
+        "results": search_documents(
+            request.query,
+            request.limit,
+            request.category,
+            source_types=request.source_types,
+            scope=request.scope,
+            owner_user_id=request.owner_user_id,
+            resume_id=request.resume_id,
+        )
+    }
 
 
 @app.delete(

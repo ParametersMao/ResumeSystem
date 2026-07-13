@@ -4,7 +4,10 @@ WORKDIR /app
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY package*.json ./
-RUN npm ci --include=dev
+RUN npm config set fetch-retries 5 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && npm ci --include=dev --prefer-offline
 
 FROM deps AS build
 
@@ -14,32 +17,33 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
+ARG DEBIAN_MIRROR=
 ENV NODE_ENV=production
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-headless-shell
 
 RUN set -eux; \
-  sed -i \
-    -e 's|http://deb.debian.org/debian-security|http://mirrors.aliyun.com/debian-security|g' \
-    -e 's|http://deb.debian.org/debian|http://mirrors.aliyun.com/debian|g' \
-    /etc/apt/sources.list.d/debian.sources; \
+  if [ -n "$DEBIAN_MIRROR" ]; then \
+    mirror="${DEBIAN_MIRROR%/}"; \
+    sed -i \
+      -e "s|http://deb.debian.org/debian-security|$mirror/debian-security|g" \
+      -e "s|http://deb.debian.org/debian|$mirror/debian|g" \
+      /etc/apt/sources.list.d/debian.sources; \
+  fi; \
   echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries; \
   echo 'Acquire::http::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries; \
   echo 'Acquire::https::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries; \
-  apt-get update; \
   for attempt in 1 2 3; do \
-    apt-get install -y --no-install-recommends --fix-missing \
-      chromium \
+    apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+      chromium-headless-shell \
       fonts-noto-cjk \
       ca-certificates \
     && break; \
-    apt-get -f install -y --no-install-recommends --fix-missing && break; \
     if [ "$attempt" = "3" ]; then exit 1; fi; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*; \
     sleep 10; \
-    apt-get update; \
   done; \
   rm -rf /var/lib/apt/lists/*
 

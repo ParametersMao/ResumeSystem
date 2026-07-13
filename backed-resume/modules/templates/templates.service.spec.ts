@@ -13,7 +13,7 @@ describe('TemplatesService', () => {
   const mockTemplate: Template = {
     id: 1,
     templateName: '技术简历模板',
-    templateData: '{"sections": []}',
+    templateData: '{"layout":{"key":"qm-sidebar-profile","variant":"sidebar"},"sections":[]}',
     cssContent: 'body { font-size: 14px; }',
     category: 'IT',
     previewImage: 'https://example.com/preview.png',
@@ -82,7 +82,10 @@ describe('TemplatesService', () => {
 
       expect(result.list).toHaveLength(1);
       expect(result.total).toBe(1);
+      expect(result.list[0].layoutKey).toBe('qm-sidebar-profile');
+      expect(result.list[0].templateVariant).toBe('sidebar');
       expect(result.list[0].templateName).toBe('技术简历模板');
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('template.status = :status', { status: true });
     });
 
     it('should filter by templateName', async () => {
@@ -125,7 +128,19 @@ describe('TemplatesService', () => {
       const result = await service.findOne(1);
 
       expect(result.id).toBe(1);
+      expect(result.layoutKey).toBe('qm-sidebar-profile');
+      expect(result.templateVariant).toBe('sidebar');
       expect(result.templateName).toBe('技术简历模板');
+      expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: 1, status: true } });
+    });
+
+    it('should allow admin detail lookup to include inactive templates', async () => {
+      mockRepository.findOne.mockResolvedValue({ ...mockTemplate, status: false });
+
+      const result = await service.findOne(1, { includeInactive: true });
+
+      expect(result.id).toBe(1);
+      expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
     });
 
     it('should throw NotFoundException when template not found', async () => {

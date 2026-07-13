@@ -5,6 +5,7 @@ import { SystemConfigService } from './system-config.service';
 import { PartialSystemConfigDto, SystemConfigDto } from '../../dto/system-config.dto';
 import { AiConnectionTestDto, AiPromptPreviewDto } from '../../dto/ai-runtime.dto';
 import { AiRuntimeService } from '../ai/ai-runtime.service';
+import { AdminOnlyGuard, AdminRoles } from '../auth/admin-only.guard';
 
 function ensureAdmin(req: any) {
   if (!req.user?.id) throw new UnauthorizedException('用户信息无效');
@@ -13,7 +14,7 @@ function ensureAdmin(req: any) {
 }
 
 @Controller('api/admin/system-config')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AdminOnlyGuard)
 export class SystemConfigController {
   constructor(
     private readonly systemConfigService: SystemConfigService,
@@ -32,6 +33,7 @@ export class SystemConfigController {
   }
 
   @Put()
+  @AdminRoles('admin')
   async updateConfig(@Request() req, @Body() payload: PartialSystemConfigDto): Promise<ApiResponse<SystemConfigDto>> {
     ensureAdmin(req);
     const data = await this.systemConfigService.updatePublicConfig(payload || {});
@@ -43,6 +45,7 @@ export class SystemConfigController {
   }
 
   @Put('ai/preview')
+  @AdminRoles('admin', 'operator')
   async previewAiPrompt(@Request() req, @Body() payload: AiPromptPreviewDto): Promise<ApiResponse<any>> {
     ensureAdmin(req);
     const aiConfig = await this.systemConfigService.getAiConfig();
@@ -55,6 +58,7 @@ export class SystemConfigController {
   }
 
   @Put('ai/test-connection')
+  @AdminRoles('admin')
   async testAiConnection(@Request() req, @Body() payload: AiConnectionTestDto): Promise<ApiResponse<any>> {
     ensureAdmin(req);
     const current = await this.systemConfigService.getAiConfig();

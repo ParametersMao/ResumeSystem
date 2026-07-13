@@ -21,7 +21,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import CoreResumePreview from '@/components/core-resume/CoreResumePreview.vue'
 import { buildResumeTitle, createEmptyDocument, ensureAllSections, parseResumeContent } from '@/core-resume/model'
-import { getResume } from '@/api/resume'
+import { exportResumePdfByHtml, getResume } from '@/api/resume'
+import { buildCoreResumePrintHtml } from '@/core-resume/print'
 import { useUserStore } from '@/store/user'
 
 const route = useRoute()
@@ -31,6 +32,7 @@ const userStore = useUserStore()
 const previewRef = ref<InstanceType<typeof CoreResumePreview> | null>(null)
 const documentState = ref(createEmptyDocument())
 const exporting = ref(false)
+const loadedResume = ref<{ id: number; templateId?: number } | null>(null)
 
 const title = computed(() => buildResumeTitle(documentState.value.profile))
 
@@ -40,6 +42,7 @@ async function loadResume() {
   try {
     await userStore.initUserState()
     const resume = await getResume(String(route.params.resumeId), userStore.user?.id)
+    loadedResume.value = { id: Number(resume.id), templateId: resume.templateId }
     const parsed = parseResumeContent(resume.content)
     if (parsed) {
       documentState.value = ensureAllSections(parsed)
@@ -61,30 +64,22 @@ async function exportPdf() {
   }
   exporting.value = true
   try {
-    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-      import('html2canvas'),
-      import('jspdf'),
-    ])
-    const canvas = await html2canvas(sheet, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-    const imgData = canvas.toDataURL('image/jpeg', 0.95)
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const pageWidth = 210
-    const pageHeight = 297
-    const imageHeight = (canvas.height * pageWidth) / canvas.width
-    let remaining = imageHeight
-    let y = 0
-
-    pdf.addImage(imgData, 'JPEG', 0, y, pageWidth, imageHeight)
-    remaining -= pageHeight
-
-    while (remaining > 0) {
-      y = remaining - imageHeight
-      pdf.addPage()
-      pdf.addImage(imgData, 'JPEG', 0, y, pageWidth, imageHeight)
-      remaining -= pageHeight
-    }
-
-    pdf.save(`${title.value}.pdf`)
+    const html = buildCoreResumePrintHtml(sheet.outerHTML, title.value)
+    const { url, pageCount } = await exportResumePdfByHtml(html, {
+      resumeId: loadedResume.value?.id,
+      templateId: loadedResume.value?.templateId,
+    })
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${title.value.replace(/[\\/:*?"<>|]/g, '-') || 'resume'}.pdf`
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    ElMessage.success(`PDF 已由服务端统一导出，共 ${pageCount} 页`)
+  } catch (error) {
+    console.error('导出 PDF 失败:', error)
+    ElMessage.error('导出失败，请稍后重试')
   } finally {
     exporting.value = false
   }

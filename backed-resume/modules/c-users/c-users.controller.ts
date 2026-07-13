@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { CUsersService } from './c-users.service';
-import { CreateCUserDto, UpdateCUserDto, UpdateCUserStatusDto, CUserResponseDto } from '../../dto/c-user.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CreateCUserDto, UpdateCUserDto, UpdateCUserStatusDto, CUserResponseDto, CUserSearchDto, ResetCUserPasswordDto } from '../../dto/c-user.dto';
 import { PaginatedApiResponse, ApiResponse } from '../../common/interfaces/pagination.interface';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminOnlyGuard } from '../auth/admin-only.guard';
@@ -12,7 +11,7 @@ export class CUsersController {
   constructor(private readonly cUsersService: CUsersService) {}
 
   @Get()
-  async findAll(@Query() paginationDto: PaginationDto): Promise<PaginatedApiResponse<CUserResponseDto>> {
+  async findAll(@Query() paginationDto: CUserSearchDto): Promise<PaginatedApiResponse<CUserResponseDto>> {
     const result = await this.cUsersService.findAll(paginationDto);
     return {
       code: 200,
@@ -84,6 +83,19 @@ export class CUsersController {
     };
   }
 
+  @Patch(':id/reset-password')
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() dto: ResetCUserPasswordDto,
+  ): Promise<ApiResponse<CUserResponseDto>> {
+    const user = await this.cUsersService.resetPassword(+id, dto.password);
+    return {
+      code: 200,
+      message: '密码重置成功，用户原有登录状态已失效',
+      data: this.toResponse(user),
+    };
+  }
+
   @Delete(':id')
   async remove(@Param('id') id: string): Promise<ApiResponse<null>> {
     await this.cUsersService.remove(+id);
@@ -91,6 +103,19 @@ export class CUsersController {
       code: 200,
       message: '用户删除成功',
       data: null,
+    };
+  }
+
+  private toResponse(user: any): CUserResponseDto {
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      status: user.status,
+      createTime: user.createTime,
+      updateTime: user.updateTime,
+      aiOperationCount: user.aiOperationCount,
     };
   }
 }

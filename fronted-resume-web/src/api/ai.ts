@@ -40,11 +40,18 @@ export interface AiDiagnoseResponse extends AiRuntimeMeta {
   steps: AiAgentStep[]
   suggestions: Array<Record<string, any>>
   diagnostics: string[]
+  strategy?: string[]
+  warnings?: string[]
   patch: Record<string, any>
   sources: Array<{
     documentId: number
     documentName: string
     category: string
+    sourceType?: 'standard' | 'role-framework' | 'resume-exemplar' | 'job-description'
+    scope?: 'global' | 'private'
+    ownerUserId?: number | null
+    resumeId?: string | null
+    factType?: 'standard' | 'example' | 'job_context'
     chunkIndex: number
     text: string
     score: number
@@ -52,11 +59,11 @@ export interface AiDiagnoseResponse extends AiRuntimeMeta {
   tokenUsed: number
 }
 
-export function aiPolish(payload: { inputText: string; sectionType?: string; jobTitle?: string }): Promise<ApiResponse<AiPolishResponse>> {
+export function aiPolish(payload: { inputText: string; sectionType?: string; jobTitle?: string; resumeId?: string; includeExemplars?: boolean }): Promise<ApiResponse<AiPolishResponse>> {
   return request.post('/api/ai/polish', payload).then((res) => res.data)
 }
 
-export function aiGenerate(payload: { jobTitle: string; sectionType?: string; contextText?: string }): Promise<ApiResponse<AiGenerateResponse>> {
+export function aiGenerate(payload: { jobTitle: string; sectionType?: string; contextText?: string; resumeId?: string; includeExemplars?: boolean }): Promise<ApiResponse<AiGenerateResponse>> {
   return request.post('/api/ai/generate', payload).then((res) => res.data)
 }
 

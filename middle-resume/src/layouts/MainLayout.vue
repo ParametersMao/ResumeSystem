@@ -80,7 +80,12 @@ const userStore = useUserStore()
 const isCollapse = ref(false)
 
 const menuRoutes = computed(() => {
-  return router.getRoutes().filter((item) => item.meta?.title && item.path !== '/login')
+  const role = userStore.user?.role || 'viewer'
+  return router.getRoutes().filter((item) => {
+    if (!item.meta?.title || item.path === '/login') return false
+    const roles = item.meta.roles
+    return !Array.isArray(roles) || roles.length === 0 || roles.includes(role)
+  })
 })
 
 const activeMenu = computed(() => route.path)

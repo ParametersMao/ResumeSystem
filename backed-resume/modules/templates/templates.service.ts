@@ -9,11 +9,12 @@ import {
   TemplateResponseDto,
   TemplateListResponseDto,
   TemplateDetailResponseDto,
+  type TemplateLayoutKey,
+  type TemplateVariant,
 } from '../../dto/template.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
 import { TemplateSearchDto } from '../../dto/template-search.dto';
 
-type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial';
 type TemplateSortBy = 'recommended' | 'latest' | 'popular';
 
 @Injectable()
@@ -27,7 +28,10 @@ export class TemplatesService {
     private templateFavoriteRepository: Repository<TemplateFavorite>,
   ) {}
 
-  async findAll(searchDto: TemplateSearchDto): Promise<PaginationResponse<TemplateListResponseDto>> {
+  async findAll(
+    searchDto: TemplateSearchDto,
+    options: { includeInactive?: boolean } = {},
+  ): Promise<PaginationResponse<TemplateListResponseDto>> {
     const {
       page = 1,
       limit = 10,
@@ -48,7 +52,9 @@ export class TemplatesService {
         });
       }
 
-      if (status === true || status === false) {
+      if (!options.includeInactive) {
+        queryBuilder.andWhere('template.status = :status', { status: true });
+      } else if (status === true || status === false) {
         queryBuilder.andWhere('template.status = :status', { status });
       }
 
@@ -98,8 +104,12 @@ export class TemplatesService {
     }
   }
 
-  async findOne(id: number): Promise<TemplateDetailResponseDto> {
-    const template = await this.templateRepository.findOne({ where: { id } });
+  async findOne(
+    id: number,
+    options: { includeInactive?: boolean } = {},
+  ): Promise<TemplateDetailResponseDto> {
+    const where = options.includeInactive ? { id } : { id, status: true };
+    const template = await this.templateRepository.findOne({ where });
     if (!template) {
       throw new NotFoundException('模板不存在');
     }
@@ -214,6 +224,7 @@ export class TemplatesService {
       id: template.id,
       templateName: template.templateName,
       templateVariant: this.resolveTemplateVariant(template.templateData, template.templateName),
+      layoutKey: this.resolveTemplateLayoutKey(template.templateData),
       previewImage: template.previewImage,
       industryTags: template.industryTags ?? undefined,
       status: template.status,
@@ -230,6 +241,7 @@ export class TemplatesService {
       templateName: template.templateName,
       templateData: template.templateData,
       templateVariant: this.resolveTemplateVariant(template.templateData, template.templateName),
+      layoutKey: this.resolveTemplateLayoutKey(template.templateData),
       previewImage: template.previewImage,
       industryTags: template.industryTags ?? undefined,
       status: template.status,
@@ -246,6 +258,7 @@ export class TemplatesService {
       templateName: template.templateName,
       templateData: template.templateData,
       templateVariant: this.resolveTemplateVariant(template.templateData, template.templateName),
+      layoutKey: this.resolveTemplateLayoutKey(template.templateData),
       previewImage: template.previewImage,
       industryTags: template.industryTags ?? undefined,
       status: template.status,
@@ -336,6 +349,17 @@ export class TemplatesService {
     }
 
     return 'classic';
+  }
+
+  private resolveTemplateLayoutKey(templateData: string | null | undefined): TemplateLayoutKey | undefined {
+    const parsed = this.safeParseTemplateData(templateData);
+    const candidate = [
+      parsed?.layout?.key,
+      parsed?.layoutKey,
+      parsed?.key,
+    ].find((value) => this.isTemplateLayoutKey(value));
+
+    return this.isTemplateLayoutKey(candidate) ? candidate : undefined;
   }
 
   private safeParseTemplateData(templateData: string | null | undefined): any {
@@ -452,6 +476,20 @@ export class TemplatesService {
       value === 'executive' ||
       value === 'compact' ||
       value === 'editorial'
+    );
+  }
+
+  private isTemplateLayoutKey(value: unknown): value is TemplateLayoutKey {
+    return (
+      value === 'qm-blue-top-photo' ||
+      value === 'qm-sidebar-profile' ||
+      value === 'qm-classic-centered' ||
+      value === 'qm-ribbon-compact' ||
+      value === 'qm-timeline-icons' ||
+      value === 'qm-minimal-ats' ||
+      value === 'qm-executive-business' ||
+      value === 'qm-student-editorial' ||
+      value === 'qm-spotlight-featured'
     );
   }
 

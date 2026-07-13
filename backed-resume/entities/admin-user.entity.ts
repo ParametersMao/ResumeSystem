@@ -23,9 +23,12 @@ export class AdminUser {
   @Column({ type: 'tinyint', default: 1 })
   status: number; // 0: 禁用，1: 启用
 
+  @Column({ type: 'int', default: 0, name: 'token_version' })
+  tokenVersion: number;
+
   @CreateDateColumn({ type: 'datetime', name: 'create_time' })
   createTime: Date;
 
   @UpdateDateColumn({ type: 'datetime', name: 'update_time' })
   updateTime: Date;
-} 
+}

@@ -51,12 +51,14 @@ export class AiAgentClientService {
     return this.callAgent(
       'polish',
       {
+        resume_id: dto.resumeId,
         user_id: userId,
         section_type: dto.sectionType || 'general',
         job_title: dto.jobTitle || '目标岗位',
         selected_text: dto.inputText,
       },
       config,
+      { include_exemplars: Boolean(dto.includeExemplars) },
     );
   }
 
@@ -64,12 +66,14 @@ export class AiAgentClientService {
     return this.callAgent(
       'generate',
       {
+        resume_id: dto.resumeId,
         user_id: userId,
         section_type: dto.sectionType || 'general',
         job_title: dto.jobTitle || '目标岗位',
         content: dto.contextText || '',
       },
       config,
+      { include_exemplars: Boolean(dto.includeExemplars) },
     );
   }
 
@@ -90,11 +94,13 @@ export class AiAgentClientService {
     taskType: AgentTaskType,
     context: AgentRequestContext,
     config: AiConfigDto,
+    requestOptions: Record<string, any> = {},
   ): Promise<AiAgentRuntimeResult> {
     const baseUrl = this.resolveAgentBaseUrl(config);
     const endpoint = `${baseUrl}/agent/${taskType}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeoutMs = Math.min(300_000, Math.max(30_000, Number(process.env.AGENT_REQUEST_TIMEOUT_MS || 150_000)));
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(endpoint, {
@@ -106,7 +112,7 @@ export class AiAgentClientService {
         body: JSON.stringify({
           task_type: taskType,
           context,
-          options: this.buildAgentOptions(config),
+          options: { ...this.buildAgentOptions(config), ...requestOptions },
         }),
         signal: controller.signal,
       });
@@ -148,8 +154,10 @@ export class AiAgentClientService {
       source: 'resume-system',
       provider: config.provider || 'mock',
       api_base_url: config.apiBaseUrl || '',
+      api_key: config.apiKey || '',
       model: config.apiModel || '',
       temperature: config.temperature,
+      strict_sources: String(process.env.RAG_STRICT_SOURCES || 'false').toLowerCase() === 'true',
       execution_mode:
         config.provider !== 'mock' && config.apiBaseUrl && config.apiKey && config.apiModel
           ? 'live'

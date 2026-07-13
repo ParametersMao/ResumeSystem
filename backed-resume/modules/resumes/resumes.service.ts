@@ -13,10 +13,14 @@ import { existsSync } from 'fs';
 import * as puppeteer from 'puppeteer';
 import { Resume } from '../../entities/resume.entity';
 import { ResumeVersion } from '../../entities/resume-version.entity';
+import { Template } from '../../entities/template.entity';
+import { TemplateUsage } from '../../entities/template-usage.entity';
+import { ResumeDownload } from '../../entities/resume-download.entity';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
 import { StorageService } from '../storage/storage.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -29,6 +33,16 @@ interface ResumeVersionSchema {
 
 type ResumeVersionSourceType = 'save' | 'manual' | 'rollback';
 
+const MAX_RESUME_CONTENT_BYTES = 1024 * 1024;
+const MAX_RESUME_PREVIEW_BYTES = 2 * 1024 * 1024;
+const MAX_EXPORT_HTML_BYTES = 2 * 1024 * 1024;
+const pdfParse = require('pdf-parse') as (buffer: Buffer) => Promise<{ numpages: number }>;
+
+export interface ResumePdfExportResult {
+  url: string;
+  pageCount: number;
+}
+
 @Injectable()
 export class ResumesService {
   private resumeVersionSchemaPromise: Promise<ResumeVersionSchema> | null = null;
@@ -38,17 +52,24 @@ export class ResumesService {
     private resumeRepository: Repository<Resume>,
     @InjectRepository(ResumeVersion)
     private resumeVersionRepository: Repository<ResumeVersion>,
+    @InjectRepository(Template)
+    private templateRepository: Repository<Template>,
     private readonly storageService: StorageService,
     private readonly entitlementsService: EntitlementsService,
+    private readonly knowledgeService: KnowledgeService,
   ) {}
 
   async create(createResumeDto: CreateResumeDto, userId: number): Promise<ResumeResponseDto> {
+    validateResumeContent(createResumeDto.content);
+    validatePreviewImage(createResumeDto.previewImage);
+
     await this.entitlementsService.assertCanCreateResume(userId);
     await this.entitlementsService.assertDatabaseStorageAvailable(
       userId,
       Buffer.byteLength(createResumeDto.content || '', 'utf8') +
         Buffer.byteLength(createResumeDto.previewImage || '', 'utf8'),
     );
+    const normalizedTemplateId = await this.resolveTemplateId(createResumeDto.templateId);
     const savedResume = await this.resumeRepository.manager.transaction(
       async (manager) => {
         const rows: Array<{ resumeLimit: number }> = await manager.query(
@@ -69,9 +90,19 @@ export class ResumesService {
         }
         const resume = manager.getRepository(Resume).create({
           ...createResumeDto,
+          templateId: normalizedTemplateId,
           userId,
         });
-        return manager.getRepository(Resume).save(resume);
+        const saved = await manager.getRepository(Resume).save(resume);
+        if (normalizedTemplateId) {
+          await manager.getRepository(TemplateUsage).save({
+            user_id: userId,
+            template_id: normalizedTemplateId,
+            usage_type: 'resume_create',
+          });
+          await manager.increment(Template, { id: normalizedTemplateId }, 'useCount', 1);
+        }
+        return saved;
       },
     );
     return this.mapToResponseDto(savedResume);
@@ -114,6 +145,13 @@ export class ResumesService {
   }
 
   async update(id: number, updateResumeDto: UpdateResumeDto, userId: number): Promise<ResumeResponseDto> {
+    if (updateResumeDto.content !== undefined) {
+      validateResumeContent(updateResumeDto.content);
+    }
+    if (updateResumeDto.previewImage !== undefined) {
+      validatePreviewImage(updateResumeDto.previewImage);
+    }
+
     const resume = await this.resumeRepository.findOne({
       where: { id, userId, status: 1 },
     });
@@ -141,11 +179,23 @@ export class ResumesService {
 
     await this.saveVersionSnapshot(resume, 'save');
 
-    Object.assign(resume, updateResumeDto);
+    const { templateId, ...resumeChanges } = updateResumeDto;
+    Object.assign(resume, resumeChanges);
+    if (templateId !== undefined) {
+      resume.templateId = await this.resolveTemplateId(templateId);
+    }
     resume.version += 1;
 
     const updatedResume = await this.resumeRepository.save(resume);
     return this.mapToResponseDto(updatedResume);
+  }
+
+  private async resolveTemplateId(templateId?: number | null): Promise<number | null> {
+    if (!templateId) return null;
+    const exists = await this.templateRepository.exists({
+      where: { id: templateId, status: true },
+    });
+    return exists ? templateId : null;
   }
 
   async listVersions(resumeId: number, userId: number): Promise<ResumeVersion[]> {
@@ -230,13 +280,25 @@ export class ResumesService {
       throw new NotFoundException('简历不存在');
     }
 
+    // Private JD source files and vectors must be removed while the resume is
+    // still active, because the knowledge boundary deliberately rejects access
+    // to deleted resumes. A cleanup failure therefore aborts the resume delete.
+    await this.knowledgeService.deleteJobDescription(id, userId);
     resume.status = 0;
     await this.resumeRepository.save(resume);
   }
 
-  async exportPdf(html: string, userId: number): Promise<string> {
+  async exportPdf(
+    html: string,
+    userId: number,
+    resumeId?: number,
+    templateId?: number,
+  ): Promise<ResumePdfExportResult> {
     if (!html?.trim()) {
       throw new ServiceUnavailableException('PDF 导出失败：未提供有效 HTML 内容');
+    }
+    if (Buffer.byteLength(html, 'utf8') > MAX_EXPORT_HTML_BYTES) {
+      throw new BadRequestException('PDF 导出失败：HTML 内容过大，请减少图片或复杂样式后重试');
     }
 
     const executablePath = resolveBrowserExecutablePath();
@@ -246,6 +308,11 @@ export class ResumesService {
       );
     }
 
+    const trackedTemplateId = await this.resolveExportTemplateId(
+      userId,
+      resumeId,
+      templateId,
+    );
     await this.entitlementsService.consumePdf(userId);
     let browser: puppeteer.Browser | null = null;
     let reservedStorageBytes = 0;
@@ -253,11 +320,34 @@ export class ResumesService {
       browser = await puppeteer.launch({
         headless: true,
         executablePath,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--disable-features=UseDBus,AudioServiceOutOfProcess',
+          '--no-first-run',
+          '--no-zygote',
+          '--headless=new',
+        ],
       });
 
       const page = await browser.newPage();
       page.setDefaultTimeout(30_000);
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        if (isAllowedPdfResourceUrl(request.url(), request.resourceType())) {
+          void request.continue().catch(() => {});
+          return;
+        }
+        void request.abort('blockedbyclient').catch(() => {});
+      });
 
       await page.setContent(injectPdfSafeMargins(html), { waitUntil: 'load', timeout: 30_000 });
       await page.emulateMediaType('print');
@@ -295,9 +385,15 @@ export class ResumesService {
       const pdfBuffer = (await page.pdf({
         format: 'A4',
         printBackground: true,
-        preferCSSPageSize: false,
-        margin: { top: '5mm', right: '5mm', bottom: '5mm', left: '5mm' },
+        preferCSSPageSize: true,
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
       })) as unknown as Buffer;
+
+      const parsedPdf = await pdfParse(Buffer.from(pdfBuffer));
+      const pageCount = Number(parsedPdf.numpages);
+      if (!Number.isInteger(pageCount) || pageCount < 1) {
+        throw new ServiceUnavailableException('PDF 导出失败：生成文件未包含有效页面');
+      }
 
       reservedStorageBytes = pdfBuffer.length;
       await this.entitlementsService.consumeStorage(
@@ -311,7 +407,20 @@ export class ResumesService {
         contentType: 'application/pdf',
         cacheControl: 'private, max-age=0, must-revalidate',
       });
-      return result.url;
+      if (trackedTemplateId) {
+        try {
+          await this.resumeRepository.manager.transaction(async (manager) => {
+            await manager.getRepository(ResumeDownload).save({
+              user_id: userId,
+              template_id: trackedTemplateId,
+            });
+            await manager.increment(Template, { id: trackedTemplateId }, 'useCount', 1);
+          });
+        } catch (analyticsError) {
+          console.warn('resume download analytics write failed', analyticsError);
+        }
+      }
+      return { url: result.url, pageCount };
     } catch (err: unknown) {
       await this.entitlementsService.refundPdf(userId);
       if (reservedStorageBytes) {
@@ -515,13 +624,89 @@ export class ResumesService {
       throw new NotFoundException('简历不存在');
     }
   }
+
+  private async resolveExportTemplateId(
+    userId: number,
+    resumeId?: number,
+    templateId?: number,
+  ): Promise<number | null> {
+    const safeResumeId = Number(resumeId);
+    if (Number.isInteger(safeResumeId) && safeResumeId > 0) {
+      const resume = await this.resumeRepository.findOne({
+        select: { id: true, templateId: true },
+        where: { id: safeResumeId, userId, status: 1 },
+      });
+      if (!resume) {
+        throw new NotFoundException('简历不存在或不属于当前用户');
+      }
+      return resume.templateId || null;
+    }
+    const safeTemplateId = Number(templateId);
+    if (Number.isInteger(safeTemplateId) && safeTemplateId > 0) {
+      return this.resolveTemplateId(safeTemplateId);
+    }
+    return null;
+  }
 }
 
-function injectPdfSafeMargins(html: string): string {
+function validateResumeContent(content: string): void {
+  if (!content?.trim()) {
+    throw new BadRequestException('简历内容不能为空');
+  }
+
+  if (Buffer.byteLength(content, 'utf8') > MAX_RESUME_CONTENT_BYTES) {
+    throw new BadRequestException('简历内容过大，请减少图片或文本内容后重试');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new BadRequestException('简历内容必须是合法 JSON');
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new BadRequestException('简历内容必须是 JSON 对象');
+  }
+}
+
+function validatePreviewImage(previewImage?: string): void {
+  if (!previewImage) return;
+  if (Buffer.byteLength(previewImage, 'utf8') > MAX_RESUME_PREVIEW_BYTES) {
+    throw new BadRequestException('简历预览图过大，请重新生成或减少图片体积');
+  }
+}
+
+function isAllowedPdfResourceUrl(rawUrl: string, resourceType: string): boolean {
+  if (resourceType === 'document') return true;
+  if (!rawUrl) return true;
+  if (/^(about:blank|data:|blob:)/i.test(rawUrl)) return true;
+
+  try {
+    const url = new URL(rawUrl);
+    if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+      return false;
+    }
+
+    return (
+      url.pathname.startsWith('/uploads/') ||
+      url.pathname.startsWith('/mock/') ||
+      url.pathname.startsWith('/assets/') ||
+      url.pathname === '/favicon.ico'
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function injectPdfSafeMargins(html: string): string {
   if (html.includes('resume-pdf-safe-margins')) {
     return html;
   }
 
+  const port = process.env.PORT || 3000;
+  const baseHref = `http://127.0.0.1:${port}/`;
+  const baseTag = `<base href="${baseHref}">`;
   const safeMarginStyle = `
     <style id="resume-pdf-safe-margins">
       @page {
@@ -535,11 +720,6 @@ function injectPdfSafeMargins(html: string): string {
         background: #ffffff !important;
       }
 
-      body {
-        box-sizing: border-box !important;
-        padding: 5mm !important;
-      }
-
       .resume-sheet {
         max-width: 100% !important;
       }
@@ -547,22 +727,40 @@ function injectPdfSafeMargins(html: string): string {
       .resume-section,
       .timeline-section,
       .spotlight-section,
-      .section-item,
-      .timeline-card,
-      .spotlight-card {
+      .student-section,
+      .formal-table-section,
+      .asymmetric-section,
+      .asymmetric-story-section {
         break-inside: auto !important;
         page-break-inside: auto !important;
+      }
+
+      .section-item,
+      .timeline-card,
+      .spotlight-card,
+      .student-item,
+      .formal-table-items > article,
+      .asymmetric-story-section > article,
+      .asymmetric-compact-items > article {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
       }
 
       .section-heading,
       .item-heading,
       .timeline-marker,
       .timeline-card-top,
-      .spotlight-card-head {
+      .spotlight-card-head,
+      .student-section-heading,
+      .formal-table-section > header,
+      .asymmetric-story-section > header {
         break-after: avoid !important;
         page-break-after: avoid !important;
       }
 
+      h1,
+      h2,
+      h3,
       p,
       li {
         orphans: 2;
@@ -572,10 +770,10 @@ function injectPdfSafeMargins(html: string): string {
   `;
 
   if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `${safeMarginStyle}</head>`);
+    return html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`).replace(/<\/head>/i, `${safeMarginStyle}</head>`);
   }
 
-  return `${safeMarginStyle}${html}`;
+  return `${baseTag}${safeMarginStyle}${html}`;
 }
 
 function resolveImageExtension(file: Express.Multer.File): string {
@@ -600,7 +798,7 @@ function isSupportedImageBuffer(buffer: Buffer, mimetype: string): boolean {
   }
 
   if (mimetype === 'image/jpeg' || mimetype === 'image/jpg') {
-    return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+    return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff && buffer.includes(Buffer.from([0xff, 0xd9]), 3);
   }
 
   if (mimetype === 'image/webp') {

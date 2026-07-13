@@ -76,8 +76,8 @@ Docker MySQL 启动后，可以备份本地数据库：
 Docker 初始化数据会创建本地测试账号：
 
 ```text
-管理端: admin / admin123
-C 端:   testuser / 123456
+管理端和 C 端均不提供固定生产凭据。首次管理员通过一次性
+`BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` 创建；QA 凭据只通过运行时环境变量传入。
 ```
 
 这些账号只用于本地验证，生产环境需要替换。

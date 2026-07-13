@@ -23,6 +23,18 @@ export type CoreTemplateVariant =
   | 'editorial'
 export type CoreAvatarPlacement = 'default' | 'hidden' | 'header-right' | 'sidebar-top' | 'meta-card'
 export type CoreAvatarShape = 'rounded' | 'circle' | 'square'
+export type CoreTemplateLayoutKey =
+  | 'qm-blue-top-photo'
+  | 'qm-sidebar-profile'
+  | 'qm-classic-centered'
+  | 'qm-ribbon-compact'
+  | 'qm-timeline-icons'
+  | 'qm-minimal-ats'
+  | 'qm-executive-business'
+  | 'qm-student-editorial'
+  | 'qm-spotlight-featured'
+  | 'qm-table-formal'
+  | 'qm-asymmetric-profile'
 
 export interface CoreDateRange {
   start: string
@@ -79,6 +91,7 @@ export interface CoreResumeTheme {
   itemSpacing: number
   fontSize: number
   lineHeight: number
+  pageMargin: number
 }
 
 export type CoreResumeThemePatch = Partial<CoreResumeTheme>
@@ -92,11 +105,22 @@ export interface CoreAvatarLayout {
 }
 
 export interface CoreTemplateLayout {
+  key?: CoreTemplateLayoutKey
   avatar?: CoreAvatarLayout
+}
+
+export interface CoreResumeTargeting {
+  jobTitle: string
+  company?: string
+  jdText: string
+  keywords: string[]
+  analyzedAt?: number
 }
 
 export interface CoreResumeDocument {
   schema: 'core-resume/v1'
+  documentTitle: string
+  slogan: string
   profile: CoreResumeProfile
   sections: CoreResumeSection[]
   theme: CoreResumeTheme
@@ -106,6 +130,7 @@ export interface CoreResumeDocument {
   templateId?: string
   templateName?: string
   templateVariant?: CoreTemplateVariant
+  targeting?: CoreResumeTargeting
 }
 
 export const CORE_SECTION_DEFINITIONS: CoreSectionDefinition[] = [
@@ -183,6 +208,8 @@ export const CORE_SECTION_DEFINITIONS: CoreSectionDefinition[] = [
     defaultVisible: true,
     fields: [
       { key: 'name', label: '技能名称', type: 'text', placeholder: '例如：Vue 3 / TypeScript / 数据分析' },
+      { key: 'proficiency', label: '熟练度（0-100）', type: 'text', placeholder: '例如：85' },
+      { key: 'level', label: '熟练程度', type: 'text', placeholder: '例如：熟练 / 精通' },
     ],
   },
   {
@@ -230,7 +257,10 @@ export const DEFAULT_CORE_THEME: CoreResumeTheme = {
   itemSpacing: 14,
   fontSize: 14,
   lineHeight: 1.7,
+  pageMargin: 42,
 }
+
+export const DEFAULT_AVATAR_PLACEHOLDER = '/mock/avatar/default.svg'
 
 export const DEFAULT_CORE_PROFILE: CoreResumeProfile = {
   name: '张三',
@@ -258,7 +288,7 @@ export function createSectionItem(type: CoreSectionType): CoreSectionItem {
     case 'campus':
       return { org: '', role: '', duration: { start: '', end: '' }, desc: '' }
     case 'skills':
-      return { name: '' }
+      return { name: '', proficiency: '', level: '' }
     case 'awards':
       return { name: '', org: '', date: '' }
     case 'summary':
@@ -288,6 +318,8 @@ export function createSection(type: CoreSectionType, index: number): CoreResumeS
 export function createEmptyDocument(): CoreResumeDocument {
   return {
     schema: 'core-resume/v1',
+    documentTitle: '',
+    slogan: '',
     profile: { ...DEFAULT_CORE_PROFILE },
     theme: { ...DEFAULT_CORE_THEME },
     sections: CORE_SECTION_DEFINITIONS.map((definition, index) => createSection(definition.type, index)),
@@ -301,7 +333,7 @@ export function createDemoDocument(themeOverrides?: Partial<CoreResumeTheme>): C
   document.profile = {
     name: '王小明',
     title: '产品经理',
-    avatar: '',
+    avatar: DEFAULT_AVATAR_PLACEHOLDER,
     phone: '13900000000',
     email: 'wang@example.com',
     gender: '男',
@@ -351,7 +383,12 @@ export function createDemoDocument(themeOverrides?: Partial<CoreResumeTheme>): C
       type: 'skills',
       title: '技能特长',
       visible: true,
-      items: [{ name: '产品规划' }, { name: 'Axure / Figma' }, { name: '数据分析' }, { name: '跨团队协作' }],
+      items: [
+        { name: '产品规划', proficiency: '92', level: '精通' },
+        { name: 'Axure / Figma', proficiency: '88', level: '熟练' },
+        { name: '数据分析', proficiency: '82', level: '熟练' },
+        { name: '跨团队协作', proficiency: '90', level: '精通' },
+      ],
     },
     {
       id: 'summary-demo',
@@ -388,6 +425,8 @@ export function ensureAllSections(document: Partial<CoreResumeDocument>): CoreRe
   })
 
   base.profile = { ...base.profile, ...(document.profile || {}) }
+  base.documentTitle = typeof document.documentTitle === 'string' ? document.documentTitle : ''
+  base.slogan = typeof document.slogan === 'string' ? document.slogan : ''
   base.templateTheme = normalizeThemePatch(document.templateTheme)
   base.templateLayout = normalizeTemplateLayout(document.templateLayout)
   base.themeOverrides = normalizeThemePatch(document.themeOverrides)
@@ -395,6 +434,7 @@ export function ensureAllSections(document: Partial<CoreResumeDocument>): CoreRe
   base.templateId = document.templateId
   base.templateName = document.templateName || base.templateName
   base.templateVariant = document.templateVariant || base.templateVariant
+  base.targeting = normalizeTargeting(document.targeting)
   return base
 }
 
@@ -415,6 +455,7 @@ export function extractThemeFromTemplate(templateData: any): Partial<CoreResumeT
     headingFontFamily: fonts.heading || fonts.body,
     sectionSpacing: toNumber(spacing.sectionMargin),
     itemSpacing: toNumber(spacing.elementMargin),
+    pageMargin: toNumber(spacing.pageMargin),
   }
 }
 
@@ -424,6 +465,7 @@ export function extractLayoutFromTemplate(templateData: any): CoreTemplateLayout
   }
 
   return normalizeTemplateLayout({
+    key: templateData.layout?.key || templateData.layoutKey || templateData.key,
     avatar: templateData.profile?.avatar || templateData.layout?.avatar || templateData.avatar,
   })
 }
@@ -447,6 +489,8 @@ export function parseResumeContent(rawContent: unknown): Partial<CoreResumeDocum
 
   return {
     schema: 'core-resume/v1',
+    documentTitle: typeof source.documentTitle === 'string' ? source.documentTitle : '',
+    slogan: typeof source.slogan === 'string' ? source.slogan : '',
     profile: {
       ...DEFAULT_CORE_PROFILE,
       ...normalizeProfile(source.profile),
@@ -459,6 +503,24 @@ export function parseResumeContent(rawContent: unknown): Partial<CoreResumeDocum
     templateId: typeof source.templateId === 'string' ? source.templateId : undefined,
     templateName: typeof source.templateName === 'string' ? source.templateName : undefined,
     templateVariant: isCoreTemplateVariant(source.templateVariant) ? source.templateVariant : undefined,
+    targeting: normalizeTargeting(source.targeting),
+  }
+}
+
+function normalizeTargeting(value: unknown): CoreResumeTargeting | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const source = value as Record<string, unknown>
+  const jobTitle = typeof source.jobTitle === 'string' ? source.jobTitle.trim() : ''
+  const jdText = typeof source.jdText === 'string' ? source.jdText.trim() : ''
+  if (!jobTitle && !jdText) return undefined
+  return {
+    jobTitle,
+    company: typeof source.company === 'string' ? source.company.trim() : undefined,
+    jdText,
+    keywords: Array.isArray(source.keywords)
+      ? source.keywords.map((item) => String(item).trim()).filter(Boolean).slice(0, 30)
+      : [],
+    analyzedAt: Number.isFinite(Number(source.analyzedAt)) ? Number(source.analyzedAt) : undefined,
   }
 }
 
@@ -468,8 +530,34 @@ function normalizeTemplateLayout(layout: unknown): CoreTemplateLayout | undefine
   }
 
   const source = layout as Record<string, unknown>
+  const key = normalizeTemplateLayoutKey(source.key)
   const avatar = normalizeAvatarLayout(source.avatar)
-  return avatar ? { avatar } : undefined
+  const result: CoreTemplateLayout = {}
+  if (key) {
+    result.key = key
+  }
+  if (avatar) {
+    result.avatar = avatar
+  }
+  return Object.keys(result).length ? result : undefined
+}
+
+function normalizeTemplateLayoutKey(value: unknown): CoreTemplateLayoutKey | undefined {
+  if (
+    value === 'qm-blue-top-photo' ||
+    value === 'qm-sidebar-profile' ||
+    value === 'qm-classic-centered' ||
+    value === 'qm-ribbon-compact' ||
+    value === 'qm-timeline-icons' ||
+    value === 'qm-minimal-ats' ||
+    value === 'qm-executive-business' ||
+    value === 'qm-student-editorial' ||
+    value === 'qm-spotlight-featured'
+    || value === 'qm-table-formal'
+  ) {
+    return value
+  }
+  return undefined
 }
 
 function normalizeAvatarLayout(value: unknown): CoreAvatarLayout | undefined {
@@ -578,6 +666,10 @@ function normalizeThemePatch(theme: unknown): CoreResumeThemePatch | undefined {
   const lineHeight = toNumber(source.lineHeight)
   if (lineHeight !== undefined) {
     patch.lineHeight = lineHeight
+  }
+  const pageMargin = toNumber(source.pageMargin)
+  if (pageMargin !== undefined) {
+    patch.pageMargin = pageMargin
   }
 
   return Object.keys(patch).length ? patch : undefined
@@ -702,7 +794,11 @@ function normalizeItem(type: CoreSectionType, item: unknown): CoreSectionItem {
         desc: toPlainText(source.desc || source.content || source.highlights),
       }
     case 'skills':
-      return { name: toText(source.name || source.skill || source.text) }
+      return {
+        name: toText(source.name || source.skill || source.text),
+        proficiency: toText(source.proficiency || source.percent || source.percentage),
+        level: toText(source.level || source.mastery),
+      }
     case 'awards':
       return {
         name: toText(source.name || source.title),

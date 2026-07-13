@@ -14,7 +14,7 @@ export class Resume {
   content: string; // JSON string containing resume data
 
   @Column({ name: 'template_id', nullable: true })
-  templateId: number;
+  templateId: number | null;
 
   @Column({ name: 'user_id' })
   userId: number;

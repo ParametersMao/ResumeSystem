@@ -2,8 +2,12 @@ import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import type { Resume } from '@/store/resume'
 
 interface MockDB {
-  templates: Array<{ id: number; templateName: string; previewImage?: string; templateData?: any; description?: string; status?: boolean; useCount?: number; downloadCount?: number }>
-  resumes: Record<string, Resume>
+  templates: Array<{ id: number; templateName: string; templateVariant?: string; layoutKey?: string; previewImage?: string; templateData?: any; description?: string; industryTags?: string; status?: boolean; useCount?: number; downloadCount?: number }>
+  resumes: Record<string, any>
+  resumeVersions: Record<string, any[]>
+  favoriteTemplateIds: number[]
+  nextResumeId: number
+  nextVersionId: number
 }
 
 const sampleCover =
@@ -17,17 +21,149 @@ const sampleTemplateData = {
   sections: { header: { enabled: true } }
 }
 
+const atsDeveloperTemplateData = {
+  variant: 'ats',
+  layoutKey: 'qm-minimal-ats',
+  layout: {
+    key: 'qm-minimal-ats',
+    variant: 'ats',
+    avatar: { enabled: false, placement: 'hidden' }
+  },
+  theme: {
+    variant: 'ats',
+    colors: { primary: '#243B53', accent: '#E8EDF3' },
+    typography: { fontFamily: { body: "'Microsoft YaHei', 'PingFang SC', sans-serif", heading: "'Microsoft YaHei', 'PingFang SC', sans-serif" } },
+    spacing: { sectionSpacing: 18, itemSpacing: 10 }
+  }
+}
+
+const campusStudentTemplateData = {
+  variant: 'editorial',
+  layoutKey: 'qm-student-editorial',
+  layout: {
+    key: 'qm-student-editorial',
+    variant: 'editorial',
+    avatar: { enabled: true, placement: 'header-right', shape: 'square', width: 88, height: 112 }
+  },
+  sectionDefaults: {
+    order: ['education', 'projects', 'internship', 'campus', 'skills', 'awards', 'summary', 'experience', 'intention', 'custom', 'hobbies'],
+    visible: ['education', 'projects', 'internship', 'campus', 'skills', 'awards', 'summary', 'intention'],
+    hidden: ['experience']
+  },
+  theme: {
+    variant: 'editorial',
+    colors: { primary: '#2F80A7', accent: '#D9ECF5' },
+    typography: { fontFamily: { body: "'Microsoft YaHei', 'PingFang SC', sans-serif", heading: "'Microsoft YaHei', 'PingFang SC', sans-serif" } },
+    spacing: { sectionSpacing: 18, itemSpacing: 10 }
+  }
+}
+
+const productOutcomeTemplateData = {
+  variant: 'spotlight',
+  layoutKey: 'qm-spotlight-featured',
+  layout: {
+    key: 'qm-spotlight-featured',
+    variant: 'spotlight',
+    avatar: { enabled: false, placement: 'hidden' }
+  },
+  sectionDefaults: {
+    order: ['summary', 'projects', 'experience', 'internship', 'skills', 'education', 'awards', 'intention', 'campus', 'custom', 'hobbies'],
+    visible: ['summary', 'projects', 'experience', 'skills', 'education', 'intention']
+  },
+  theme: {
+    variant: 'spotlight',
+    colors: { primary: '#3156D3', accent: '#E8EDFF' },
+    typography: { fontFamily: { body: "'Microsoft YaHei', 'PingFang SC', sans-serif", heading: "'Microsoft YaHei', 'PingFang SC', sans-serif" } },
+    spacing: { sectionSpacing: 20, itemSpacing: 12 }
+  }
+}
+
+const formalTableTemplateData = {
+  variant: 'classic',
+  layoutKey: 'qm-table-formal',
+  layout: {
+    key: 'qm-table-formal',
+    variant: 'classic',
+    avatar: { enabled: true, placement: 'header-right', shape: 'square', width: 78, height: 98 }
+  },
+  theme: {
+    variant: 'classic',
+    colors: { primary: '#31577B', accent: '#EDF3F8' },
+    typography: { fontFamily: { body: "'Microsoft YaHei', 'PingFang SC', sans-serif", heading: "'Microsoft YaHei', 'PingFang SC', sans-serif" } },
+    spacing: { sectionSpacing: 0, itemSpacing: 0 }
+  }
+}
+
 const db: MockDB = {
-  templates: Array.from({ length: 12 }).map((_, i) => ({
-    id: i + 1,
-    templateName: `测试模板${i + 1}`,
-    previewImage: sampleCover,
-    templateData: sampleTemplateData,
-    status: true,
-    useCount: Math.floor(Math.random() * 200),
-    downloadCount: Math.floor(Math.random() * 100)
-  })),
-  resumes: {}
+  templates: Array.from({ length: 12 }).map((_, i) => i === 0
+    ? {
+        id: 1,
+        templateName: '技术开发 · ATS 单栏投递版',
+        templateVariant: 'ats',
+        layoutKey: 'qm-minimal-ats',
+        previewImage: sampleCover,
+        templateData: atsDeveloperTemplateData,
+        industryTags: 'ATS,技术开发,前端,后端,测试,数据,无照片,单栏',
+        status: true,
+        useCount: 0,
+        downloadCount: 0
+      }
+    : i === 1
+      ? {
+          id: 2,
+          templateName: '应届校招 · 项目实习优先版',
+          templateVariant: 'editorial',
+          layoutKey: 'qm-student-editorial',
+          previewImage: sampleCover,
+          templateData: campusStudentTemplateData,
+          description: '教育信息顶部摘要，项目、实习和校园成果构成正文主线。',
+          industryTags: '校招,应届生,项目经历,实习经历,校园经历,教育背景',
+          status: true,
+          useCount: 0,
+          downloadCount: 0
+        }
+      : i === 2
+        ? {
+            id: 3,
+            templateName: '产品运营 · 成果导向版',
+            templateVariant: 'spotlight',
+            layoutKey: 'qm-spotlight-featured',
+            previewImage: sampleCover,
+            templateData: productOutcomeTemplateData,
+            description: '用业务问题、个人行动与指标结果组织项目和经历。',
+            industryTags: '产品,运营,增长,市场,成果导向,数据分析',
+            status: true,
+            useCount: 0,
+            downloadCount: 0
+          }
+        : i === 3
+          ? {
+              id: 4,
+              templateName: '正式表格 · 规范信息版',
+              templateVariant: 'classic',
+              layoutKey: 'qm-table-formal',
+              previewImage: sampleCover,
+              templateData: formalTableTemplateData,
+              description: '规范表格承载个人信息与经历，适合国企、事业单位、教师和医护岗位。',
+              industryTags: '表格,正式,国企,事业单位,教师,医护',
+              status: true,
+              useCount: 0,
+              downloadCount: 0
+            }
+          : {
+        id: i + 1,
+        templateName: `测试模板${i + 1}`,
+        previewImage: sampleCover,
+        templateData: sampleTemplateData,
+        status: true,
+        useCount: 0,
+        downloadCount: 0
+      }),
+  resumes: {},
+  resumeVersions: {},
+  favoriteTemplateIds: [],
+  nextResumeId: 1,
+  nextVersionId: 1
 }
 
 const userTemplateData = {
@@ -260,7 +396,9 @@ export function setupMock(instance: AxiosInstance) {
     const rawUrl = (config.url || '')
     const method = (config.method || 'get').toLowerCase()
     const params = (config.params || {}) as Record<string, any>
-    const body = (config.data ? JSON.parse(config.data as any) : {}) as Record<string, any>
+    const body = (typeof config.data === 'string'
+      ? JSON.parse(config.data)
+      : (config.data || {})) as Record<string, any>
     // 归一化：去掉域名与 /api 前缀
     const url = rawUrl
       .replace(/^https?:\/\/[^/]+/, '')
@@ -268,13 +406,35 @@ export function setupMock(instance: AxiosInstance) {
       .split('?')[0]
 
     // Templates list (backend兼容：按 templateName 模糊查询)
-    if (method === 'get' && url.startsWith('/templates')) {
+    if (method === 'get' && url === '/templates') {
       const page = Number(params.page || 1)
       const limit = Number(params.limit || 20)
       const keyword = String(params.templateName || params.keyword || '')
       const filtered = keyword ? db.templates.filter(t => t.templateName.includes(keyword)) : db.templates
       const data = paginate(filtered, page, limit)
       return { data: { code: 200, message: 'success', data }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    if (method === 'get' && url === '/templates/favorites/list') {
+      return {
+        data: { code: 200, message: 'success', data: { templateIds: db.favoriteTemplateIds } },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }
+    }
+
+    if (method === 'post' && /^\/templates\/\d+\/favorite$/.test(url)) {
+      const id = Number(url.split('/')[2])
+      if (!db.favoriteTemplateIds.includes(id)) db.favoriteTemplateIds.push(id)
+      return { data: { code: 200, message: 'success', data: null }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    if (method === 'delete' && /^\/templates\/\d+\/favorite$/.test(url)) {
+      const id = Number(url.split('/')[2])
+      db.favoriteTemplateIds = db.favoriteTemplateIds.filter((item) => item !== id)
+      return { data: { code: 200, message: 'success', data: null }, status: 200, statusText: 'OK', headers: {}, config }
     }
 
     // Template detail
@@ -289,13 +449,84 @@ export function setupMock(instance: AxiosInstance) {
       return { data: { code: 200, message: 'success', data: item }, status: 200, statusText: 'OK', headers: {}, config }
     }
 
+    if (method === 'post' && url === '/resumes/import/parse') {
+      const form = config.data instanceof FormData ? config.data : null
+      const file = form?.get('file') as File | null
+      const filename = file?.name || 'sample-resume.txt'
+      return {
+        data: {
+          code: 200,
+          message: '解析完成，请核对后再创建简历',
+          data: {
+            filename,
+            fileType: filename.toLowerCase().endsWith('.pdf') ? 'pdf' : filename.toLowerCase().endsWith('.docx') ? 'docx' : 'txt',
+            characterCount: 176,
+            rawText: '李明\n产品经理\n13800138000\nliming@example.com\n\n项目经历\n智能简历系统\n负责需求分析、版本规划和交付推进。\n\n技能特长\n产品规划、数据分析、Figma',
+            profile: { name: '李明', phone: '13800138000', email: 'liming@example.com' },
+            sections: [
+              { type: 'projects', title: '项目经历', text: '智能简历系统\n负责需求分析、版本规划和交付推进。', confidence: 'high' },
+              { type: 'skills', title: '技能特长', text: '产品规划、数据分析、Figma', confidence: 'high' },
+            ],
+            warnings: ['导入结果由规则识别生成，请在保存前核对姓名、时间、公司与岗位字段。'],
+          },
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }
+    }
+
     // Create resume
     if (method === 'post' && url === '/resumes') {
-      const resumeId = crypto.randomUUID()
-      const resume = createInitialResume(resumeId, String(body.templateId))
-      resume.meta.title = String(body.title || '我的简历')
-      db.resumes[resumeId] = resume
-      return { data: { code: 200, message: 'success', data: { resumeId } }, status: 200, statusText: 'OK', headers: {}, config }
+      const id = db.nextResumeId++
+      const now = new Date().toISOString()
+      const resume = {
+        id,
+        title: String(body.title || '我的简历'),
+        content: String(body.content || ''),
+        templateId: body.templateId ? Number(body.templateId) : undefined,
+        version: 1,
+        createTime: now,
+        updateTime: now,
+      }
+      db.resumes[String(id)] = resume
+      db.resumeVersions[String(id)] = []
+      return { data: { code: 200, message: 'success', data: resume }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    if (method === 'get' && /^\/resumes\/\d+\/versions$/.test(url)) {
+      const id = url.split('/')[2]
+      const versions = [...(db.resumeVersions[id] || [])].sort((left, right) => right.id - left.id)
+      return { data: { code: 200, message: 'success', data: versions }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    if (method === 'post' && /^\/resumes\/\d+\/versions$/.test(url)) {
+      const id = url.split('/')[2]
+      const resume = db.resumes[id]
+      if (!resume) return { data: { code: 404, message: 'not found', data: null }, status: 404, statusText: 'NOT_FOUND', headers: {}, config }
+      const version = {
+        id: db.nextVersionId++,
+        resumeId: Number(id),
+        userId: 1,
+        sourceVersion: resume.version,
+        sourceType: 'manual',
+        remark: body.remark || '',
+        createTime: new Date().toISOString(),
+        content: resume.content,
+      }
+      db.resumeVersions[id] = [version, ...(db.resumeVersions[id] || [])]
+      return { data: { code: 200, message: 'success', data: version }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    if (method === 'post' && /^\/resumes\/\d+\/rollback$/.test(url)) {
+      const id = url.split('/')[2]
+      const resume = db.resumes[id]
+      const version = (db.resumeVersions[id] || []).find((item) => item.id === Number(body.versionId))
+      if (!resume || !version) return { data: { code: 404, message: 'not found', data: null }, status: 404, statusText: 'NOT_FOUND', headers: {}, config }
+      const updated = { ...resume, content: version.content, version: resume.version + 1, updateTime: new Date().toISOString() }
+      db.resumes[id] = updated
+      return { data: { code: 200, message: 'success', data: updated }, status: 200, statusText: 'OK', headers: {}, config }
     }
 
     // Get resume detail
@@ -320,14 +551,65 @@ export function setupMock(instance: AxiosInstance) {
       const id = url.split('/').pop()!
       const origin = db.resumes[id]
       if (!origin) return { data: { code: 404, message: 'not found', data: null }, status: 404, statusText: 'NOT_FOUND', headers: {}, config }
-      const merged = { ...origin, ...body, meta: { ...origin.meta, ...(body.meta||{}), version: origin.meta.version + 1, updatedAt: Date.now() } }
+      const merged = { ...origin, ...body, version: origin.version + 1, updateTime: new Date().toISOString() }
       db.resumes[id] = merged
       return { data: { code: 200, message: 'success', data: merged }, status: 200, statusText: 'OK', headers: {}, config }
     }
 
+    if (method === 'post' && url === '/ai/diagnose') {
+      const contentText = String(body.contentText || '')
+      const jobTitle = String(body.jobTitle || '目标岗位')
+      return {
+        data: {
+          code: 200,
+          message: 'success',
+          data: {
+            taskType: 'diagnose',
+            executionMode: 'mock',
+            provider: 'local-mock',
+            model: 'evidence-review-v1',
+            diagnostics: [
+              `已按 ${jobTitle} 的 JD 与当前简历进行逐项证据检查。`,
+              contentText.length > 300 ? '简历已有一定内容基础，下一步应优先补齐缺失要求的真实证据。' : '当前简历信息量偏少，建议先补充项目、行动和结果。',
+            ],
+            strategy: ['优先修改缺口对应模块，再压缩与目标岗位无关的泛化表述。', '每条经历采用“业务问题—个人行动—可验证结果”的顺序。'],
+            warnings: ['不要为了覆盖 JD 关键词而补写未实际使用过的工具或不存在的量化结果。'],
+            suggestions: [],
+            patch: {},
+            steps: [],
+            sources: [],
+            tokenUsed: Math.min(800, Math.max(80, contentText.length)),
+          },
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }
+    }
+
     // Auth login
-    if (method === 'post' && url === '/auth/login') {
-      return { data: { code: 200, message: '登录成功', data: { access_token: 'mock-token', user: { id: 1, username: 'mock' } } }, status: 200, statusText: 'OK', headers: {}, config }
+    if (method === 'post' && (url === '/auth/login' || url === '/auth/cuser/login')) {
+      return { data: { code: 200, message: '登录成功', data: { access_token: 'mock-token', refresh_token: 'mock-refresh-token', user: { id: 1, username: 'mock' } } }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    if (method === 'get' && url === '/auth/cuser/profile') {
+      const now = new Date().toISOString()
+      return {
+        data: {
+          code: 200,
+          message: 'success',
+          data: { id: 1, username: 'mock', status: 1, createTime: now, updateTime: now, aiOperationCount: 0 },
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      }
+    }
+
+    if (method === 'post' && url === '/auth/cuser/logout') {
+      return { data: { code: 200, message: 'success', data: null }, status: 200, statusText: 'OK', headers: {}, config }
     }
 
     // Export PDF
@@ -340,8 +622,11 @@ export function setupMock(instance: AxiosInstance) {
   }
 
   instance.interceptors.request.use((config) => {
-    // mark as mock-handled to avoid duplicate
+    // Route mock requests through a local adapter instead of waiting for the
+    // development proxy to fail first. This keeps editor initialization stable
+    // when no backend service is running.
     ;(config as any)._mock = true
+    ;(config as any).adapter = () => handler(config)
     return config
   })
 

@@ -181,6 +181,7 @@ async function handleSendCode() {
       }
     }, 1000)
   } catch (error: any) {
+    if (error.response?.status === 429) return
     ElMessage.error(error.response?.data?.message || '验证码发送失败')
   } finally {
     sendingCode.value = false

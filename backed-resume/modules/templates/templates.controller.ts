@@ -27,6 +27,17 @@ export class TemplatesController {
     };
   }
 
+  @Get('/admin/list')
+  @UseGuards(JwtAuthGuard, AdminOnlyGuard)
+  async findAllForAdmin(@Query() searchDto: TemplateSearchDto): Promise<PaginatedApiResponse<TemplateListResponseDto>> {
+    const result = await this.templatesService.findAll(searchDto, { includeInactive: true });
+    return {
+      code: 200,
+      message: 'success',
+      data: result,
+    };
+  }
+
   @Get('/favorites/list')
   @UseGuards(JwtAuthGuard)
   async listFavorites(@Request() req): Promise<ApiResponse<{ templateIds: number[] }>> {
@@ -36,6 +47,17 @@ export class TemplatesController {
       code: 200,
       message: 'success',
       data: { templateIds },
+    };
+  }
+
+  @Get('/admin/:id')
+  @UseGuards(JwtAuthGuard, AdminOnlyGuard)
+  async findOneForAdmin(@Param('id') id: string): Promise<ApiResponse<TemplateDetailResponseDto>> {
+    const template = await this.templatesService.findOne(+id, { includeInactive: true });
+    return {
+      code: 200,
+      message: 'success',
+      data: template,
     };
   }
 
@@ -61,6 +83,7 @@ export class TemplatesController {
         templateName: template.templateName,
         templateData: template.templateData,
         templateVariant: template.templateVariant,
+        layoutKey: template.layoutKey,
         previewImage: template.previewImage,
         industryTags: (template as any).industryTags,
         status: template.status,
@@ -87,6 +110,7 @@ export class TemplatesController {
         templateName: template.templateName,
         templateData: template.templateData,
         templateVariant: template.templateVariant,
+        layoutKey: template.layoutKey,
         previewImage: template.previewImage,
         industryTags: (template as any).industryTags,
         status: template.status,

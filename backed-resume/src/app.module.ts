@@ -51,18 +51,31 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
         : 'config.env',
     }),
     // API 限流：登录接口 20次/分钟，其他接口 100次/分钟
-    ThrottlerModule.forRoot([
-      {
-        name: 'login',
-        ttl: 60000,
-        limit: 20,
+    ThrottlerModule.forRoot({
+      errorMessage: (context, detail) => {
+        const req = context.switchToHttp().getRequest();
+        const retrySeconds = Math.max(
+          1,
+          Math.ceil((detail.timeToBlockExpire || detail.timeToExpire || detail.ttl) / 1000),
+        );
+        if (String(req?.url || '').includes('/api/auth/email/send-code')) {
+          return `验证码请求过于频繁，请在 ${retrySeconds} 秒后重试`;
+        }
+        return `操作过于频繁，请在 ${retrySeconds} 秒后重试`;
       },
-      {
-        name: 'default',
-        ttl: 60000,
-        limit: 100,
-      },
-    ]),
+      throttlers: [
+        {
+          name: 'login',
+          ttl: 60000,
+          limit: 20,
+        },
+        {
+          name: 'default',
+          ttl: 60000,
+          limit: 100,
+        },
+      ],
+    }),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST || 'localhost',
@@ -70,6 +83,10 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
       username: process.env.DB_USERNAME || 'root',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_DATABASE || 'resume_system',
+      charset: 'utf8mb4',
+      extra: {
+        charset: 'utf8mb4_unicode_ci',
+      },
       entities: [
         AdminUser,
         CUser,

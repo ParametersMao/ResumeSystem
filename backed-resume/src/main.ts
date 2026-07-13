@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
+import { buildAllowedOrigins, isOriginAllowed } from './cors';
+import { isPrivateKnowledgeUploadPath } from './security/upload-static-access';
 
 async function bootstrap() {
   // 全局异常监听，输出所有未捕获异常
@@ -23,15 +25,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: loggerLevels });
 
   // 全局 CORS 配置：允许指定前端域名
-  const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
-    .split(',')
-    .map((url) => url.trim())
-    .filter(Boolean);
+  const allowedOrigins = buildAllowedOrigins(process.env.FRONTEND_URL);
 
   app.enableCors({
     origin: (origin, callback) => {
       // 允许没有 origin 的请求（如 Postman）
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin, allowedOrigins)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -57,7 +56,17 @@ async function bootstrap() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // 静态资源：本地上传文件与 mock 资源（不接 OSS 的阶段性方案）
-  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+  app.use(
+    '/uploads',
+    (req, res, next) => {
+      if (isPrivateKnowledgeUploadPath(req.url || req.path)) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(404).end();
+      }
+      return next();
+    },
+    express.static(join(process.cwd(), 'uploads')),
+  );
   app.use('/mock', express.static(join(process.cwd(), 'public', 'mock')));
 
   await app.listen(process.env.PORT || 3000);

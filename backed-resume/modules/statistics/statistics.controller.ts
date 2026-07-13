@@ -1,8 +1,9 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { StatisticsService } from './statistics.service';
 import { ApiResponse } from '../../common/interfaces/pagination.interface';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminOnlyGuard } from '../auth/admin-only.guard';
+import { AdminOnlyGuard, AdminRoles } from '../auth/admin-only.guard';
 
 @Controller('api/statistics')
 @UseGuards(JwtAuthGuard, AdminOnlyGuard)
@@ -47,5 +48,36 @@ export class StatisticsController {
       message: 'success',
       data: users,
     };
+  }
+
+  @Get('export')
+  @AdminRoles('admin', 'operator')
+  async exportData(
+    @Query('type') type: string,
+    @Query('format') format = 'csv',
+    @Query('startDate') startDate: string | undefined,
+    @Query('endDate') endDate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    const allowedTypes = ['users', 'resumes', 'templates', 'ai-operations'];
+    if (!allowedTypes.includes(type)) {
+      throw new BadRequestException('不支持的数据导出类型');
+    }
+    if (!['csv', 'json'].includes(format)) {
+      throw new BadRequestException('仅支持 CSV 或 JSON 格式');
+    }
+    const result = await this.statisticsService.exportData(
+      type as 'users' | 'resumes' | 'templates' | 'ai-operations',
+      format as 'csv' | 'json',
+      startDate,
+      endDate,
+    );
+    response.setHeader('Content-Type', result.contentType);
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.fileName}"`,
+    );
+    response.setHeader('X-Export-Row-Count', String(result.rowCount));
+    response.send(result.body);
   }
 }

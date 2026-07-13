@@ -272,7 +272,7 @@ const getUserListData = async () => {
       page: pagination.page,
       limit: pagination.pageSize,
       search: searchForm.username || '',
-      status: searchForm.status ? Number(searchForm.status) : undefined
+      status: searchForm.status === 'active' ? 1 : searchForm.status === 'inactive' ? 0 : undefined
     }
     const res = await getUserList(params)
     userList.value = (res.data.list || []).map((item: any) => ({
@@ -375,7 +375,8 @@ const handleSubmit = async () => {
         password: form.password,
         email: form.email,
         phone: form.phone, // 补充手机号
-        user_type: form.role
+        role: form.role,
+        status: form.status === 'active' ? 1 : 0
       })
       ElMessage.success('新增成功')
     } else {
@@ -384,7 +385,7 @@ const handleSubmit = async () => {
         username: form.username,
         email: form.email,
         phone: form.phone, // 补充手机号
-        user_type: form.role
+        role: form.role
       })
       ElMessage.success('编辑成功')
     }

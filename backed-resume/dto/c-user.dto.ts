@@ -1,4 +1,5 @@
 import { IsString, IsEmail, IsOptional, IsInt, Min, Max, Matches } from 'class-validator';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 // 密码强度：最少8位，必须包含大小写字母和数字
 export const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -74,4 +75,16 @@ export class CUserResponseDto {
   createTime: Date;
   updateTime: Date;
   aiOperationCount: number;
+}
+
+export class CUserSearchDto extends PaginationDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1)
+  status?: number;
 }

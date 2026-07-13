@@ -8,7 +8,7 @@ export type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' |
  * GET /api/templates
  */
 export const getTemplateList = (params: PaginationParams & { templateName?: string; description?: string; status?: boolean | null; industryTags?: string; templateVariant?: TemplateVariant | '' }) => {
-  return request.get('/templates', { params })
+  return request.get('/templates/admin/list', { params })
 }
 
 /**
@@ -16,7 +16,7 @@ export const getTemplateList = (params: PaginationParams & { templateName?: stri
  * GET /api/templates/{id}
  */
 export const getTemplateDetail = (id: number) => {
-  return request.get(`/templates/${id}`)
+  return request.get(`/templates/admin/${id}`)
 }
 
 /**

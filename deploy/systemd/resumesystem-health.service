@@ -1,0 +1,14 @@
+[Unit]
+Description=ResumeSystem production health check
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/resumesystem-current
+Environment=ENV_FILE=.env
+ExecStart=/opt/resumesystem-current/deploy/health-check.sh
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true

@@ -28,18 +28,30 @@ import {
 } from '../../common/interfaces/pagination.interface';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ResumesService } from './resumes.service';
+import { ResumeImportResult, ResumeImportService } from './resume-import.service';
 
 function currentCuserId(req: any): number {
   if (!req.user?.id || req.user.type !== 'cuser') {
-    throw new UnauthorizedException('无权访问该用户资源');
+    throw new UnauthorizedException('No permission to access this user resource');
   }
   return Number(req.user.id);
+}
+
+function parsePositiveId(value: string | number, label = 'id'): number {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new BadRequestException(`${label} is invalid`);
+  }
+  return id;
 }
 
 @Controller('api/resumes')
 @UseGuards(JwtAuthGuard)
 export class ResumesController {
-  constructor(private readonly resumesService: ResumesService) {}
+  constructor(
+    private readonly resumesService: ResumesService,
+    private readonly resumeImportService: ResumeImportService,
+  ) {}
 
   @Post()
   async create(
@@ -47,7 +59,7 @@ export class ResumesController {
     @Body() dto: CreateResumeDto,
   ): Promise<ApiResponse<ResumeResponseDto>> {
     const resume = await this.resumesService.create(dto, currentCuserId(req));
-    return { code: 200, message: '简历创建成功', data: resume };
+    return { code: 200, message: 'Resume created', data: resume };
   }
 
   @Get()
@@ -68,9 +80,16 @@ export class ResumesController {
   async exportPdf(
     @Request() req,
     @Body('html') html: string,
-  ): Promise<ApiResponse<{ url: string }>> {
-    const url = await this.resumesService.exportPdf(html, currentCuserId(req));
-    return { code: 200, message: '导出成功', data: { url } };
+    @Body('resumeId') resumeId?: number,
+    @Body('templateId') templateId?: number,
+  ): Promise<ApiResponse<{ url: string; pageCount: number }>> {
+    const result = await this.resumesService.exportPdf(
+      html,
+      currentCuserId(req),
+      resumeId,
+      templateId,
+    );
+    return { code: 200, message: 'Exported', data: result };
   }
 
   @Post('assets/photo')
@@ -80,7 +99,10 @@ export class ResumesController {
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const isImage = /^image\/(png|jpe?g|webp)$/i.test(file.mimetype || '');
-        cb(isImage ? null : new BadRequestException('仅支持 PNG、JPG、WebP 图片'), isImage);
+        cb(
+          isImage ? null : new BadRequestException('Only PNG, JPG, JPEG, and WebP images are supported'),
+          isImage,
+        );
       },
     }),
   )
@@ -88,12 +110,33 @@ export class ResumesController {
     @Request() req,
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<ApiResponse<{ url: string; key: string }>> {
-    if (!file) throw new BadRequestException('请上传照片文件');
+    if (!file) {
+      throw new BadRequestException('Please upload a photo file');
+    }
     const result = await this.resumesService.uploadResumePhoto(
       file,
       currentCuserId(req),
     );
-    return { code: 200, message: '上传成功', data: result };
+    return { code: 200, message: 'Uploaded', data: result };
+  }
+
+  @Post('import/parse')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async parseImport(
+    @Request() req,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<ApiResponse<ResumeImportResult>> {
+    currentCuserId(req);
+    if (!file) {
+      throw new BadRequestException('请选择要导入的简历文件');
+    }
+    const result = await this.resumeImportService.parse(file);
+    return { code: 200, message: '解析完成，请核对后再创建简历', data: result };
   }
 
   @Get(':id/versions')
@@ -102,7 +145,7 @@ export class ResumesController {
     @Param('id') id: string,
   ): Promise<ApiResponse<any[]>> {
     const versions = await this.resumesService.listVersions(
-      +id,
+      parsePositiveId(id, 'resumeId'),
       currentCuserId(req),
     );
     return {
@@ -127,11 +170,11 @@ export class ResumesController {
     @Body('remark') remark?: string,
   ): Promise<ApiResponse<any>> {
     const version = await this.resumesService.createVersionSnapshot(
-      +id,
+      parsePositiveId(id, 'resumeId'),
       currentCuserId(req),
       remark,
     );
-    return { code: 200, message: '版本已保存', data: version };
+    return { code: 200, message: 'Version saved', data: version };
   }
 
   @Post(':id/rollback')
@@ -141,11 +184,11 @@ export class ResumesController {
     @Body('versionId') versionId: number,
   ): Promise<ApiResponse<ResumeResponseDto>> {
     const resume = await this.resumesService.rollback(
-      +id,
-      Number(versionId),
+      parsePositiveId(id, 'resumeId'),
+      parsePositiveId(versionId, 'versionId'),
       currentCuserId(req),
     );
-    return { code: 200, message: '回滚成功', data: resume };
+    return { code: 200, message: 'Rolled back', data: resume };
   }
 
   @Get(':id')
@@ -153,7 +196,10 @@ export class ResumesController {
     @Request() req,
     @Param('id') id: string,
   ): Promise<ApiResponse<ResumeResponseDto>> {
-    const resume = await this.resumesService.findOne(+id, currentCuserId(req));
+    const resume = await this.resumesService.findOne(
+      parsePositiveId(id, 'resumeId'),
+      currentCuserId(req),
+    );
     return { code: 200, message: 'success', data: resume };
   }
 
@@ -164,11 +210,11 @@ export class ResumesController {
     @Body() dto: UpdateResumeDto,
   ): Promise<ApiResponse<ResumeResponseDto>> {
     const resume = await this.resumesService.update(
-      +id,
+      parsePositiveId(id, 'resumeId'),
       dto,
       currentCuserId(req),
     );
-    return { code: 200, message: '更新成功', data: resume };
+    return { code: 200, message: 'Updated', data: resume };
   }
 
   @Delete(':id')
@@ -176,7 +222,10 @@ export class ResumesController {
     @Request() req,
     @Param('id') id: string,
   ): Promise<ApiResponse<null>> {
-    await this.resumesService.remove(+id, currentCuserId(req));
-    return { code: 200, message: '删除成功', data: null };
+    await this.resumesService.remove(
+      parsePositiveId(id, 'resumeId'),
+      currentCuserId(req),
+    );
+    return { code: 200, message: 'Deleted', data: null };
   }
 }

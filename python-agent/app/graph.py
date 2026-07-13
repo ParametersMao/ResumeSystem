@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, TypedDict
 
 from .llm import call_structured_llm
 from .rag import search_documents
-from .schemas import AgentRequest, AgentResponse, AgentStep, AgentSuggestion
+from .schemas import AgentRequest, AgentResponse, AgentStep, AgentSuggestion, RagSourceType
 
 try:
     from langgraph.graph import END, StateGraph
@@ -138,15 +139,71 @@ def retrieval_node(request: AgentRequest, perception: AgentStep) -> AgentStep:
         ]
         if part
     )[:3000]
+    strict_sources = bool(request.options.get("strict_sources")) or str(
+        os.getenv("RAG_STRICT_SOURCES", "false")
+    ).lower() in {"1", "true", "yes"}
+    requires_private_jd = bool(
+        request.task_type == "diagnose"
+        and request.context.user_id
+        and request.context.resume_id
+    )
     try:
-        sources = search_documents(query, limit=5)
+        source_types = _retrieval_source_types(request)
+        # Private JD context is only routable when both tenant and resume identity
+        # are present. Missing identity therefore fails closed to global knowledge.
+        owner_user_id = (
+            request.context.user_id
+            if request.context.user_id and request.context.resume_id
+            else None
+        )
+        if requires_private_jd:
+            # Retrieve the private JD independently so global standards cannot
+            # crowd it out of the top-k and create a false "JD diagnosis".
+            job_sources = search_documents(
+                query,
+                limit=2,
+                source_types=["job-description"],
+                scope="private",
+                owner_user_id=owner_user_id,
+                resume_id=request.context.resume_id,
+            )
+            if not job_sources:
+                raise RuntimeError(
+                    "当前简历绑定的私有 JD 未命中，请重新保存并索引 JD 后再诊断。"
+                )
+            global_sources = search_documents(
+                query,
+                limit=3,
+                source_types=["standard", "role-framework"],
+                scope="global",
+            )
+            sources = job_sources + global_sources
+        else:
+            sources = search_documents(
+                query,
+                limit=5,
+                source_types=source_types,
+                owner_user_id=owner_user_id,
+                resume_id=request.context.resume_id if owner_user_id else None,
+            )
+        if strict_sources and not sources:
+            raise RuntimeError("严格来源模式下未检索到达到阈值的知识库依据。")
         return AgentStep(
             name="retrieval",
             title="知识检索",
             summary=f"已从知识库检索到 {len(sources)} 条相关依据。",
-            output={"sources": sources, "enabled": True},
+            output={
+                "sources": sources,
+                "enabled": True,
+                "sourceTypes": source_types,
+                "tenantFiltered": True,
+            },
         )
     except Exception as error:
+        if requires_private_jd:
+            raise RuntimeError(f"私有 JD 诊断失败：{str(error)[:240]}") from error
+        if strict_sources:
+            raise RuntimeError(f"严格来源模式阻止无依据生成：{str(error)[:240]}") from error
         return AgentStep(
             name="retrieval",
             title="知识检索",
@@ -242,12 +299,39 @@ def validation_node(
     warnings = _string_list(live_result.get("warnings"))
     if request.task_type != "diagnose" and not execution.output.get("suggestions"):
         warnings.append("当前任务未生成可应用建议。")
+    source_text = request.context.selected_text or _content_to_text(request.context.content)
+    suggested_text = " ".join(
+        str(item.get("text") or "")
+        for item in execution.output.get("suggestions", [])
+        if isinstance(item, dict)
+    )
+    unsupported_numbers = sorted(
+        set(re.findall(r"\d+(?:\.\d+)?%?", suggested_text))
+        - set(re.findall(r"\d+(?:\.\d+)?%?", source_text))
+    )
+    if unsupported_numbers:
+        warnings.append(
+            "建议中出现原简历未提供的数字证据：" + "、".join(unsupported_numbers[:8]) + "；应用前必须核实。"
+        )
     return AgentStep(
         name="validation",
         title="结果校验",
         summary="已校验输出结构和基本事实风险。",
         output={"warnings": warnings, "safe_to_apply": not warnings},
     )
+
+
+def _retrieval_source_types(request: AgentRequest) -> list[RagSourceType]:
+    if request.task_type == "diagnose":
+        return ["standard", "role-framework", "job-description"]
+    source_types: list[RagSourceType] = ["standard", "job-description"]
+    include_exemplars = any(
+        bool(request.options.get(key))
+        for key in ("include_exemplars", "includeExemplars", "reference_examples")
+    )
+    if include_exemplars:
+        source_types.append("resume-exemplar")
+    return source_types
 
 
 def _load_live_result(

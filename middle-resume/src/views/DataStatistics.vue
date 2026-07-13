@@ -90,7 +90,7 @@
     </el-row>
 
     <!-- 导出功能 -->
-    <el-row :gutter="20" class="export-row">
+    <el-row v-if="userStore.user?.role !== 'viewer'" :gutter="20" class="export-row">
       <el-col :span="24">
         <el-card class="export-card">
           <template #header>
@@ -119,13 +119,12 @@
               </el-form-item>
               <el-form-item label="文件格式">
                 <el-radio-group v-model="exportForm.format">
-                  <el-radio label="excel">Excel</el-radio>
                   <el-radio label="csv">CSV</el-radio>
                   <el-radio label="json">JSON</el-radio>
                 </el-radio-group>
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" @click="handleExport">导出数据</el-button>
+                <el-button type="primary" :loading="exporting" @click="handleExport">导出数据</el-button>
               </el-form-item>
             </el-form>
           </div>
@@ -139,11 +138,14 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { ElMessage } from 'element-plus'
-import { getStatisticsOverview, getStatisticsTrend, getPopularTemplates, getUserActivity } from '@/api/statistics'
+import { exportStatistics, getStatisticsOverview, getStatisticsTrend, getPopularTemplates, getUserActivity } from '@/api/statistics'
+import { useUserStore } from '@/store/modules/user'
 import '@/plugins/echarts'
 
 // 时间范围
 const timeRange = ref('7')
+const userStore = useUserStore()
+const exporting = ref(false)
 
 // 图表选项配置
 const lineChartOption = ref({})
@@ -189,59 +191,45 @@ const stats = ref([
 ])
 
 // 用户排行
-const userRanking = ref([
-  {
-    rank: 1,
-    username: '张三',
-    resumeCount: 0,
-    lastActive: '-'
-  },
-  {
-    rank: 2,
-    username: '李四',
-    resumeCount: 0,
-    lastActive: '-'
-  },
-  {
-    rank: 3,
-    username: '王五',
-    resumeCount: 0,
-    lastActive: '-'
-  }
-])
+const userRanking = ref<any[]>([])
 
 // 模板排行
-const templateRanking = ref([
-  {
-    rank: 1,
-    name: '经典模板',
-    usageCount: 0,
-    percentage: '-'
-  },
-  {
-    rank: 2,
-    name: '现代模板',
-    usageCount: 0,
-    percentage: '-'
-  },
-  {
-    rank: 3,
-    name: '创意模板',
-    usageCount: 0,
-    percentage: '-'
-  }
-])
+const templateRanking = ref<any[]>([])
 
 // 导出表单
 const exportForm = reactive({
-  type: 'users',
-  dateRange: [],
-  format: 'excel'
+  type: 'users' as 'users' | 'resumes' | 'templates' | 'ai-operations',
+  dateRange: [] as Date[],
+  format: 'csv' as 'csv' | 'json'
 })
 
 // 导出数据
-const handleExport = () => {
-  ElMessage.success('数据导出成功')
+const handleExport = async () => {
+  exporting.value = true
+  try {
+    const [start, end] = exportForm.dateRange || []
+    const toDate = (value?: Date) => value ? value.toISOString().slice(0, 10) : undefined
+    const blob = await exportStatistics({
+      type: exportForm.type,
+      format: exportForm.format,
+      startDate: toDate(start),
+      endDate: toDate(end),
+    })
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `${exportForm.type}-${new Date().toISOString().slice(0, 10)}.${exportForm.format}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
+    ElMessage.success('数据文件已生成并开始下载')
+  } catch (error) {
+    console.error('数据导出失败', error)
+    ElMessage.error('数据导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 onMounted(() => {

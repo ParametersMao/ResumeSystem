@@ -1,0 +1,16 @@
+[Unit]
+Description=ResumeSystem daily verified backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/resumesystem-current
+Environment=ENV_FILE=.env
+Environment=BACKUP_ROOT=/opt/resumesystem-backups
+Environment=INCLUDE_IMAGES=false
+ExecStart=/opt/resumesystem-current/deploy/backup.sh
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
