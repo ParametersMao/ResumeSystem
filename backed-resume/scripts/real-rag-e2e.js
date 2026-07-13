@@ -39,12 +39,19 @@ async function main() {
     },
   })
 
-  const listed = await api(`/api/admin/knowledge-documents?page=1&limit=20&search=${encodeURIComponent(documentName)}`, {
-    token: adminToken,
-  })
-  let document = listed?.data?.list?.find((item) => item.name === documentName)
+  const documents = []
+  for (let page = 1; ; page += 1) {
+    const listed = await api(`/api/admin/knowledge-documents?page=${page}&limit=100`, {
+      token: adminToken,
+    })
+    const pageItems = Array.isArray(listed?.data?.list) ? listed.data.list : []
+    documents.push(...pageItems.filter((item) => item.scope === 'global' && item.enabled !== false))
+    if (page * 100 >= Number(listed?.data?.total || 0)) break
+  }
 
-  if (!document) {
+  let reindexedDocuments = []
+
+  if (!documents.length) {
     const form = new FormData()
     const source = readFileSync(documentPath)
     form.append('file', new Blob([source], { type: 'text/markdown' }), 'resume-writing-standard-v1.md')
@@ -55,23 +62,28 @@ async function main() {
       method: 'POST',
       token: adminToken,
       body: form,
-      timeout: 240000,
+      timeout: 360000,
     })
-    document = uploaded.data
+    reindexedDocuments = [uploaded.data]
   } else {
     // v1.3 added source/scope payload filters. Old points can look healthy in
-    // MySQL while being invisible to the new Agent, so every release E2E must
-    // force a metadata-aware rebuild.
-    const reindexed = await api(`/api/admin/knowledge-documents/${document.id}/reindex`, {
-      method: 'POST',
-      token: adminToken,
-      timeout: 240000,
-    })
-    document = reindexed.data
+    // MySQL while being invisible to the new Agent. Rebuild every enabled
+    // global document, regardless of display name, on every release E2E.
+    for (const document of documents) {
+      const reindexed = await api(`/api/admin/knowledge-documents/${document.id}/reindex`, {
+        method: 'POST',
+        token: adminToken,
+        timeout: 360000,
+      })
+      reindexedDocuments.push(reindexed.data)
+    }
   }
 
-  if (document.status !== 'ready' || Number(document.chunkCount) < 1) {
-    throw new Error(`知识库索引失败：status=${document.status}, chunks=${document.chunkCount}, error=${document.errorMessage || 'unknown'}`)
+  const failedDocument = reindexedDocuments.find(
+    (document) => document.status !== 'ready' || Number(document.chunkCount) < 1,
+  )
+  if (failedDocument) {
+    throw new Error(`知识库索引失败：id=${failedDocument.id}, status=${failedDocument.status}, chunks=${failedDocument.chunkCount}, error=${failedDocument.errorMessage || 'unknown'}`)
   }
 
   const search = await api('/api/admin/knowledge-documents/search', {
@@ -107,7 +119,11 @@ async function main() {
   if (!Number.isFinite(Number(result.tokenUsed)) || Number(result.tokenUsed) < 1) throw new Error('真实 LLM 调用未返回 token 用量。')
 
   console.log(JSON.stringify({
-    knowledgeUpload: { status: document.status, chunkCount: Number(document.chunkCount) },
+    knowledgeReindex: {
+      status: 'passed',
+      documents: reindexedDocuments.length,
+      chunkCount: reindexedDocuments.reduce((sum, document) => sum + Number(document.chunkCount || 0), 0),
+    },
     vectorSearch: {
       status: 'passed',
       method: searchSources[0]?.retrievalMethod,

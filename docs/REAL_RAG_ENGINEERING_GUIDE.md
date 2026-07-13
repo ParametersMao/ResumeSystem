@@ -160,6 +160,8 @@ temperature=0.3
 
 Agent 为 DeepSeek V4 请求启用 thinking 与 high reasoning effort，并要求 JSON object。`LLM_TIMEOUT_SECONDS` 默认 120 秒，NestJS 的 `AGENT_REQUEST_TIMEOUT_MS` 默认 150 秒，外层超时必须大于内层，避免 DeepSeek 尚在生成时被主业务提前中止。
 
+知识库索引使用独立的 `KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS`，生产默认 300 秒，并限制在 120～600 秒之间。原因是 FastEmbed 在新机器、空模型卷或模型版本变更后会先完成模型下载与冷启动；业务后端的索引超时必须覆盖这段时间，不能在 Agent 随后成功写入向量时提前把 MySQL 文档标成失败。模型卷应持久化，发布验收必须包含一次冷启动或空缓存索引；普通搜索不依赖延长 LLM 超时。
+
 ## 6. 分页与 PDF 策略
 
 ### 6.1 一页适配下限
@@ -246,7 +248,7 @@ node backed-resume/scripts/pagination-pdf-qa.js
 
 2026-07-11 历史实测：BGE 输出 512 维向量；标准知识库状态 ready、2 chunks；Hybrid 检索 2 hits；DeepSeek live 返回 sources 与 tokenUsed；严格来源无命中请求被结构化阻断。
 
-2026-07-13 发布前代码门禁：NestJS 133 项测试、Agent 15 项测试、三端生产构建和生产依赖审计通过。线上旧文档已恢复为 ready + enabled，但 v1.3 新 payload 过滤器不会读取缺少 `sourceType/scope` 的旧 points，因此部署必须无条件重建全部启用的全局文档，再执行真实 Hybrid、live DeepSeek 和私有 JD 租户 E2E；数据库状态不能替代这一步。
+2026-07-13 发布前代码门禁：NestJS 134 项测试、Agent 15 项测试、三端生产构建和生产依赖审计通过。线上旧文档已恢复为 ready + enabled，但 v1.3 新 payload 过滤器不会读取缺少 `sourceType/scope` 的旧 points，因此部署必须无条件重建全部启用的全局文档，再执行真实 Hybrid、live DeepSeek 和私有 JD 租户 E2E；数据库状态不能替代这一步。
 
 ## 9. 运维与故障排查
 

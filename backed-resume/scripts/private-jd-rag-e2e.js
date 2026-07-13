@@ -32,7 +32,7 @@ async function main() {
       method: 'POST',
       token: tokenA,
       form: { text: jdText },
-      timeout: 240000,
+      timeout: 360000,
     })
     assert(indexed.data?.status === 'ready' && Number(indexed.data?.chunkCount) >= 1,
       `私有 JD 索引失败：${indexed.data?.errorMessage || indexed.data?.status}`)

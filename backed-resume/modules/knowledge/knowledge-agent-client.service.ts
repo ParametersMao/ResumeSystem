@@ -92,7 +92,14 @@ export class KnowledgeAgentClientService {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
+    const isIndexRequest = path === '/rag/index';
+    const configuredTimeout = isIndexRequest
+      ? Number(process.env.KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS || 300_000)
+      : 120_000;
+    const timeoutMs = Number.isFinite(configuredTimeout)
+      ? Math.min(600_000, Math.max(120_000, configuredTimeout))
+      : 300_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const secret = String(process.env.AGENT_INTERNAL_SECRET || '').trim();
       if (!secret) {

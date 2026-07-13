@@ -12,6 +12,7 @@ describe('KnowledgeAgentClientService metadata contract', () => {
     global.fetch = originalFetch;
     delete process.env.AGENT_SERVICE_URL;
     delete process.env.AGENT_INTERNAL_SECRET;
+    delete process.env.KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS;
     jest.restoreAllMocks();
   });
 
@@ -83,5 +84,31 @@ describe('KnowledgeAgentClientService metadata contract', () => {
       ownerUserId: 11,
       resumeId: '8',
     });
+  });
+
+  it('uses the configurable cold-start timeout and clamps it to the safe range', async () => {
+    process.env.KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS = '900000';
+    const timeoutSpy = jest.spyOn(global, 'setTimeout');
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ document_id: 9, chunk_count: 1, embedding_backend: 'fastembed' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as any;
+
+    await new KnowledgeAgentClientService().indexDocument({
+      documentId: 9,
+      name: 'Cold start',
+      category: 'resume-standard',
+      sourceType: 'standard',
+      scope: 'global',
+      file: {
+        originalname: 'standard.md',
+        mimetype: 'text/markdown',
+        buffer: Buffer.from('standard'),
+      } as Express.Multer.File,
+    });
+
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 600_000)).toBe(true);
   });
 });
