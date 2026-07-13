@@ -1152,7 +1152,7 @@ const coreResumePrintStyles = `
   }
 
   .resume-sheet.layout-qm-blue-top-photo {
-    padding: 12px 32px 34px;
+    padding: 12px 32px 32px;
     border-radius: 0;
     background: #fff;
     color: #111827;
@@ -1236,13 +1236,13 @@ const coreResumePrintStyles = `
   }
 
   .layout-qm-blue-top-photo .resume-section + .resume-section {
-    margin-top: 26px;
+    margin-top: 18px;
   }
 
   .layout-qm-blue-top-photo .section-heading {
     gap: 0;
     align-items: flex-end;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     border-bottom: 1px solid #8d96a3;
   }
 
