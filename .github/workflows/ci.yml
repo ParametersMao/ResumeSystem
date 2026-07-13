@@ -1,0 +1,168 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, "codex/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backed-resume
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backed-resume/package-lock.json
+      - run: npm ci
+      - run: npm test -- --runInBand
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=moderate
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fronted-resume-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fronted-resume-web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=moderate
+
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: middle-resume
+    env:
+      VITE_BASE: /admin/
+      VITE_API_BASE_URL: /api
+      VITE_APP_ENV: production
+      VITE_DEBUG: "false"
+      VITE_USE_MOCK: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: middle-resume/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=moderate
+
+  agent:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: python-agent/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production compose
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          DB_DATABASE: resume_system
+          DB_USERNAME: resume_user
+          DB_PASSWORD: ci-db-password
+          FRONTEND_URL: https://example.test
+          JWT_ACCESS_SECRET: ci-access-secret-00000000000000000000000000000000
+          JWT_REFRESH_SECRET: ci-refresh-secret-000000000000000000000000000000
+          SYSTEM_CONFIG_MASTER_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          JWT_ACCESS_EXPIRES_IN: 1h
+          JWT_REFRESH_EXPIRES_IN: 7d
+          EMAIL_CODE_SECRET: ci-email-secret-000000000000000000000000000000000
+          EMAIL_ALLOW_DEV_CODE: "false"
+          AI_ENABLED: "true"
+          AI_PROVIDER: deepseek
+          AI_EXECUTION_ENGINE: agent
+          OPENAI_API_URL: https://api.deepseek.com
+          OPENAI_API_KEY: ci-not-a-secret
+          OPENAI_MODEL: deepseek-v4-pro
+          AGENT_SERVICE_URL: http://agent:8000
+          AGENT_REQUEST_TIMEOUT_MS: "150000"
+          AGENT_INTERNAL_SECRET: ci-agent-secret-00000000000000000000000000000000
+          RAG_STRICT_SOURCES: "true"
+          AGENT_EXECUTION_MODE: live
+          RAG_ENABLED: "true"
+          QDRANT_COLLECTION: ci_resume_knowledge
+          QDRANT_API_KEY: ""
+          EMBEDDING_BACKEND: fastembed
+          EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+          LLM_TIMEOUT_SECONDS: "120"
+          RAG_MIN_SCORE: "0.34"
+          RAG_CANDIDATE_LIMIT: "40"
+          RAG_DENSE_WEIGHT: "0.68"
+          RAG_LEXICAL_WEIGHT: "0.27"
+          R2_ENDPOINT: ""
+          R2_REGION: auto
+          R2_ACCESS_KEY_ID: ""
+          R2_SECRET_ACCESS_KEY: ""
+          R2_BUCKET: ""
+          R2_PUBLIC_BASE_URL: ""
+          HTTP_PORT: "80"
+          HTTPS_PORT: "443"
+        run: docker compose -f docker-compose.prod.yml config --quiet
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment shell scripts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck deploy/*.sh
+          bash -n deploy/*.sh
+      - name: Validate production Nginx configuration
+        run: |
+          mkdir -p /tmp/resumesystem-certs/live/aidana.top
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -subj /CN=aidana.top \
+            -keyout /tmp/resumesystem-certs/live/aidana.top/privkey.pem \
+            -out /tmp/resumesystem-certs/live/aidana.top/fullchain.pem
+          docker run --rm \
+            --add-host backend:127.0.0.1 \
+            --add-host web:127.0.0.1 \
+            --add-host admin:127.0.0.1 \
+            -v "$PWD/deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "/tmp/resumesystem-certs:/etc/letsencrypt:ro" \
+            nginx:1.27-alpine nginx -t

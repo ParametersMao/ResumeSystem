@@ -14,10 +14,13 @@ import * as puppeteer from 'puppeteer';
 import { Resume } from '../../entities/resume.entity';
 import { ResumeVersion } from '../../entities/resume-version.entity';
 import { Template } from '../../entities/template.entity';
+import { TemplateUsage } from '../../entities/template-usage.entity';
+import { ResumeDownload } from '../../entities/resume-download.entity';
 import { CreateResumeDto, UpdateResumeDto, ResumeResponseDto, ResumeListResponseDto } from '../../dto/resume.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
 import { StorageService } from '../storage/storage.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -53,6 +56,7 @@ export class ResumesService {
     private templateRepository: Repository<Template>,
     private readonly storageService: StorageService,
     private readonly entitlementsService: EntitlementsService,
+    private readonly knowledgeService: KnowledgeService,
   ) {}
 
   async create(createResumeDto: CreateResumeDto, userId: number): Promise<ResumeResponseDto> {
@@ -89,7 +93,16 @@ export class ResumesService {
           templateId: normalizedTemplateId,
           userId,
         });
-        return manager.getRepository(Resume).save(resume);
+        const saved = await manager.getRepository(Resume).save(resume);
+        if (normalizedTemplateId) {
+          await manager.getRepository(TemplateUsage).save({
+            user_id: userId,
+            template_id: normalizedTemplateId,
+            usage_type: 'resume_create',
+          });
+          await manager.increment(Template, { id: normalizedTemplateId }, 'useCount', 1);
+        }
+        return saved;
       },
     );
     return this.mapToResponseDto(savedResume);
@@ -267,11 +280,20 @@ export class ResumesService {
       throw new NotFoundException('简历不存在');
     }
 
+    // Private JD source files and vectors must be removed while the resume is
+    // still active, because the knowledge boundary deliberately rejects access
+    // to deleted resumes. A cleanup failure therefore aborts the resume delete.
+    await this.knowledgeService.deleteJobDescription(id, userId);
     resume.status = 0;
     await this.resumeRepository.save(resume);
   }
 
-  async exportPdf(html: string, userId: number): Promise<ResumePdfExportResult> {
+  async exportPdf(
+    html: string,
+    userId: number,
+    resumeId?: number,
+    templateId?: number,
+  ): Promise<ResumePdfExportResult> {
     if (!html?.trim()) {
       throw new ServiceUnavailableException('PDF 导出失败：未提供有效 HTML 内容');
     }
@@ -286,6 +308,11 @@ export class ResumesService {
       );
     }
 
+    const trackedTemplateId = await this.resolveExportTemplateId(
+      userId,
+      resumeId,
+      templateId,
+    );
     await this.entitlementsService.consumePdf(userId);
     let browser: puppeteer.Browser | null = null;
     let reservedStorageBytes = 0;
@@ -380,6 +407,19 @@ export class ResumesService {
         contentType: 'application/pdf',
         cacheControl: 'private, max-age=0, must-revalidate',
       });
+      if (trackedTemplateId) {
+        try {
+          await this.resumeRepository.manager.transaction(async (manager) => {
+            await manager.getRepository(ResumeDownload).save({
+              user_id: userId,
+              template_id: trackedTemplateId,
+            });
+            await manager.increment(Template, { id: trackedTemplateId }, 'useCount', 1);
+          });
+        } catch (analyticsError) {
+          console.warn('resume download analytics write failed', analyticsError);
+        }
+      }
       return { url: result.url, pageCount };
     } catch (err: unknown) {
       await this.entitlementsService.refundPdf(userId);
@@ -583,6 +623,29 @@ export class ResumesService {
     if (!exists) {
       throw new NotFoundException('简历不存在');
     }
+  }
+
+  private async resolveExportTemplateId(
+    userId: number,
+    resumeId?: number,
+    templateId?: number,
+  ): Promise<number | null> {
+    const safeResumeId = Number(resumeId);
+    if (Number.isInteger(safeResumeId) && safeResumeId > 0) {
+      const resume = await this.resumeRepository.findOne({
+        select: { id: true, templateId: true },
+        where: { id: safeResumeId, userId, status: 1 },
+      });
+      if (!resume) {
+        throw new NotFoundException('简历不存在或不属于当前用户');
+      }
+      return resume.templateId || null;
+    }
+    const safeTemplateId = Number(templateId);
+    if (Number.isInteger(safeTemplateId) && safeTemplateId > 0) {
+      return this.resolveTemplateId(safeTemplateId);
+    }
+    return null;
   }
 }
 

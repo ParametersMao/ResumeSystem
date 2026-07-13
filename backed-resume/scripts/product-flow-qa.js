@@ -2,8 +2,14 @@ const puppeteer = require('puppeteer')
 const { existsSync } = require('fs')
 
 const baseUrl = process.env.QA_BASE_URL || 'http://127.0.0.1:5173'
-const username = process.env.QA_USERNAME || 'testuser'
-const password = process.env.QA_PASSWORD || '123456'
+const username = requiredEnv('QA_USERNAME')
+const password = requiredEnv('QA_PASSWORD')
+
+function requiredEnv(name) {
+  const value = String(process.env[name] || '').trim()
+  if (!value) throw new Error(`缺少 ${name}；测试凭据只允许通过运行时环境变量传入。`)
+  return value
+}
 
 async function main() {
   const browser = await puppeteer.launch({ headless: true, executablePath: resolveBrowserPath() })

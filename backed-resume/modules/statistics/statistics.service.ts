@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ObjectLiteral, Repository } from 'typeorm';
 import { Statistic } from '../../entities/statistic.entity';
@@ -241,5 +241,122 @@ export class StatisticsService {
         ai_operation_count: countMap.get(u.id) || 0,
       }));
     }
+  }
+
+  async exportData(
+    type: 'users' | 'resumes' | 'templates' | 'ai-operations',
+    format: 'csv' | 'json',
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{
+    body: Buffer;
+    contentType: string;
+    fileName: string;
+    rowCount: number;
+  }> {
+    const { from, to } = this.normalizeExportRange(startDate, endDate);
+    const query = this.buildExportQuery(type, from, to);
+    const rows = await this.cUserRepository.query(query.sql, query.params);
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    if (format === 'json') {
+      return {
+        body: Buffer.from(JSON.stringify(rows, null, 2), 'utf8'),
+        contentType: 'application/json; charset=utf-8',
+        fileName: `${type}-${stamp}.json`,
+        rowCount: rows.length,
+      };
+    }
+
+    const columns = rows.length ? Object.keys(rows[0]) : query.columns;
+    const lines = [
+      columns.map((column) => this.csvCell(column)).join(','),
+      ...rows.map((row: Record<string, unknown>) =>
+        columns.map((column) => this.csvCell(row[column])).join(','),
+      ),
+    ];
+    return {
+      body: Buffer.from(`\uFEFF${lines.join('\r\n')}`, 'utf8'),
+      contentType: 'text/csv; charset=utf-8',
+      fileName: `${type}-${stamp}.csv`,
+      rowCount: rows.length,
+    };
+  }
+
+  private normalizeExportRange(startDate?: string, endDate?: string): {
+    from?: Date;
+    to?: Date;
+  } {
+    const parse = (value: string | undefined, endOfDay: boolean) => {
+      if (!value) return undefined;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new BadRequestException('导出日期必须为 YYYY-MM-DD 格式');
+      }
+      const parsed = new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new BadRequestException('导出日期无效');
+      }
+      return parsed;
+    };
+    const from = parse(startDate, false);
+    const to = parse(endDate, true);
+    if (from && to && from > to) {
+      throw new BadRequestException('导出开始日期不能晚于结束日期');
+    }
+    return { from, to };
+  }
+
+  private buildExportQuery(
+    type: 'users' | 'resumes' | 'templates' | 'ai-operations',
+    from?: Date,
+    to?: Date,
+  ): { sql: string; params: Date[]; columns: string[] } {
+    const definitions = {
+      users: {
+        table: 'c_users',
+        dateColumn: 'create_time',
+        columns: ['id', 'username', 'email', 'phone', 'status', 'ai_operation_count', 'create_time', 'update_time'],
+      },
+      resumes: {
+        table: 'resumes',
+        dateColumn: 'create_time',
+        columns: ['id', 'user_id', 'template_id', 'title', 'status', 'version', 'create_time', 'update_time'],
+      },
+      templates: {
+        table: 'templates',
+        dateColumn: 'create_time',
+        columns: ['id', 'name', 'is_active', 'use_count', 'create_time', 'update_time'],
+      },
+      'ai-operations': {
+        table: 'ai_operations',
+        dateColumn: 'create_time',
+        columns: ['id', 'user_id', 'operation_type', 'status', 'tokens_used', 'create_time'],
+      },
+    } as const;
+    const definition = definitions[type];
+    const clauses: string[] = [];
+    const params: Date[] = [];
+    if (from) {
+      clauses.push(`${definition.dateColumn} >= ?`);
+      params.push(from);
+    }
+    if (to) {
+      clauses.push(`${definition.dateColumn} <= ?`);
+      params.push(to);
+    }
+    const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
+    return {
+      sql: `SELECT ${definition.columns.join(', ')} FROM ${definition.table}${where} ORDER BY ${definition.dateColumn} DESC LIMIT 50000`,
+      params,
+      columns: [...definition.columns],
+    };
+  }
+
+  private csvCell(value: unknown): string {
+    let text = value == null ? '' : value instanceof Date ? value.toISOString() : String(value);
+    if (/^[=+\-@]/.test(text)) {
+      text = `'${text}`;
+    }
+    return `"${text.replace(/"/g, '""')}"`;
   }
 }

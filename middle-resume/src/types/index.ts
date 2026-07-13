@@ -95,19 +95,19 @@ export interface RouteMeta {
   icon?: string
   requiresAuth?: boolean
   permissions?: string[]
+  roles?: Array<'admin' | 'operator' | 'viewer'>
 }
 
 // C端用户类型
 export interface CUser {
   id: number
-  nickname: string
-  phone: string
-  email: string
-  avatar?: string
-  gender?: 'male' | 'female' | 'other'
-  status: 'active' | 'inactive'
-  registerAt: string
-  lastLoginAt: string
+  username: string
+  phone?: string
+  email?: string
+  status: number
+  createTime: string
+  updateTime: string
+  aiOperationCount: number
 }
 
 // 统计概览数据

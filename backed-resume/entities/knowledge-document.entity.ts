@@ -17,6 +17,27 @@ export class KnowledgeDocument {
   @Column({ type: 'varchar', length: 64, default: 'general' })
   category: string;
 
+  @Column({ type: 'varchar', length: 32, default: 'standard', name: 'source_type' })
+  sourceType: 'standard' | 'role-framework' | 'resume-exemplar' | 'job-description';
+
+  @Column({ type: 'varchar', length: 16, default: 'global' })
+  scope: 'global' | 'private';
+
+  @Column({ type: 'int', nullable: true, name: 'owner_user_id' })
+  ownerUserId: number | null;
+
+  @Column({ type: 'int', nullable: true, name: 'resume_id' })
+  resumeId: number | null;
+
+  @Column({ type: 'tinyint', width: 1, default: 0 })
+  licensed: boolean;
+
+  @Column({ type: 'tinyint', width: 1, default: 0, name: 'pii_reviewed' })
+  piiReviewed: boolean;
+
+  @Column({ type: 'datetime', nullable: true, name: 'expires_at' })
+  expiresAt: Date | null;
+
   @Column({ type: 'varchar', length: 500, default: '' })
   description: string;
 

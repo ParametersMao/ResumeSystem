@@ -17,11 +17,20 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    mem_limit: 650m
+    cpus: 1.0
+    pids_limit: 200
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s
       timeout: 5s
       retries: 20
+    networks: [data]
 
   backend:
     build:
@@ -42,6 +51,9 @@ services:
       DB_DATABASE: ${DB_DATABASE}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      SYSTEM_CONFIG_MASTER_KEY: ${SYSTEM_CONFIG_MASTER_KEY}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
       EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET}
@@ -63,6 +75,14 @@ services:
       R2_BUCKET: ${R2_BUCKET}
       R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-headless-shell
+    mem_limit: 600m
+    cpus: 1.5
+    pids_limit: 300
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     volumes:
       - backend_uploads:/app/uploads
     healthcheck:
@@ -70,6 +90,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
+    networks: [app, data]
 
   web:
     build:
@@ -79,9 +100,23 @@ services:
         VITE_USE_MOCK: "false"
     container_name: resume-web
     restart: unless-stopped
+    mem_limit: 96m
+    cpus: 0.5
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [app]
 
   admin:
     build:
@@ -94,19 +129,41 @@ services:
         VITE_BASE: /admin/
     container_name: resume-admin
     restart: unless-stopped
+    mem_limit: 96m
+    cpus: 0.5
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [app]
 
   reverse-proxy:
     image: nginx:1.27-alpine
     container_name: resume-proxy
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     depends_on:
       web:
-        condition: service_started
+        condition: service_healthy
       admin:
-        condition: service_started
+        condition: service_healthy
       backend:
         condition: service_healthy
     ports:
@@ -115,6 +172,12 @@ services:
     volumes:
       - ./deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://127.0.0.1/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [public, app]
 
   agent:
     build:
@@ -144,12 +207,21 @@ services:
       RAG_LEXICAL_WEIGHT: ${RAG_LEXICAL_WEIGHT}
       RAG_STRICT_SOURCES: ${RAG_STRICT_SOURCES}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
+      test: ["CMD-SHELL", "python -c \"import json,urllib.request; j=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)); raise SystemExit(0 if j.get('status') == 'ok' else 1)\""]
       interval: 15s
       timeout: 5s
       retries: 20
     volumes:
       - fastembed_models:/models/fastembed
+    mem_limit: 650m
+    cpus: 1.5
+    pids_limit: 250
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [app, data]
 
   qdrant:
     image: qdrant/qdrant:v1.13.2
@@ -157,9 +229,24 @@ services:
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
+    mem_limit: 300m
+    cpus: 1.0
+    pids_limit: 150
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [data]
 
 volumes:
   mysql_data:
   backend_uploads:
   qdrant_data:
   fastembed_models:
+
+networks:
+  public:
+  app:
+  data:
+    internal: true

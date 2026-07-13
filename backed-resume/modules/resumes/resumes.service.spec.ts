@@ -19,6 +19,7 @@ describe('ResumesService validation', () => {
         assertCanCreateResume: jest.fn(),
         assertDatabaseStorageAvailable: jest.fn(),
       } as any,
+      { deleteJobDescription: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -44,5 +45,34 @@ describe('ResumesService validation', () => {
     expect(html).toContain('break-inside: avoid !important');
     expect(html).toContain('.student-section-heading,');
     expect(html).toContain('break-after: avoid !important');
+  });
+
+  it('cleans private JD resources before marking a resume deleted', async () => {
+    const resume = { id: 8, userId: 11, status: 1 };
+    const repository = (service as any).resumeRepository;
+    const knowledge = (service as any).knowledgeService;
+    repository.findOne = jest.fn().mockResolvedValue(resume);
+    repository.save = jest.fn().mockResolvedValue({ ...resume, status: 0 });
+
+    await service.remove(8, 11);
+
+    expect(knowledge.deleteJobDescription).toHaveBeenCalledWith(8, 11);
+    expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({ status: 0 }));
+    expect(knowledge.deleteJobDescription.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.save.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('does not delete a resume when private JD cleanup fails', async () => {
+    const resume = { id: 8, userId: 11, status: 1 };
+    const repository = (service as any).resumeRepository;
+    const knowledge = (service as any).knowledgeService;
+    repository.findOne = jest.fn().mockResolvedValue(resume);
+    repository.save = jest.fn();
+    knowledge.deleteJobDescription.mockRejectedValueOnce(new Error('qdrant unavailable'));
+
+    await expect(service.remove(8, 11)).rejects.toThrow('qdrant unavailable');
+    expect(repository.save).not.toHaveBeenCalled();
+    expect(resume.status).toBe(1);
   });
 });

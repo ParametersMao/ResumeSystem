@@ -4,7 +4,7 @@
       <!-- 页面标题 -->
       <section class="page-header">
         <h1 class="page-title">联系我们</h1>
-        <p class="page-subtitle">我们随时为您提供帮助</p>
+        <p class="page-subtitle">客服与工单通道尚未开放，本页仅提供产品使用说明</p>
       </section>
 
       <div class="contact-content">
@@ -13,36 +13,36 @@
           <div class="contact-card">
             <div class="card-icon">📧</div>
             <h3>邮箱</h3>
-            <p>support@resume.com</p>
-            <a href="mailto:support@resume.com" class="contact-link">发送邮件</a>
+            <p>暂未开通</p>
+            <span class="small-text">正式邮箱启用后会在此公布</span>
           </div>
 
           <div class="contact-card">
             <div class="card-icon">📱</div>
             <h3>客服热线</h3>
-            <p>400-123-4567</p>
-            <p class="small-text">工作日 9:00-18:00</p>
+            <p>暂未开通</p>
+            <p class="small-text">当前没有对外客服电话</p>
           </div>
 
           <div class="contact-card">
             <div class="card-icon">💬</div>
             <h3>在线客服</h3>
-            <p>即时响应</p>
-            <button class="contact-link" @click="openChat">开始对话</button>
+            <p>暂未开通</p>
+            <button class="contact-link" type="button" disabled>暂不可用</button>
           </div>
 
           <div class="contact-card">
             <div class="card-icon">📍</div>
-            <h3>公司地址</h3>
-            <p>北京市朝阳区</p>
-            <p class="small-text">科技园区A座10层</p>
+            <h3>服务状态</h3>
+            <p>内部测试阶段</p>
+            <p class="small-text">暂不提供线下接待</p>
           </div>
         </div>
 
         <!-- 联系表单 -->
         <div class="contact-form-section">
           <h2>发送消息</h2>
-          <p class="form-description">填写下面的表单，我们会尽快回复您</p>
+          <p class="form-description">表单尚未接入真实工单后端，当前内容不会被提交。</p>
           
           <form class="contact-form" @submit.prevent="handleSubmit">
             <div class="form-group">
@@ -99,8 +99,8 @@
               ></textarea>
             </div>
 
-            <button type="submit" class="submit-btn" :disabled="isSubmitting">
-              {{ isSubmitting ? '发送中...' : '发送消息' }}
+            <button type="submit" class="submit-btn" disabled>
+              提交暂未开放
             </button>
           </form>
         </div>
@@ -120,7 +120,7 @@
           </div>
           <div class="faq-item">
             <h4>数据安全吗？</h4>
-            <p>我们采用银行级别的加密技术，确保您的数据安全。</p>
+            <p>系统持续完善访问控制、传输加密和备份机制；请勿在测试阶段上传不必要的敏感信息。</p>
           </div>
           <div class="faq-item">
             <h4>如何修改密码？</h4>
@@ -133,10 +133,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-
-const isSubmitting = ref(false)
 
 const formData = reactive({
   name: '',
@@ -146,32 +144,8 @@ const formData = reactive({
   message: ''
 })
 
-function openChat() {
-  ElMessage.info('在线客服功能正在开发中')
-}
-
-async function handleSubmit() {
-  isSubmitting.value = true
-  
-  try {
-    // 模拟提交
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
-    ElMessage.success('消息发送成功！我们会尽快回复您')
-    
-    // 重置表单
-    Object.assign(formData, {
-      name: '',
-      email: '',
-      phone: '',
-      subject: '',
-      message: ''
-    })
-  } catch (error) {
-    ElMessage.error('发送失败，请稍后再试')
-  } finally {
-    isSubmitting.value = false
-  }
+function handleSubmit() {
+  ElMessage.info('联系表单尚未开放，消息没有发送')
 }
 </script>
 

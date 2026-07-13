@@ -30,7 +30,7 @@ export const updateCUser = (id: number, data: { username?: string; phone?: strin
  * PATCH /api/cusers/{id}/status
  */
 export const updateCUserStatus = (id: number, status: number) => {
-  return request.put(`/cusers/${id}/status`, { status })
+  return request.patch(`/cusers/${id}/status`, { status })
 }
 
 /**

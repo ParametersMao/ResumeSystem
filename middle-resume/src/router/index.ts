@@ -24,7 +24,7 @@ const routes: RouteRecordRaw[] = [
         path: 'user-management',
         name: 'UserManagement',
         component: () => import('@/views/UserManagement.vue'),
-        meta: { title: '用户管理', icon: 'User' }
+        meta: { title: '用户管理', icon: 'User', roles: ['admin'] }
       },
       {
         path: 'cuser-management',
@@ -82,6 +82,12 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresAuth !== false && !userStore.isLoggedIn) {
     next('/login')
+  } else if (
+    Array.isArray(to.meta.roles) &&
+    to.meta.roles.length > 0 &&
+    !to.meta.roles.includes(userStore.user?.role || 'viewer')
+  ) {
+    next('/dashboard')
   } else {
     next()
   }

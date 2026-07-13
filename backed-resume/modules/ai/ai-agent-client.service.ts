@@ -51,12 +51,14 @@ export class AiAgentClientService {
     return this.callAgent(
       'polish',
       {
+        resume_id: dto.resumeId,
         user_id: userId,
         section_type: dto.sectionType || 'general',
         job_title: dto.jobTitle || '目标岗位',
         selected_text: dto.inputText,
       },
       config,
+      { include_exemplars: Boolean(dto.includeExemplars) },
     );
   }
 
@@ -64,12 +66,14 @@ export class AiAgentClientService {
     return this.callAgent(
       'generate',
       {
+        resume_id: dto.resumeId,
         user_id: userId,
         section_type: dto.sectionType || 'general',
         job_title: dto.jobTitle || '目标岗位',
         content: dto.contextText || '',
       },
       config,
+      { include_exemplars: Boolean(dto.includeExemplars) },
     );
   }
 
@@ -90,6 +94,7 @@ export class AiAgentClientService {
     taskType: AgentTaskType,
     context: AgentRequestContext,
     config: AiConfigDto,
+    requestOptions: Record<string, any> = {},
   ): Promise<AiAgentRuntimeResult> {
     const baseUrl = this.resolveAgentBaseUrl(config);
     const endpoint = `${baseUrl}/agent/${taskType}`;
@@ -107,7 +112,7 @@ export class AiAgentClientService {
         body: JSON.stringify({
           task_type: taskType,
           context,
-          options: this.buildAgentOptions(config),
+          options: { ...this.buildAgentOptions(config), ...requestOptions },
         }),
         signal: controller.signal,
       });

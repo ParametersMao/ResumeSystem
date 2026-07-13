@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdminUser } from '../../entities/admin-user.entity';
@@ -8,11 +8,22 @@ import { PaginationResponse } from '../../common/interfaces/pagination.interface
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
-export class AdminUsersService {
+export class AdminUsersService implements OnModuleInit {
   constructor(
     @InjectRepository(AdminUser)
     private adminUserRepository: Repository<AdminUser>,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    const columns: Array<{ Field: string }> = await this.adminUserRepository.query(
+      'SHOW COLUMNS FROM admin_users',
+    );
+    if (!columns.some((column) => column.Field === 'token_version')) {
+      await this.adminUserRepository.query(
+        'ALTER TABLE admin_users ADD COLUMN token_version INT NOT NULL DEFAULT 0 AFTER status',
+      );
+    }
+  }
 
   async findAll(paginationDto: PaginationDto): Promise<PaginationResponse<AdminUserResponseDto>> {
     const { page = 1, limit = 10 } = paginationDto;
@@ -82,6 +93,8 @@ export class AdminUsersService {
     }
 
     // 如果更新密码，需要加密
+    const passwordChanged = Boolean(updateAdminUserDto.password);
+    const roleChanged = Boolean(updateAdminUserDto.role && updateAdminUserDto.role !== user.role);
     if (updateAdminUserDto.password) {
       updateAdminUserDto.password = await bcrypt.hash(updateAdminUserDto.password, 10);
     }
@@ -93,6 +106,9 @@ export class AdminUsersService {
       phone: updateAdminUserDto.phone,
       role: updateAdminUserDto.role,
     });
+    if (passwordChanged || roleChanged) {
+      user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+    }
     
     return this.adminUserRepository.save(user);
   }
@@ -100,12 +116,14 @@ export class AdminUsersService {
   async updateStatus(id: number, updateStatusDto: UpdateAdminUserStatusDto): Promise<AdminUser> {
     const user = await this.findOne(id);
     user.status = updateStatusDto.status;
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     return this.adminUserRepository.save(user);
   }
 
   async resetPassword(id: number, password: string): Promise<AdminUser> {
     const user = await this.findOne(id);
     user.password = await bcrypt.hash(password, 10);
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     return this.adminUserRepository.save(user);
   }
 
@@ -142,7 +160,7 @@ export class AdminUsersService {
   }
 
   async ensureDevAdminAccount(): Promise<AdminUser> {
-    const defaultPassword = '123456';
+    const defaultPassword = process.env.DEV_ADMIN_PASSWORD || '123456';
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
     const existing = await this.findByUsername('admin');
 
@@ -165,6 +183,27 @@ export class AdminUsersService {
     }
 
     return this.adminUserRepository.save(existing);
+  }
+
+  async ensureBootstrapAdminAccount(username: string, password: string): Promise<AdminUser> {
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername || password.length < 12) {
+      throw new Error('BOOTSTRAP_ADMIN_USERNAME and a password of at least 12 characters are required');
+    }
+
+    const existing = await this.findByUsername(normalizedUsername);
+    if (existing) {
+      return existing;
+    }
+
+    const user = this.adminUserRepository.create({
+      username: normalizedUsername,
+      password: await bcrypt.hash(password, 12),
+      role: 'admin',
+      status: 1,
+      tokenVersion: 0,
+    });
+    return this.adminUserRepository.save(user);
   }
 
   private isBcryptHash(value: string): boolean {

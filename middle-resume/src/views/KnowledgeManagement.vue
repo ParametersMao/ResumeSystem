@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions">
         <el-button @click="searchVisible = true">检索测试</el-button>
-        <el-button type="primary" @click="uploadVisible = true">上传文档</el-button>
+        <el-button v-if="canWrite" type="primary" @click="uploadVisible = true">上传文档</el-button>
       </div>
     </div>
 
@@ -37,6 +37,11 @@
             <el-option label="已停用" value="disabled" />
           </el-select>
         </el-form-item>
+        <el-form-item label="资料来源">
+          <el-select v-model="filters.sourceType" clearable placeholder="全部来源" style="width: 190px">
+            <el-option v-for="item in sourceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="loadDocuments">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
@@ -55,6 +60,13 @@
         <el-table-column prop="category" label="分类" width="110">
           <template #default="{ row }">{{ categoryLabel(row.category) }}</template>
         </el-table-column>
+        <el-table-column prop="sourceType" label="资料来源" min-width="150">
+          <template #default="{ row }">
+            <el-tooltip :content="sourceTypeDescription(row.sourceType)" placement="top">
+              <el-tag effect="plain">{{ sourceTypeLabel(row.sourceType) }}</el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="105">
           <template #default="{ row }">
             <el-tooltip :content="row.errorMessage || statusLabel(row.status)" placement="top">
@@ -71,16 +83,16 @@
           <template #default="{ row }">
             <el-switch
               :model-value="row.enabled"
-              :disabled="row.status === 'indexing' || row.status === 'failed'"
+              :disabled="!canWrite || row.status === 'indexing' || row.status === 'failed'"
               @change="(value: string | number | boolean) => handleToggle(row, Boolean(value))"
             />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleReindex(row)">重建索引</el-button>
+            <el-button v-if="canWrite" link type="primary" @click="handleReindex(row)">重建索引</el-button>
             <el-button link type="primary" @click="openSource(row)">原文件</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="canWrite" link type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -112,6 +124,22 @@
         <el-form-item label="显示名称">
           <el-input v-model="uploadForm.name" placeholder="留空则使用文件名" />
         </el-form-item>
+        <el-form-item label="资料来源" required>
+          <el-select v-model="uploadForm.sourceType" style="width: 100%">
+            <el-option
+              v-for="item in sourceTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            >
+              <div class="source-option">
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.description }}</span>
+              </div>
+            </el-option>
+          </el-select>
+          <p class="source-help">{{ sourceTypeDescription(uploadForm.sourceType) }}</p>
+        </el-form-item>
         <el-form-item label="资料分类">
           <el-select v-model="uploadForm.category">
             <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -120,6 +148,18 @@
         <el-form-item label="说明">
           <el-input v-model="uploadForm.description" type="textarea" :rows="3" placeholder="可选，说明资料用途或适用岗位" />
         </el-form-item>
+        <el-alert
+          v-if="uploadForm.sourceType === 'resume-exemplar'"
+          title="优秀简历样例仅用于结构与表达参考，不应复制个人经历或身份信息。"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="exemplar-alert"
+        />
+        <div v-if="uploadForm.sourceType === 'resume-exemplar'" class="compliance-checks">
+          <el-checkbox v-model="uploadForm.licensed">我确认已获得该简历用于本知识库的明确授权</el-checkbox>
+          <el-checkbox v-model="uploadForm.piiReviewed">我确认已完成人工 PII 脱敏复核（姓名、联系方式、证件、地址等）</el-checkbox>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="uploadVisible = false">取消</el-button>
@@ -170,8 +210,19 @@ import {
   searchKnowledge,
   toggleKnowledgeDocument,
   uploadKnowledgeDocument,
-  type KnowledgeDocument
+  type KnowledgeDocument,
+  type KnowledgeSourceType
 } from '@/api/knowledge'
+import { useUserStore } from '@/store/modules/user'
+
+const userStore = useUserStore()
+const canWrite = computed(() => userStore.user?.role !== 'viewer')
+
+const sourceTypeOptions: Array<{ value: KnowledgeSourceType; label: string; description: string }> = [
+  { value: 'standard', label: '标准与写作规范', description: '权威简历写作、ATS、事实表达和版式规范，作为全局基础知识。' },
+  { value: 'role-framework', label: '岗位能力框架', description: '岗位职责、能力模型和通用 JD 规范，用于理解岗位要求，不对应某次私人投递。' },
+  { value: 'resume-exemplar', label: '授权优秀简历样例', description: '仅上传已获授权且完成人工 PII 脱敏复核的优秀简历，用于学习结构与表达方式。' }
+]
 
 const categoryOptions = [
   { label: '通用规范', value: 'general' },
@@ -193,8 +244,15 @@ const page = ref(1)
 const limit = ref(10)
 const total = ref(0)
 const selectedFile = ref<File | null>(null)
-const filters = reactive({ search: '', category: '', status: '' })
-const uploadForm = reactive({ name: '', category: 'general', description: '' })
+const filters = reactive<{ search: string; category: string; status: string; sourceType?: KnowledgeSourceType }>({ search: '', category: '', status: '', sourceType: undefined })
+const uploadForm = reactive({
+  name: '',
+  category: 'general',
+  description: '',
+  sourceType: 'standard' as KnowledgeSourceType,
+  licensed: false,
+  piiReviewed: false
+})
 const searchForm = reactive({ query: '', category: '' })
 const metrics = ref<Record<string, number | string>>({})
 const metricCards = computed(() => [
@@ -212,7 +270,8 @@ async function loadDocuments() {
       limit: limit.value,
       search: filters.search || undefined,
       category: filters.category || undefined,
-      status: filters.status || undefined
+      status: filters.status || undefined,
+      sourceType: filters.sourceType
     })
     documents.value = response.data.list || []
     total.value = Number(response.data.total || 0)
@@ -231,7 +290,7 @@ async function loadMetrics() {
 }
 
 function resetFilters() {
-  Object.assign(filters, { search: '', category: '', status: '' })
+  Object.assign(filters, { search: '', category: '', status: '', sourceType: undefined })
   page.value = 1
   loadDocuments()
 }
@@ -249,18 +308,35 @@ async function handleUpload() {
     ElMessage.warning('请先选择文件')
     return
   }
+  if (
+    uploadForm.sourceType === 'resume-exemplar' &&
+    (!uploadForm.licensed || !uploadForm.piiReviewed)
+  ) {
+    ElMessage.warning('上传优秀简历样例前，必须确认已获授权并完成 PII 脱敏复核')
+    return
+  }
   uploading.value = true
   try {
     const response = await uploadKnowledgeDocument({
       file: selectedFile.value,
       name: uploadForm.name,
       category: uploadForm.category,
-      description: uploadForm.description
+      description: uploadForm.description,
+      sourceType: uploadForm.sourceType,
+      licensed: uploadForm.licensed,
+      piiReviewed: uploadForm.piiReviewed
     })
     ElMessage.success(response.message)
     uploadVisible.value = false
     selectedFile.value = null
-    Object.assign(uploadForm, { name: '', category: 'general', description: '' })
+    Object.assign(uploadForm, {
+      name: '',
+      category: 'general',
+      description: '',
+      sourceType: 'standard',
+      licensed: false,
+      piiReviewed: false
+    })
     await loadDocuments()
   } finally {
     uploading.value = false
@@ -322,6 +398,14 @@ function categoryLabel(value: string) {
   return categoryOptions.find((item) => item.value === value)?.label || value
 }
 
+function sourceTypeLabel(value: KnowledgeSourceType) {
+  return sourceTypeOptions.find((item) => item.value === value)?.label || value
+}
+
+function sourceTypeDescription(value: KnowledgeSourceType) {
+  return sourceTypeOptions.find((item) => item.value === value)?.description || ''
+}
+
 function statusLabel(value: string) {
   return ({ ready: '可用', indexing: '处理中', failed: '失败', disabled: '已停用', pending: '等待中' } as Record<string, string>)[value] || value
 }
@@ -356,5 +440,11 @@ onMounted(() => Promise.all([loadDocuments(), loadMetrics()]))
 .result-card { padding: 14px 16px; border: 1px solid var(--el-border-color-light); border-radius: 10px; background: var(--el-fill-color-lighter); }
 .result-card p { margin: 8px 0 0; line-height: 1.7; white-space: pre-wrap; }
 .result-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-option { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+.source-option span, .source-help { color: var(--el-text-color-secondary); font-size: 12px; }
+.source-help { margin: 8px 0 0; line-height: 1.5; }
+.exemplar-alert { margin-bottom: 12px; }
+.compliance-checks { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--el-color-warning-light-5); border-radius: 8px; background: var(--el-color-warning-light-9); }
+.compliance-checks :deep(.el-checkbox) { height: auto; white-space: normal; }
 @media (max-width: 1000px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

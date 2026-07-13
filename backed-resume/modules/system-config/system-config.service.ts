@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SystemConfig } from '../../entities/system-config.entity';
 import { AiConfigDto, PartialSystemConfigDto, SystemConfigDto } from '../../dto/system-config.dto';
+import {
+  decryptConfigSecret,
+  encryptConfigSecret,
+  isEncryptedConfigSecret,
+} from '../../src/security/config-secret.crypto';
 
 const GLOBAL_CONFIG_KEY = 'global';
 
@@ -102,13 +107,35 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfigDto = {
 };
 
 @Injectable()
-export class SystemConfigService {
+export class SystemConfigService implements OnModuleInit {
   private ensureTablePromise: Promise<void> | null = null;
 
   constructor(
     @InjectRepository(SystemConfig)
     private readonly systemConfigRepository: Repository<SystemConfig>,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureTable();
+    const record = await this.systemConfigRepository.findOne({
+      where: { configKey: GLOBAL_CONFIG_KEY },
+    });
+    if (!record) return;
+    let raw: any;
+    try {
+      raw = JSON.parse(record.configData || '{}');
+    } catch {
+      return;
+    }
+    const legacySecretPresent =
+      (Boolean(raw?.email?.smtpPass) && !isEncryptedConfigSecret(raw.email.smtpPass)) ||
+      (Boolean(raw?.ai?.apiKey) && !isEncryptedConfigSecret(raw.ai.apiKey));
+    if (!legacySecretPresent) return;
+
+    const config = this.mergeWithDefault(this.parseConfigData(record.configData));
+    record.configData = this.serializeConfigForStorage(config);
+    await this.systemConfigRepository.save(record);
+  }
 
   async getConfig(): Promise<SystemConfigDto> {
     await this.ensureTable();
@@ -119,7 +146,7 @@ export class SystemConfigService {
     if (!record) {
       const created = this.systemConfigRepository.create({
         configKey: GLOBAL_CONFIG_KEY,
-        configData: JSON.stringify(DEFAULT_SYSTEM_CONFIG),
+        configData: this.serializeConfigForStorage(DEFAULT_SYSTEM_CONFIG),
       });
       await this.systemConfigRepository.save(created);
       return this.cloneDefaultConfig();
@@ -140,12 +167,12 @@ export class SystemConfigService {
     });
 
     if (existing) {
-      existing.configData = JSON.stringify(next);
+      existing.configData = this.serializeConfigForStorage(next);
       await this.systemConfigRepository.save(existing);
     } else {
       const created = this.systemConfigRepository.create({
         configKey: GLOBAL_CONFIG_KEY,
-        configData: JSON.stringify(next),
+        configData: this.serializeConfigForStorage(next),
       });
       await this.systemConfigRepository.save(created);
     }
@@ -187,10 +214,36 @@ export class SystemConfigService {
 
   private parseConfigData(value: string): Partial<SystemConfigDto> {
     try {
-      return JSON.parse(value || '{}');
-    } catch {
-      return {};
+      const parsed = JSON.parse(value || '{}') as Partial<SystemConfigDto>;
+      if (parsed.email) {
+        parsed.email.smtpPass = decryptConfigSecret(
+          parsed.email.smtpPass,
+          'email.smtpPass',
+        ).value;
+      }
+      if (parsed.ai) {
+        parsed.ai.apiKey = decryptConfigSecret(parsed.ai.apiKey, 'ai.apiKey').value;
+      }
+      return parsed;
+    } catch (error) {
+      // Invalid JSON remains backward-compatible with the old empty-config fallback,
+      // but authentication/key failures must be visible rather than silently erasing secrets.
+      try {
+        JSON.parse(value || '{}');
+      } catch {
+        return {};
+      }
+      throw error;
     }
+  }
+
+  private serializeConfigForStorage(config: SystemConfigDto): string {
+    const stored: SystemConfigDto = JSON.parse(JSON.stringify(config));
+    stored.email.smtpPass = encryptConfigSecret(stored.email.smtpPass, 'email.smtpPass');
+    stored.ai.apiKey = encryptConfigSecret(stored.ai.apiKey, 'ai.apiKey');
+    delete stored.email.smtpPassConfigured;
+    delete stored.ai.apiKeyConfigured;
+    return JSON.stringify(stored);
   }
 
   private cloneDefaultConfig(): SystemConfigDto {

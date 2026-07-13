@@ -13,6 +13,10 @@ import { EmailAuthService } from './email-auth.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import * as bcrypt from 'bcrypt';
 
+jest.mock('../knowledge/knowledge.service', () => ({
+  KnowledgeService: class KnowledgeService {},
+}));
+
 // Mock bcrypt
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),

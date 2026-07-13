@@ -47,6 +47,13 @@ export class StorageService {
   async uploadObject(input: UploadObjectInput): Promise<UploadObjectResult> {
     const key = sanitizeObjectKey(input.key);
 
+    // Knowledge originals, especially private JDs, must never inherit a public
+    // asset bucket policy. They remain on the protected backend volume and are
+    // available only through authenticated knowledge APIs.
+    if (isKnowledgeObject(key)) {
+      return this.uploadLocalObject(key, input);
+    }
+
     if (this.r2Client && this.r2Bucket && this.r2PublicBaseUrl) {
       await this.r2Client.send(
         new PutObjectCommand({
@@ -79,22 +86,15 @@ export class StorageService {
       };
     }
 
-    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    const targetPath = resolveLocalObjectPath(uploadRoot, key);
-    await mkdir(dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, input.body);
-
-    const publicBaseUrl = normalizePublicBaseUrl(process.env.PUBLIC_FILE_BASE_URL || '');
-    const localUrl = `/uploads/${key}`;
-    return {
-      key,
-      url: publicBaseUrl ? `${publicBaseUrl}${localUrl}` : localUrl,
-      provider: 'local',
-    };
+    return this.uploadLocalObject(key, input);
   }
 
   async deleteObject(key: string): Promise<void> {
     const safeKey = sanitizeObjectKey(key);
+    if (isKnowledgeObject(safeKey)) {
+      await this.deleteLocalObject(safeKey);
+      return;
+    }
     if (this.r2Client && this.r2Bucket) {
       await this.r2Client.send(new DeleteObjectCommand({ Bucket: this.r2Bucket, Key: safeKey }));
       return;
@@ -103,12 +103,14 @@ export class StorageService {
       await this.ossClient.delete(safeKey);
       return;
     }
-    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    await rm(resolveLocalObjectPath(uploadRoot, safeKey), { force: true });
+    await this.deleteLocalObject(safeKey);
   }
 
   async downloadObject(key: string): Promise<Buffer> {
     const safeKey = sanitizeObjectKey(key);
+    if (isKnowledgeObject(safeKey)) {
+      return this.downloadLocalObject(safeKey);
+    }
     if (this.r2Client && this.r2Bucket) {
       const result = await this.r2Client.send(
         new GetObjectCommand({ Bucket: this.r2Bucket, Key: safeKey }),
@@ -120,9 +122,36 @@ export class StorageService {
       const result = await this.ossClient.get(safeKey);
       return Buffer.isBuffer(result.content) ? result.content : Buffer.from(result.content);
     }
-    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    return readFile(resolveLocalObjectPath(uploadRoot, safeKey));
+    return this.downloadLocalObject(safeKey);
   }
+
+  private async uploadLocalObject(key: string, input: UploadObjectInput): Promise<UploadObjectResult> {
+    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
+    const targetPath = resolveLocalObjectPath(uploadRoot, key);
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, input.body);
+    const publicBaseUrl = normalizePublicBaseUrl(process.env.PUBLIC_FILE_BASE_URL || '');
+    const localUrl = `/uploads/${key}`;
+    return {
+      key,
+      url: publicBaseUrl ? `${publicBaseUrl}${localUrl}` : localUrl,
+      provider: 'local',
+    };
+  }
+
+  private async deleteLocalObject(key: string): Promise<void> {
+    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
+    await rm(resolveLocalObjectPath(uploadRoot, key), { force: true });
+  }
+
+  private async downloadLocalObject(key: string): Promise<Buffer> {
+    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
+    return readFile(resolveLocalObjectPath(uploadRoot, key));
+  }
+}
+
+function isKnowledgeObject(key: string): boolean {
+  return key === 'knowledge' || key.startsWith('knowledge/');
 }
 
 function isR2Configured() {

@@ -439,6 +439,9 @@
             clearable
             @keyup.enter="rerunAiPolish"
           />
+          <el-checkbox v-model="aiReferenceExamples">
+            参考已授权且脱敏的优秀简历表达（只学习结构，不复制事实）
+          </el-checkbox>
         </div>
 
         <div class="ai-mode-tip">
@@ -505,17 +508,67 @@
             <span>目标岗位</span>
             <el-input v-model="jobTargetTitle" placeholder="例如：产品运营 / 用户增长" clearable />
           </label>
-          <label class="field-block field-block-full">
-            <span>职位描述 JD</span>
+          <div class="field-block field-block-full job-description-workspace">
+            <div class="job-description-heading">
+              <span>职位描述 JD · 私有知识工作区</span>
+              <el-radio-group v-model="jobDescriptionSourceMode" size="small">
+                <el-radio-button label="text">粘贴文本</el-radio-button>
+                <el-radio-button label="file">上传文件</el-radio-button>
+              </el-radio-group>
+            </div>
             <el-input
+              v-if="jobDescriptionSourceMode === 'text'"
               v-model="jobDescription"
               type="textarea"
               :rows="8"
-              maxlength="8000"
+              maxlength="10000"
               show-word-limit
-              placeholder="粘贴岗位职责和任职要求。系统只会基于 JD 与当前简历提供建议，不会自动编造经历。"
+              placeholder="粘贴岗位职责和任职要求。保存后会按当前账号和简历隔离索引。"
             />
-          </label>
+            <div v-else class="job-file-panel">
+              <el-upload
+                :auto-upload="false"
+                :limit="1"
+                accept=".pdf,.docx,.txt,.md,.markdown"
+                :on-change="handleJobDescriptionFileChange"
+                :on-remove="handleJobDescriptionFileRemove"
+              >
+                <el-button>选择 PDF / DOCX / TXT / Markdown</el-button>
+              </el-upload>
+              <p>PDF/DOCX 由后端解析；TXT/Markdown 还会在浏览器中保留文本，用于本地关键词覆盖分析。</p>
+            </div>
+            <div class="job-index-toolbar">
+              <el-button
+                type="primary"
+                plain
+                :loading="jobDescriptionSaving"
+                @click="saveCurrentJobDescription"
+              >
+                保存并索引 JD
+              </el-button>
+              <el-button
+                v-if="jobDescriptionMetadata"
+                type="danger"
+                plain
+                :loading="jobDescriptionDeleting"
+                @click="removeCurrentJobDescription"
+              >
+                删除私有 JD
+              </el-button>
+              <span v-if="!currentResume" class="job-index-hint">请先保存简历，再建立私有 JD 索引。</span>
+            </div>
+            <div v-loading="jobDescriptionLoading" class="job-index-status" :class="jobDescriptionMetadata?.status || 'empty'">
+              <template v-if="jobDescriptionMetadata">
+                <div>
+                  <strong>{{ jobDescriptionStatusLabel(jobDescriptionMetadata.status) }}</strong>
+                  <span>{{ jobDescriptionMetadata.fileName }} · {{ jobDescriptionMetadata.chunkCount || 0 }} 个切块</span>
+                </div>
+                <p v-if="jobDescriptionMetadata.errorMessage">{{ jobDescriptionMetadata.errorMessage }}</p>
+                <small>仅当前账号和简历可检索；深度诊断会按 userId + resumeId 读取，不会把 JD 当作普通简历正文。</small>
+              </template>
+              <span v-else>尚未为当前简历建立 JD 索引</span>
+            </div>
+          </div>
         </div>
 
         <section v-if="jobWorkspaceAnalysis" class="job-analysis-overview">
@@ -561,7 +614,7 @@
 
         <div class="ai-mode-tip">
           <span class="ai-mode-tag">事实优先</span>
-          <p>本地覆盖分析不消耗 AI 权益；深度诊断会把 JD 与当前简历一并发送给已配置的 AI/Agent，并保留运行记录。</p>
+          <p>本地覆盖分析不消耗 AI 权益；深度诊断会让 Agent 按当前用户与简历检索已索引 JD，并保留运行记录。</p>
         </div>
 
         <el-empty
@@ -860,12 +913,16 @@ import { resolveTemplatePreset, resolveTemplateVariant } from '@/core-resume/tem
 import {
   createResume,
   createResumeVersionSnapshot,
+  deleteResumeJobDescription,
   exportResumePdfByHtml,
   getResume,
+  getResumeJobDescription,
   listResumeVersions,
   rollbackResumeVersion,
+  saveResumeJobDescription,
   updateResume,
   uploadResumePhoto,
+  type JobDescriptionMetadata,
 } from '@/api/resume'
 import { getTemplateDetail } from '@/api/template'
 import { aiDiagnose, aiGenerate, aiPolish, type AiDiagnoseResponse, type AiGenerateResponse, type PolishSuggestion } from '@/api/ai'
@@ -1003,6 +1060,14 @@ const aiDiagnoseResult = ref<AiDiagnoseResponse | null>(null)
 const jobTargetCompany = ref('')
 const jobTargetTitle = ref('')
 const jobDescription = ref('')
+const jobDescriptionSourceMode = ref<'text' | 'file'>('text')
+const jobDescriptionFile = ref<File | null>(null)
+const jobDescriptionFileText = ref('')
+const jobDescriptionMetadata = ref<JobDescriptionMetadata | null>(null)
+const jobDescriptionLoading = ref(false)
+const jobDescriptionSaving = ref(false)
+const jobDescriptionDeleting = ref(false)
+const indexedJobDescriptionSignature = ref('')
 const jobWorkspaceAnalysis = ref<JobWorkspaceAnalysis | null>(null)
 const savingJobVersion = ref(false)
 const aiLoading = ref(false)
@@ -1015,6 +1080,7 @@ const aiModel = ref('')
 const aiExecutionMode = ref<'' | 'mock' | 'prepared' | 'live'>('')
 const aiPromptPreview = ref('')
 const aiTargetJobTitle = ref('')
+const aiReferenceExamples = ref(false)
 const aiDialogState = ref<AiDialogState>({
   sectionId: '',
   itemIndex: 0,
@@ -1452,6 +1518,8 @@ async function requestAiPolish(inputText: string, sectionType: CoreSectionType) 
       inputText,
       sectionType,
       jobTitle: aiTargetJobTitle.value,
+      resumeId: currentResume.value?.id ? String(currentResume.value.id) : undefined,
+      includeExemplars: aiReferenceExamples.value,
     })
     aiSuggestions.value = (response.data.suggestions || [])
       .map(normalizeAiSuggestion)
@@ -1485,6 +1553,8 @@ async function requestAiGenerate(sectionType: CoreSectionType) {
       jobTitle: aiTargetJobTitle.value || documentState.value.profile.title || '目标岗位',
       sectionType,
       contextText,
+      resumeId: currentResume.value?.id ? String(currentResume.value.id) : undefined,
+      includeExemplars: aiReferenceExamples.value,
     })
     aiSuggestions.value = buildGenerateSuggestions(response.data, sectionType)
     aiTokenUsed.value = response.data.tokenUsed || 0
@@ -1500,32 +1570,52 @@ async function requestAiGenerate(sectionType: CoreSectionType) {
   }
 }
 
-function openJobWorkspace() {
+async function openJobWorkspace() {
   aiDiagnoseVisible.value = true
   if (!jobTargetTitle.value) {
     jobTargetTitle.value = documentState.value.targeting?.jobTitle || documentState.value.profile.title || ''
   }
+  await loadCurrentJobDescription()
 }
 
 async function runJobDiagnosis() {
   aiDiagnoseVisible.value = true
   const jobTitle = jobTargetTitle.value.trim()
-  const jdText = jobDescription.value.trim()
+  const jdText = currentJobDescriptionAnalysisText()
   if (!jobTitle) {
     ElMessage.warning('请先填写目标岗位')
     return
   }
-  if (jdText.length < 40) {
+  if (jobDescriptionSourceMode.value === 'text' && jdText.length < 40) {
     ElMessage.warning('请粘贴更完整的 JD，至少包含岗位职责或任职要求')
     return
   }
+  if (
+    jobDescriptionSourceMode.value === 'file' &&
+    !jobDescriptionFile.value &&
+    jobDescriptionMetadata.value?.status !== 'ready'
+  ) {
+    ElMessage.warning('请选择 JD 文件并完成索引')
+    return
+  }
 
-  jobWorkspaceAnalysis.value = analyzeJobWorkspace(jdText)
+  const savedResumeId = currentResume.value?.id
+  if (!savedResumeId) {
+    ElMessage.warning('请先保存当前简历，再建立并使用岗位 JD 索引')
+    return
+  }
+
+  const indexed = await ensureCurrentJobDescriptionIndexed()
+  if (!indexed) return
+
+  if (jdText.length >= 40) {
+    jobWorkspaceAnalysis.value = analyzeJobWorkspace(jdText)
+  }
   documentState.value.targeting = {
     jobTitle,
     company: jobTargetCompany.value.trim() || undefined,
-    jdText,
-    keywords: jobWorkspaceAnalysis.value.requirements.map((item) => item.keyword),
+    jdText: jdText || documentState.value.targeting?.jdText || '',
+    keywords: jobWorkspaceAnalysis.value?.requirements.map((item) => item.keyword) || [],
     analyzedAt: Date.now(),
   }
   aiDiagnosing.value = true
@@ -1533,18 +1623,30 @@ async function runJobDiagnosis() {
 
   try {
     const response = await aiDiagnose({
-      resumeId: resumeId.value || undefined,
+      resumeId: String(savedResumeId),
       jobTitle,
       templateVariant: resolveTemplateVariant(documentState.value as VariantAwareDocument),
       content: buildAiDiagnoseContent(),
-      contentText: `【职位描述 JD】\n${jdText}\n\n【当前简历】\n${buildAiDiagnoseText()}`,
-      userInstruction: '请逐条对照 JD 与简历证据，指出已匹配项、缺口和应修改的简历模块。不得编造经历、工具、公司、学校、证书或量化结果。',
+      contentText: buildAiDiagnoseText(),
+      userInstruction: '请检索当前 userId + resumeId 绑定的私有岗位 JD，逐条对照 JD 与简历证据，指出已匹配项、缺口和应修改的简历模块。不得编造经历、工具、公司、学校、证书或量化结果。',
     })
+
+    const usedCurrentJobDescription = response.data.sources?.some((source) =>
+      source.sourceType === 'job-description' &&
+      source.factType === 'job_context' &&
+      String(source.resumeId || '') === String(savedResumeId),
+    )
+    if (!usedCurrentJobDescription) {
+      throw new Error('Agent 未命中当前简历绑定的私有 JD，请重新保存并索引后再试')
+    }
 
     aiDiagnoseResult.value = response.data
   } catch (error) {
     console.error('AI 深度诊断失败:', error)
-    ElMessage.warning('本地岗位覆盖分析已完成；AI 深度诊断暂不可用')
+    ElMessage.warning(resolveAiErrorMessage(
+      error,
+      '本地岗位覆盖分析已完成；AI 深度诊断暂不可用，请确认私有 JD 已成功索引',
+    ))
   } finally {
     aiDiagnosing.value = false
   }
@@ -1555,7 +1657,153 @@ function hydrateJobWorkspace() {
   jobTargetCompany.value = targeting?.company || ''
   jobTargetTitle.value = targeting?.jobTitle || documentState.value.profile.title || ''
   jobDescription.value = targeting?.jdText || ''
+  jobDescriptionSourceMode.value = 'text'
   jobWorkspaceAnalysis.value = targeting?.jdText ? analyzeJobWorkspace(targeting.jdText) : null
+}
+
+async function loadCurrentJobDescription() {
+  const savedResumeId = currentResume.value?.id
+  if (!savedResumeId) {
+    jobDescriptionMetadata.value = null
+    indexedJobDescriptionSignature.value = ''
+    return
+  }
+  jobDescriptionLoading.value = true
+  try {
+    const metadata = await getResumeJobDescription(savedResumeId)
+    jobDescriptionMetadata.value = metadata
+    if (metadata?.status === 'ready') {
+      if (!jobDescription.value.trim()) jobDescriptionSourceMode.value = 'file'
+      indexedJobDescriptionSignature.value = currentJobDescriptionSignature()
+    }
+  } catch (error) {
+    console.error('加载岗位 JD 元数据失败:', error)
+  } finally {
+    jobDescriptionLoading.value = false
+  }
+}
+
+async function handleJobDescriptionFileChange(file: any) {
+  const raw = file?.raw as File | undefined
+  jobDescriptionFile.value = raw || null
+  jobDescriptionFileText.value = ''
+  if (raw && /\.(txt|md|markdown)$/i.test(raw.name)) {
+    try {
+      jobDescriptionFileText.value = (await raw.text()).trim()
+    } catch (error) {
+      console.error('读取 JD 文本文件失败:', error)
+    }
+  }
+}
+
+function handleJobDescriptionFileRemove() {
+  jobDescriptionFile.value = null
+  jobDescriptionFileText.value = ''
+}
+
+function currentJobDescriptionAnalysisText() {
+  return (
+    jobDescriptionSourceMode.value === 'file'
+      ? jobDescriptionFileText.value
+      : jobDescription.value
+  ).trim()
+}
+
+function currentJobDescriptionSignature() {
+  if (jobDescriptionSourceMode.value === 'file') {
+    const file = jobDescriptionFile.value
+    if (file) return `file:${file.name}:${file.size}:${file.lastModified}`
+    const metadata = jobDescriptionMetadata.value
+    return metadata ? `metadata:${metadata.id}:${metadata.updateTime}` : ''
+  }
+  const text = jobDescription.value.trim()
+  return text ? `text:${text}` : ''
+}
+
+async function saveCurrentJobDescription(): Promise<boolean> {
+  const savedResumeId = currentResume.value?.id
+  if (!savedResumeId) {
+    ElMessage.warning('请先保存当前简历，再上传或粘贴岗位 JD')
+    return false
+  }
+  const input: { file?: File; text?: string } = jobDescriptionSourceMode.value === 'file'
+    ? { file: jobDescriptionFile.value || undefined }
+    : { text: jobDescription.value.trim() || undefined }
+  if (!input.file && !input.text) {
+    ElMessage.warning(jobDescriptionSourceMode.value === 'file' ? '请选择 JD 文件' : '请粘贴岗位 JD')
+    return false
+  }
+
+  jobDescriptionSaving.value = true
+  try {
+    const metadata = await saveResumeJobDescription(savedResumeId, input)
+    jobDescriptionMetadata.value = metadata
+    if (metadata.status !== 'ready') {
+      indexedJobDescriptionSignature.value = ''
+      ElMessage.error(metadata.errorMessage || 'JD 文件已保存，但索引失败')
+      return false
+    }
+    indexedJobDescriptionSignature.value = currentJobDescriptionSignature()
+    ElMessage.success(`JD 已索引，共 ${metadata.chunkCount || 0} 个切块`)
+    return true
+  } catch (error) {
+    console.error('保存岗位 JD 失败:', error)
+    ElMessage.error('岗位 JD 保存或索引失败')
+    return false
+  } finally {
+    jobDescriptionSaving.value = false
+  }
+}
+
+async function ensureCurrentJobDescriptionIndexed() {
+  const signature = currentJobDescriptionSignature()
+  if (
+    signature &&
+    signature === indexedJobDescriptionSignature.value &&
+    jobDescriptionMetadata.value?.status === 'ready'
+  ) {
+    return true
+  }
+  if (
+    jobDescriptionSourceMode.value === 'file' &&
+    !jobDescriptionFile.value &&
+    jobDescriptionMetadata.value?.status === 'ready'
+  ) {
+    indexedJobDescriptionSignature.value = signature
+    return true
+  }
+  return saveCurrentJobDescription()
+}
+
+async function removeCurrentJobDescription() {
+  const savedResumeId = currentResume.value?.id
+  if (!savedResumeId || !jobDescriptionMetadata.value) return
+  await ElMessageBox.confirm(
+    '确定删除当前简历绑定的私有 JD 原文件和全部向量切块吗？本地输入会保留。',
+    '删除私有 JD',
+    { type: 'warning' },
+  )
+  jobDescriptionDeleting.value = true
+  try {
+    await deleteResumeJobDescription(savedResumeId)
+    jobDescriptionMetadata.value = null
+    indexedJobDescriptionSignature.value = ''
+    jobDescriptionFile.value = null
+    jobDescriptionFileText.value = ''
+    ElMessage.success('私有 JD 及其索引已删除，本地输入仍保留')
+  } finally {
+    jobDescriptionDeleting.value = false
+  }
+}
+
+function jobDescriptionStatusLabel(status: JobDescriptionMetadata['status']) {
+  return ({
+    pending: '等待索引',
+    indexing: '正在索引',
+    ready: '索引可用',
+    failed: '索引失败',
+    disabled: '已停用',
+  } as Record<JobDescriptionMetadata['status'], string>)[status]
 }
 
 function analyzeJobWorkspace(jdText: string): JobWorkspaceAnalysis {
@@ -1657,7 +1905,7 @@ async function saveJobTargetVersion() {
     documentState.value.targeting = {
       jobTitle,
       company: jobTargetCompany.value.trim() || undefined,
-      jdText: jobDescription.value.trim(),
+      jdText: currentJobDescriptionAnalysisText() || jobDescription.value.trim(),
       keywords: jobWorkspaceAnalysis.value.requirements.map((item) => item.keyword),
       analyzedAt: Date.now(),
     }
@@ -1775,6 +2023,9 @@ function resolveAiErrorMessage(error: unknown, fallback: string) {
   }
 
   if (!response) {
+    if (error instanceof Error && error.message.startsWith('Agent 未命中')) {
+      return error.message
+    }
     return 'AI 请求失败，请检查网络连接后重试'
   }
 
@@ -2432,7 +2683,10 @@ async function exportPdf() {
     const exportTitle = buildResumeTitle(documentState.value.profile)
     const exportFilename = buildResumePdfFilename()
     const html = buildCoreResumePrintHtml(sheet.outerHTML, exportTitle)
-    const { url, pageCount } = await exportResumePdfByHtml(html)
+    const { url, pageCount } = await exportResumePdfByHtml(html, {
+      resumeId: currentResume.value?.id,
+      templateId: Number(documentState.value.templateId || templateId.value || 0) || undefined,
+    })
     await downloadPdf(url, exportFilename)
     ElMessage.success(`PDF 已导出，共 ${pageCount} 页`)
   } catch (error) {
@@ -3948,6 +4202,61 @@ function hasSectionContent(item: CoreResumeItem) {
   background: linear-gradient(135deg, #f8fbff, #eef6ff);
   border: 1px solid #cfe1ff;
 }
+
+.job-description-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.job-description-heading,
+.job-index-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.job-file-panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed #93c5fd;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.job-file-panel p,
+.job-index-status p,
+.job-index-status small,
+.job-index-hint {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.job-index-status {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #fff;
+  color: #475569;
+}
+
+.job-index-status > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-index-status.ready strong { color: #15803d; }
+.job-index-status.failed strong { color: #b91c1c; }
+.job-index-status.indexing strong,
+.job-index-status.pending strong { color: #b45309; }
 
 .job-analysis-overview {
   display: grid;

@@ -93,6 +93,7 @@ export class AdminUserResponseDto {
   phone?: string;
   role: string;
   status: number;
+  tokenVersion?: number;
   createTime: Date;
   updateTime: Date;
 }

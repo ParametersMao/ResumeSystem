@@ -36,10 +36,10 @@ echo 执行以下命令启动服务：
 echo npm run start:dev
 echo.
 echo 服务启动后，访问：http://localhost:3000
-echo 默认管理员账户：admin / admin123
+echo 未创建固定管理员账户。请通过环境变量配置一次性 BOOTSTRAP_ADMIN_USERNAME 和 BOOTSTRAP_ADMIN_PASSWORD。
 
 echo.
 echo ========================================
 echo 配置完成！
 echo ========================================
-pause 
+pause

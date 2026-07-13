@@ -1,4 +1,4 @@
-import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class AiPolishDto {
   @IsString()
@@ -14,6 +14,15 @@ export class AiPolishDto {
   @IsString()
   @MaxLength(128)
   jobTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  resumeId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeExemplars?: boolean;
 }
 
 export class AiGenerateDto {
@@ -30,6 +39,15 @@ export class AiGenerateDto {
   @IsString()
   @MaxLength(4000)
   contextText?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  resumeId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeExemplars?: boolean;
 }
 
 export class AiDiagnoseDto {

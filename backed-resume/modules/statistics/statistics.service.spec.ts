@@ -167,4 +167,34 @@ describe('StatisticsService', () => {
       expect(result[0].ai_operation_count).toBe(5);
     });
   });
+
+  describe('exportData', () => {
+    it('exports a real UTF-8 CSV and neutralizes spreadsheet formulas', async () => {
+      mockRepository.query.mockResolvedValue([{
+        id: 1,
+        username: '=HYPERLINK("https://example.invalid")',
+        email: 'user@example.com',
+      }]);
+
+      const result = await service.exportData('users', 'csv');
+      const text = result.body.toString('utf8');
+
+      expect(result.rowCount).toBe(1);
+      expect(result.contentType).toContain('text/csv');
+      expect(text).toContain("'=HYPERLINK");
+      expect(mockRepository.query).toHaveBeenCalledWith(
+        expect.stringContaining('FROM c_users'),
+        [],
+      );
+    });
+
+    it('exports JSON without sensitive password fields', async () => {
+      mockRepository.query.mockResolvedValue([{ id: 1, username: 'safe-user' }]);
+
+      const result = await service.exportData('users', 'json', '2026-01-01', '2026-01-31');
+
+      expect(result.body.toString('utf8')).not.toContain('password');
+      expect(result.fileName).toMatch(/users-\d{4}-\d{2}-\d{2}\.json/);
+    });
+  });
 });

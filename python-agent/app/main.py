@@ -12,10 +12,17 @@ from .rag import (
     search_documents,
     set_document_enabled,
 )
-from .schemas import AgentRequest, AgentResponse, RagEnabledRequest, RagSearchRequest
+from .schemas import (
+    AgentRequest,
+    AgentResponse,
+    RagEnabledRequest,
+    RagScope,
+    RagSearchRequest,
+    RagSourceType,
+)
 
 
-app = FastAPI(title="Resume Agent Service", version="1.0.0")
+app = FastAPI(title="Resume Agent Service", version="1.3.0")
 MAX_RAG_FILE_BYTES = 10 * 1024 * 1024
 
 
@@ -35,7 +42,7 @@ def health() -> dict:
     return {
         "status": "ok" if rag.get("qdrant_reachable") else "degraded",
         "service": "resume-agent",
-        "version": "1.0.0",
+        "version": "1.3.0",
         "rag": rag,
     }
 
@@ -87,24 +94,51 @@ async def rag_index(
     document_id: int = Form(...),
     name: str = Form(...),
     category: str = Form("general"),
+    source_type: RagSourceType = Form("standard"),
+    scope: RagScope = Form("global"),
+    owner_user_id: int | None = Form(None),
+    resume_id: str | None = Form(None),
+    licensed: bool = Form(False),
+    pii_reviewed: bool = Form(False),
+    expires_at: str | None = Form(None),
     file: UploadFile = File(...),
 ) -> dict:
     data = await file.read(MAX_RAG_FILE_BYTES + 1)
     if len(data) > MAX_RAG_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Knowledge document must not exceed 10MB")
-    return index_document(
-        document_id=document_id,
-        name=name,
-        category=category,
-        file_name=file.filename or "document.txt",
-        content_type=file.content_type or "application/octet-stream",
-        data=data,
-    )
+    try:
+        return index_document(
+            document_id=document_id,
+            name=name,
+            category=category,
+            file_name=file.filename or "document.txt",
+            content_type=file.content_type or "application/octet-stream",
+            data=data,
+            source_type=source_type,
+            scope=scope,
+            owner_user_id=owner_user_id,
+            resume_id=resume_id,
+            licensed=licensed,
+            pii_reviewed=pii_reviewed,
+            expires_at=expires_at,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)[:500]) from error
 
 
 @app.post("/rag/search", dependencies=[Depends(require_internal_secret)])
 def rag_search(request: RagSearchRequest) -> dict:
-    return {"results": search_documents(request.query, request.limit, request.category)}
+    return {
+        "results": search_documents(
+            request.query,
+            request.limit,
+            request.category,
+            source_types=request.source_types,
+            scope=request.scope,
+            owner_user_id=request.owner_user_id,
+            resume_id=request.resume_id,
+        )
+    }
 
 
 @app.delete(

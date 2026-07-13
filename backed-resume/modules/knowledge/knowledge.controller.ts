@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -22,10 +23,13 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { KnowledgeService } from './knowledge.service';
 import {
+  AdminKnowledgeUploadDto,
   KnowledgeDocumentQueryDto,
   KnowledgeSearchDto,
   KnowledgeToggleDto,
 } from '../../dto/knowledge-document.dto';
+import { MAX_KNOWLEDGE_FILE_SIZE } from './knowledge-file-validation';
+import { AdminOnlyGuard, AdminRoles } from '../auth/admin-only.guard';
 
 function ensureAdmin(req: any) {
   if (!req.user?.id || req.user.type !== 'admin') {
@@ -35,7 +39,7 @@ function ensureAdmin(req: any) {
 }
 
 @Controller('api/admin/knowledge-documents')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AdminOnlyGuard)
 export class KnowledgeController {
   constructor(private readonly knowledgeService: KnowledgeService) {}
 
@@ -49,25 +53,29 @@ export class KnowledgeController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 20 * 1024 * 1024 },
+      limits: { fileSize: MAX_KNOWLEDGE_FILE_SIZE },
       fileFilter: (_req, file, callback) => {
         const allowed = /\.(pdf|docx|txt|md|markdown)$/i.test(file.originalname);
-        callback(allowed ? null : new Error('仅支持 PDF、DOCX、TXT、Markdown 文件'), allowed);
+        callback(
+          allowed ? null : new BadRequestException('仅支持 PDF、DOCX、TXT、Markdown 文件'),
+          allowed,
+        );
       },
     }),
   )
   async upload(
     @Request() req,
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { name?: string; category?: string; description?: string },
+    @Body() body: AdminKnowledgeUploadDto,
   ) {
     const adminId = ensureAdmin(req);
-    if (!file) throw new Error('请选择要上传的知识文档');
+    if (!file) throw new BadRequestException('请选择要上传的知识文档');
     const data = await this.knowledgeService.upload({ ...body, file, adminId });
     return { code: 200, message: data.status === 'ready' ? '上传并索引成功' : '文件已上传，但索引失败', data };
   }
 
   @Post('search')
+  @AdminRoles('admin', 'operator', 'viewer')
   async search(@Request() req, @Body() dto: KnowledgeSearchDto) {
     ensureAdmin(req);
     return {
@@ -92,6 +100,8 @@ export class KnowledgeController {
     ensureAdmin(req);
     const file = await this.knowledgeService.getFile(id);
     response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader(
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,

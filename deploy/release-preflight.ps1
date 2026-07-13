@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $required = @(
   'MYSQL_ROOT_PASSWORD', 'DB_PASSWORD', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET',
-  'EMAIL_CODE_SECRET', 'AGENT_INTERNAL_SECRET', 'OPENAI_API_KEY'
+  'EMAIL_CODE_SECRET', 'AGENT_INTERNAL_SECRET', 'OPENAI_API_KEY', 'SYSTEM_CONFIG_MASTER_KEY'
 )
 
 if (-not (Test-Path -LiteralPath $EnvFile)) {
@@ -30,6 +30,14 @@ foreach ($name in $required) {
 foreach ($name in @('JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'EMAIL_CODE_SECRET', 'AGENT_INTERNAL_SECRET')) {
   if ([string]$values[$name] -and ([string]$values[$name]).Length -lt 32) {
     $errors += "$name must be at least 32 characters"
+  }
+}
+try {
+  $masterKeyBytes = [Convert]::FromBase64String([string]$values['SYSTEM_CONFIG_MASTER_KEY'])
+  if ($masterKeyBytes.Length -ne 32) { $errors += 'SYSTEM_CONFIG_MASTER_KEY must decode to exactly 32 bytes' }
+} catch {
+  if ([string]$values['SYSTEM_CONFIG_MASTER_KEY'] -notmatch '^[0-9a-fA-F]{64}$') {
+    $errors += 'SYSTEM_CONFIG_MASTER_KEY must be 32-byte base64 or 64 hexadecimal characters'
   }
 }
 if ($values['JWT_ACCESS_SECRET'] -eq $values['JWT_REFRESH_SECRET']) {

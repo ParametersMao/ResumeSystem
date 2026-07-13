@@ -15,8 +15,8 @@
 - 管理端默认端口：`3030`
 - 后端默认端口：`3000`
 - MySQL 默认端口：`3306`
-- 测试账号：`testuser / 123456`
-- 管理员账号：`admin / admin123`
+- 测试账号：历史环境账号已轮换；凭据只通过 QA 运行时环境变量传入。
+- 管理员账号：历史默认账号已轮换；新环境不再种入固定密码。
 - AI：当前保留 DeepSeek/OpenAI-compatible 直连能力；MVP 阶段 RAG 与 Qdrant 可延后启用
 - 邮箱：生产注册依赖 SMTP；未配置 SMTP 时应明确提示，不应表现为未知失败
 
@@ -75,7 +75,7 @@ docker compose ps
 
 手工主流程：
 
-1. 登录 `testuser / 123456`。
+1. 使用通过运行时环境变量提供的 QA 账号登录。
 2. 创建或打开简历。
 3. 上传证件照。
 4. 保存并刷新确认数据仍在。
@@ -200,7 +200,7 @@ docker compose ps
 - API 验证：
   - `GET /api/health`：200
   - `GET /api/templates?page=1&limit=100&status=true&sortBy=recommended`：200，`total=7`，响应头 `Cache-Control=no-store...`
-  - `POST /api/auth/cuser/login`：`testuser / 123456` 登录成功
+  - `POST /api/auth/cuser/login`：当时的 QA 账号登录成功（凭据已轮换）
   - `POST /api/resumes`：创建成功，返回有效 `id`
   - `PUT /api/resumes/:id`：保存成功
   - `PUT /api/resumes/NaN`：400，阻断 SQL 层 NaN 错误
@@ -236,4 +236,4 @@ docker compose ps
   - `/admin/` 和 `/admin/login` 返回后台 HTML。
   - `/admin/js/...` 与 `/admin/css/...` 静态资源返回 200。
   - Playwright 打开 `/admin/login`：页面标题为“简历中台系统”，`#app` 正常挂载，控制台错误 0。
-  - `POST /api/auth/login` 使用 `admin / admin123` 返回 200。
+  - `POST /api/auth/login` 使用当时的管理员 QA 账号返回 200（凭据已轮换）。

@@ -80,8 +80,15 @@ export class ResumesController {
   async exportPdf(
     @Request() req,
     @Body('html') html: string,
+    @Body('resumeId') resumeId?: number,
+    @Body('templateId') templateId?: number,
   ): Promise<ApiResponse<{ url: string; pageCount: number }>> {
-    const result = await this.resumesService.exportPdf(html, currentCuserId(req));
+    const result = await this.resumesService.exportPdf(
+      html,
+      currentCuserId(req),
+      resumeId,
+      templateId,
+    );
     return { code: 200, message: 'Exported', data: result };
   }
 

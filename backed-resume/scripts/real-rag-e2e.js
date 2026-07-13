@@ -2,13 +2,19 @@ const { readFileSync } = require('fs')
 const { resolve } = require('path')
 
 const baseUrl = String(process.env.QA_API_BASE_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '')
-const adminUsername = process.env.QA_ADMIN_USERNAME || 'admin'
-const adminPassword = process.env.QA_ADMIN_PASSWORD || 'admin123'
-const userUsername = process.env.QA_USERNAME || 'testuser'
-const userPassword = process.env.QA_PASSWORD || '123456'
+const adminUsername = requiredEnv('QA_ADMIN_USERNAME')
+const adminPassword = requiredEnv('QA_ADMIN_PASSWORD')
+const userUsername = requiredEnv('QA_USERNAME')
+const userPassword = requiredEnv('QA_PASSWORD')
 const apiKey = String(process.env.QA_LLM_API_KEY || '').trim()
 const documentName = '标准简历知识库 v1'
 const documentPath = resolve(__dirname, '../../docs/knowledge-base/resume-writing-standard-v1.md')
+
+function requiredEnv(name) {
+  const value = String(process.env[name] || '').trim()
+  if (!value) throw new Error(`缺少 ${name}；测试凭据只允许通过运行时环境变量传入。`)
+  return value
+}
 
 async function main() {
   if (!apiKey) throw new Error('缺少 QA_LLM_API_KEY；密钥只允许通过运行时环境变量传入。')
@@ -52,7 +58,10 @@ async function main() {
       timeout: 240000,
     })
     document = uploaded.data
-  } else if (document.status !== 'ready' || Number(document.chunkCount) < 1) {
+  } else {
+    // v1.3 added source/scope payload filters. Old points can look healthy in
+    // MySQL while being invisible to the new Agent, so every release E2E must
+    // force a metadata-aware rebuild.
     const reindexed = await api(`/api/admin/knowledge-documents/${document.id}/reindex`, {
       method: 'POST',
       token: adminToken,

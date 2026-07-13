@@ -19,7 +19,7 @@ No third-party template assets or exact copyrighted layout files were copied int
 - Backend: `http://localhost:3000`
 - Admin: `http://localhost:3030`
 - Browser automation: Playwright with local Chrome executable
-- Test user: `testuser / 123456`
+- Test user: runtime QA account; credentials have been rotated and are supplied only through environment variables.
 - Output folder: `runtime-logs/template-qa-2026-06-29`
 
 ## Summary

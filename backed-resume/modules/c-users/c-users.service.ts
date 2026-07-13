@@ -1,28 +1,43 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { CUser } from '../../entities/c-user.entity';
 import { CreateCUserDto, UpdateCUserDto, UpdateCUserStatusDto, CUserResponseDto } from '../../dto/c-user.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { CUserSearchDto } from '../../dto/c-user.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
 import * as bcrypt from 'bcrypt';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 @Injectable()
 export class CUsersService {
   constructor(
     @InjectRepository(CUser)
     private cUserRepository: Repository<CUser>,
+    private readonly knowledgeService: KnowledgeService,
   ) {}
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginationResponse<CUserResponseDto>> {
-    const { page = 1, limit = 10 } = paginationDto;
+  async findAll(paginationDto: CUserSearchDto): Promise<PaginationResponse<CUserResponseDto>> {
+    const { page = 1, limit = 10, search, status } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const [users, total] = await this.cUserRepository.findAndCount({
-      skip,
-      take: limit,
-      order: { createTime: 'DESC' },
-    });
+    const query = this.cUserRepository
+      .createQueryBuilder('user')
+      .orderBy('user.createTime', 'DESC')
+      .skip(skip)
+      .take(limit);
+    if (search?.trim()) {
+      const keyword = `%${search.trim()}%`;
+      query.andWhere(new Brackets((builder) => {
+        builder
+          .where('user.username LIKE :keyword', { keyword })
+          .orWhere('user.email LIKE :keyword', { keyword })
+          .orWhere('user.phone LIKE :keyword', { keyword });
+      }));
+    }
+    if (status === 0 || status === 1) {
+      query.andWhere('user.status = :status', { status });
+    }
+    const [users, total] = await query.getManyAndCount();
 
     const responseData = users.map(user => this.mapToResponseDto(user));
 
@@ -120,17 +135,20 @@ export class CUsersService {
   async updateStatus(id: number, updateStatusDto: UpdateCUserStatusDto): Promise<CUser> {
     const user = await this.findOne(id);
     user.status = updateStatusDto.status;
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     return this.cUserRepository.save(user);
   }
 
   async resetPassword(id: number, password: string): Promise<CUser> {
     const user = await this.findOne(id);
     user.password = await bcrypt.hash(password, 10);
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     return this.cUserRepository.save(user);
   }
 
   async remove(id: number): Promise<void> {
     const user = await this.findOne(id);
+    await this.knowledgeService.deletePrivateKnowledgeForUser(id);
     await this.cUserRepository.remove(user);
   }
 
@@ -189,7 +207,7 @@ export class CUsersService {
   }
 
   async ensureDevTestUser(): Promise<CUser> {
-    const defaultPassword = '123456';
+    const defaultPassword = process.env.DEV_TEST_USER_PASSWORD || '123456';
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
     const existing = await this.findByUsername('testuser');
 

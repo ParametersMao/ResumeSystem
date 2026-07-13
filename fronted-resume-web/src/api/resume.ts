@@ -28,6 +28,26 @@ export interface ResumeImportResult {
   warnings: string[]
 }
 
+export interface JobDescriptionMetadata {
+  id: number
+  name: string
+  category: 'job-description'
+  sourceType: 'job-description'
+  scope: 'private'
+  ownerUserId: number
+  resumeId: number
+  fileName: string
+  mimeType: string
+  fileSize: number
+  status: 'pending' | 'indexing' | 'ready' | 'failed' | 'disabled'
+  chunkCount: number
+  errorMessage: string
+  enabled: boolean
+  createTime: string
+  updateTime: string
+  expiresAt?: string | null
+}
+
 export async function createResume(templateId: string | undefined, title: string, userId: number, content: string) {
   const payload: Record<string, unknown> = {
     title,
@@ -62,8 +82,14 @@ export async function listMyResumes(userId: number, page = 1, limit = 10) {
   return data.data
 }
 
-export async function exportResumePdfByHtml(html: string) {
-  const { data } = await http.post<ApiResponse<{ url: string; pageCount: number }>>('/api/resumes/export', { html })
+export async function exportResumePdfByHtml(
+  html: string,
+  context: { resumeId?: number; templateId?: number } = {},
+) {
+  const { data } = await http.post<ApiResponse<{ url: string; pageCount: number }>>('/api/resumes/export', {
+    html,
+    ...context,
+  })
   return data.data
 }
 
@@ -83,6 +109,36 @@ export async function parseResumeImport(file: File) {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data.data
+}
+
+export async function saveResumeJobDescription(
+  resumeId: string | number,
+  input: { text?: string; file?: File; expiresAt?: string },
+) {
+  const form = new FormData()
+  if (input.file) form.append('file', input.file)
+  if (input.text) form.append('text', input.text)
+  if (input.expiresAt) form.append('expiresAt', input.expiresAt)
+  const { data } = await http.post<ApiResponse<JobDescriptionMetadata>>(
+    `/api/resumes/${resumeId}/job-description`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+  )
+  return data.data
+}
+
+export async function getResumeJobDescription(resumeId: string | number) {
+  const { data } = await http.get<ApiResponse<JobDescriptionMetadata | null>>(
+    `/api/resumes/${resumeId}/job-description`,
+  )
+  return data.data
+}
+
+export async function deleteResumeJobDescription(resumeId: string | number) {
+  const { data } = await http.delete<ApiResponse<null>>(
+    `/api/resumes/${resumeId}/job-description`,
+  )
+  return data
 }
 
 export async function listResumeVersions(resumeId: string, userId?: number) {

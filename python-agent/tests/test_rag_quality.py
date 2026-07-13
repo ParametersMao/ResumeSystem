@@ -101,6 +101,93 @@ class RagQualityGateTest(unittest.TestCase):
         warnings = result.output.get("warnings", [])
         self.assertTrue(any("35%" in warning and "必须核实" in warning for warning in warnings))
 
+    def test_graph_routes_only_current_resume_private_jd(self) -> None:
+        for document_id, owner_id, resume_id, tenant_token in [
+            (201, 11, "resume-one", "OwnerOnePrivate"),
+            (202, 22, "resume-two", "OwnerTwoPrivate"),
+        ]:
+            rag.index_document(
+                document_id=document_id,
+                name=f"{tenant_token} JD",
+                category="job-guide",
+                file_name=f"{document_id}.txt",
+                content_type="text/plain",
+                data=f"Vue TypeScript 前端工程师 {tenant_token}".encode(),
+                source_type="job-description",
+                scope="private",
+                owner_user_id=owner_id,
+                resume_id=resume_id,
+            )
+        rag.index_document(
+            document_id=203,
+            name="授权脱敏样例",
+            category="example",
+            file_name="example.txt",
+            content_type="text/plain",
+            data="Vue TypeScript 前端工程师 ExampleOnly".encode(),
+            source_type="resume-exemplar",
+            licensed=True,
+            pii_reviewed=True,
+        )
+
+        request = AgentRequest(
+            task_type="diagnose",
+            context=ResumeContext(
+                user_id=11,
+                resume_id="resume-one",
+                job_title="前端工程师",
+                selected_text="Vue TypeScript",
+            ),
+        )
+        perception = AgentStep(
+            name="perception",
+            title="上下文感知",
+            summary="test",
+            output={"job_title": "前端工程师"},
+        )
+        result = retrieval_node(request, perception)
+        ids = {item["documentId"] for item in result.output["sources"]}
+        self.assertIn(201, ids)
+        self.assertNotIn(202, ids)
+        self.assertNotIn(203, ids)
+        self.assertEqual(
+            result.output["sourceTypes"],
+            ["standard", "role-framework", "job-description"],
+        )
+
+        polish = request.model_copy(
+            update={"task_type": "polish", "options": {"includeExemplars": True}}
+        )
+        polish_result = retrieval_node(polish, perception)
+        self.assertIn("resume-exemplar", polish_result.output["sourceTypes"])
+        example_sources = [
+            item
+            for item in polish_result.output["sources"]
+            if item["sourceType"] == "resume-exemplar"
+        ]
+        self.assertTrue(example_sources)
+        self.assertTrue(all(item["factType"] == "example" for item in example_sources))
+
+    def test_resume_diagnosis_fails_when_only_global_sources_match(self) -> None:
+        request = AgentRequest(
+            task_type="diagnose",
+            context=ResumeContext(
+                user_id=11,
+                resume_id="missing-private-jd",
+                job_title="前端工程师",
+                selected_text="Vue TypeScript",
+            ),
+        )
+        perception = AgentStep(
+            name="perception",
+            title="上下文感知",
+            summary="test",
+            output={"job_title": "前端工程师"},
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "私有 JD 诊断失败"):
+            retrieval_node(request, perception)
+
 
 if __name__ == "__main__":
     unittest.main()

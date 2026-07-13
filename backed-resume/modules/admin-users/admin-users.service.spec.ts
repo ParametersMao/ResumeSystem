@@ -24,6 +24,7 @@ describe('AdminUsersService', () => {
     phone: '13800138000',
     role: 'admin',
     status: 1,
+    tokenVersion: 0,
     createTime: new Date('2026-04-01'),
     updateTime: new Date('2026-04-01'),
   };
@@ -174,6 +175,7 @@ describe('AdminUsersService', () => {
       await service.resetPassword(1, 'newpassword123');
 
       expect(bcrypt.hash).toHaveBeenCalledWith('newpassword123', 10);
+      expect(mockAdminUser.tokenVersion).toBeGreaterThan(0);
     });
   });
 
@@ -203,6 +205,41 @@ describe('AdminUsersService', () => {
       const result = await service.findByUsername('nonexistent');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('ensureBootstrapAdminAccount', () => {
+    it('creates a one-time bootstrap administrator with a strong bcrypt cost', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
+      mockRepository.create.mockImplementation((value) => value);
+      mockRepository.save.mockImplementation(async (value) => ({ id: 2, ...value }));
+
+      const result = await service.ensureBootstrapAdminAccount('release-admin', 'a-long-bootstrap-password');
+
+      expect(bcrypt.hash).toHaveBeenCalledWith('a-long-bootstrap-password', 12);
+      expect(mockRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+        username: 'release-admin',
+        role: 'admin',
+        status: 1,
+        tokenVersion: 0,
+      }));
+      expect(result.username).toBe('release-admin');
+    });
+
+    it('never resets an existing administrator password', async () => {
+      mockRepository.findOne.mockResolvedValue(mockAdminUser);
+
+      const result = await service.ensureBootstrapAdminAccount('admin', 'a-long-bootstrap-password');
+
+      expect(result).toBe(mockAdminUser);
+      expect(bcrypt.hash).not.toHaveBeenCalled();
+      expect(mockRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects weak bootstrap passwords', async () => {
+      await expect(service.ensureBootstrapAdminAccount('admin', 'short')).rejects.toThrow(
+        'password of at least 12 characters',
+      );
     });
   });
 });

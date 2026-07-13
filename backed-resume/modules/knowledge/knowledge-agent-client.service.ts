@@ -1,4 +1,5 @@
 import { BadGatewayException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { KnowledgeScope, KnowledgeSourceType } from '../../dto/knowledge-document.dto';
 
 interface IndexResult {
   document_id: number;
@@ -12,12 +13,26 @@ export class KnowledgeAgentClientService {
     documentId: number;
     name: string;
     category: string;
+    sourceType: KnowledgeSourceType;
+    scope: KnowledgeScope;
+    ownerUserId?: number | null;
+    resumeId?: number | null;
+    licensed?: boolean;
+    piiReviewed?: boolean;
+    expiresAt?: Date | null;
     file: Express.Multer.File;
   }): Promise<IndexResult> {
     const form = new FormData();
     form.append('document_id', String(input.documentId));
     form.append('name', input.name);
     form.append('category', input.category);
+    form.append('source_type', input.sourceType);
+    form.append('scope', input.scope);
+    if (input.ownerUserId) form.append('owner_user_id', String(input.ownerUserId));
+    if (input.resumeId) form.append('resume_id', String(input.resumeId));
+    form.append('licensed', String(Boolean(input.licensed)));
+    form.append('pii_reviewed', String(Boolean(input.piiReviewed)));
+    if (input.expiresAt) form.append('expires_at', input.expiresAt.toISOString());
     form.append(
       'file',
       new Blob([input.file.buffer], { type: input.file.mimetype }),
@@ -38,11 +53,29 @@ export class KnowledgeAgentClientService {
     });
   }
 
-  async search(query: string, limit: number, category?: string) {
+  async search(
+    query: string,
+    limit: number,
+    category?: string,
+    filters: {
+      sourceTypes?: KnowledgeSourceType[];
+      scope?: KnowledgeScope;
+      ownerUserId?: number;
+      resumeId?: number;
+    } = {},
+  ) {
     return this.request<{ results: Array<Record<string, any>> }>('/rag/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, limit, category: category || null }),
+      body: JSON.stringify({
+        query,
+        limit,
+        category: category || null,
+        sourceTypes: filters.sourceTypes || null,
+        scope: filters.scope || null,
+        ownerUserId: filters.ownerUserId || null,
+        resumeId: filters.resumeId ? String(filters.resumeId) : null,
+      }),
     });
   }
 

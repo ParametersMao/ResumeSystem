@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
 import { buildAllowedOrigins, isOriginAllowed } from './cors';
+import { isPrivateKnowledgeUploadPath } from './security/upload-static-access';
 
 async function bootstrap() {
   // 全局异常监听，输出所有未捕获异常
@@ -55,7 +56,17 @@ async function bootstrap() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // 静态资源：本地上传文件与 mock 资源（不接 OSS 的阶段性方案）
-  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+  app.use(
+    '/uploads',
+    (req, res, next) => {
+      if (isPrivateKnowledgeUploadPath(req.url || req.path)) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(404).end();
+      }
+      return next();
+    },
+    express.static(join(process.cwd(), 'uploads')),
+  );
   app.use('/mock', express.static(join(process.cwd(), 'public', 'mock')));
 
   await app.listen(process.env.PORT || 3000);
