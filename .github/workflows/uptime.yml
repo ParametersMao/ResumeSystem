@@ -1,8 +1,9 @@
 name: production-uptime
 
 on:
-  schedule:
-    - cron: "*/10 * * * *"
+  # The ECS-local systemd timer is the active five-minute monitor. Keep the
+  # GitHub probe manual until the Alibaba Cloud edge policy stops resetting
+  # GitHub-hosted runner connections before they reach Nginx.
   workflow_dispatch:
 
 permissions:
