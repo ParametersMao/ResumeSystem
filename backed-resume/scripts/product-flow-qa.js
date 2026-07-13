@@ -12,7 +12,11 @@ function requiredEnv(name) {
 }
 
 async function main() {
-  const browser = await puppeteer.launch({ headless: true, executablePath: resolveBrowserPath() })
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: resolveBrowserPath(),
+    args: browserLaunchArgs(),
+  })
   const page = await browser.newPage()
   await page.setViewport({ width: 1440, height: 1000 })
   const errors = []
@@ -151,6 +155,12 @@ function resolveBrowserPath() {
   const resolved = candidates.find((candidate) => existsSync(candidate))
   if (!resolved) throw new Error('未找到 Chrome/Edge/Chromium，请通过 QA_BROWSER_PATH 指定。')
   return resolved
+}
+
+function browserLaunchArgs() {
+  return typeof process.getuid === 'function' && process.getuid() === 0
+    ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    : []
 }
 
 main().catch((error) => {

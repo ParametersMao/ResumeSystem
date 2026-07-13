@@ -9,6 +9,7 @@ async function main() {
   const browser = await puppeteer.launch({
     headless: true,
     ...(executablePath ? { executablePath } : {}),
+    args: browserLaunchArgs(),
   })
   const page = await browser.newPage()
   await page.setViewport({ width: 1440, height: 1200, deviceScaleFactor: 1 })
@@ -99,6 +100,12 @@ function resolveBrowserPath() {
     '/usr/bin/google-chrome',
   ].filter(Boolean)
   return candidates.find((candidate) => existsSync(candidate))
+}
+
+function browserLaunchArgs() {
+  return typeof process.getuid === 'function' && process.getuid() === 0
+    ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    : []
 }
 
 main().catch((error) => {
