@@ -17,12 +17,20 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
+ARG DEBIAN_MIRROR=
 ENV NODE_ENV=production
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-headless-shell
 
 RUN set -eux; \
+  if [ -n "$DEBIAN_MIRROR" ]; then \
+    mirror="${DEBIAN_MIRROR%/}"; \
+    sed -i \
+      -e "s|http://deb.debian.org/debian-security|$mirror/debian-security|g" \
+      -e "s|http://deb.debian.org/debian|$mirror/debian|g" \
+      /etc/apt/sources.list.d/debian.sources; \
+  fi; \
   echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries; \
   echo 'Acquire::http::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries; \
   echo 'Acquire::https::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries; \

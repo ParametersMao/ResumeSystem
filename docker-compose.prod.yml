@@ -35,6 +35,8 @@ services:
   backend:
     build:
       context: ./backed-resume
+      args:
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-}
     container_name: resume-backend
     restart: unless-stopped
     depends_on:
