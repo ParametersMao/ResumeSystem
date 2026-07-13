@@ -94,8 +94,10 @@ fi
 printf '%s\n' "${RELEASE_COMMIT:-unknown}" > "$TEMP_DIR/release-commit.txt"
 (
   cd "$TEMP_DIR"
+  sums_file="$(mktemp)"
   find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
-    | sort | xargs sha256sum > SHA256SUMS
+    | sort | xargs sha256sum > "$sums_file"
+  mv "$sums_file" SHA256SUMS
   sha256sum -c SHA256SUMS
 )
 

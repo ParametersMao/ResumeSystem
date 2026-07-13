@@ -45,6 +45,7 @@ set +a
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-resumesystem}"
 
 stack_stopped=false
+# shellcheck disable=SC2317 -- invoked indirectly by the ERR/INT/TERM trap.
 recover_stack_on_error() {
   if [[ "$stack_stopped" == "true" ]]; then
     "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build >/dev/null 2>&1 || true
