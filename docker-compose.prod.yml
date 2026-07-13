@@ -184,6 +184,8 @@ services:
   agent:
     build:
       context: ./python-agent
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     container_name: resume-agent
     restart: unless-stopped
     depends_on:
