@@ -6,6 +6,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 BACKUP_ROOT="${BACKUP_ROOT:-/opt/resumesystem-backups}"
 INCLUDE_IMAGES="${INCLUDE_IMAGES:-false}"
 RETENTION_COUNT="${RETENTION_COUNT:-7}"
+BACKUP_HELPER_IMAGE="${BACKUP_HELPER_IMAGE:-alpine:3.20}"
 REQUESTED_RELEASE_COMMIT="${RELEASE_COMMIT:-}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FINAL_DIR="${BACKUP_ROOT%/}/v1.3-${STAMP}"
@@ -38,9 +39,31 @@ PROJECT_NAME="${COMPOSE_PROJECT_NAME:-resumesystem}"
 # carry a stale RELEASE_COMMIT from an older rollout and must not overwrite it.
 RELEASE_COMMIT="${REQUESTED_RELEASE_COMMIT:-${RELEASE_COMMIT:-unknown}}"
 
-for name in resume-mysql resume-backend resume-agent resume-qdrant; do
+BACKUP_CONTAINERS=(
+  resume-web
+  resume-admin
+  resume-backend
+  resume-agent
+  resume-qdrant
+  resume-proxy
+  resume-mysql
+)
+for name in "${BACKUP_CONTAINERS[@]}"; do
   docker inspect "$name" >/dev/null
+  configured_image="$(docker inspect "$name" --format '{{.Config.Image}}')"
+  running_image="$(docker inspect "$name" --format '{{.Image}}')"
+  resolved_image="$(docker image inspect "$configured_image" --format '{{.Id}}' 2>/dev/null || true)"
+  if [[ -z "$resolved_image" || "$resolved_image" != "$running_image" ]]; then
+    echo "Configured image $configured_image does not resolve to the running image for $name" >&2
+    echo "Retag the verified running image before taking a restorable backup" >&2
+    exit 1
+  fi
 done
+docker image inspect "$BACKUP_HELPER_IMAGE" >/dev/null 2>&1 || {
+  echo "Backup helper image is not available locally: $BACKUP_HELPER_IMAGE" >&2
+  echo "Preload it before backup; backup must not pull or build after services are frozen" >&2
+  exit 1
+}
 
 rm -rf -- "$TEMP_DIR"
 mkdir -p "$TEMP_DIR"
@@ -48,7 +71,7 @@ chmod 700 "$TEMP_DIR"
 rag_stopped=false
 cleanup_on_error() {
   if [[ "$rag_stopped" == "true" ]]; then
-    "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d qdrant agent >/dev/null 2>&1 || true
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build qdrant agent >/dev/null 2>&1 || true
   fi
   rm -rf -- "$TEMP_DIR"
 }
@@ -68,7 +91,7 @@ archive_volume() {
   docker run --rm \
     -v "${volume}:/data:ro" \
     -v "${TEMP_DIR}:/backup" \
-    alpine:3.20 sh -c "tar -czf '/backup/${output}' -C /data ."
+    "$BACKUP_HELPER_IMAGE" sh -c "tar -czf '/backup/${output}' -C /data ."
 }
 
 # Freeze only the RAG services while archiving Qdrant's storage. This avoids a
@@ -76,7 +99,7 @@ archive_volume() {
 "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" stop agent qdrant
 rag_stopped=true
 archive_volume "${PROJECT_NAME}_qdrant_data" qdrant-storage.tar.gz
-"${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d qdrant agent
+"${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build qdrant agent
 rag_stopped=false
 archive_volume "${PROJECT_NAME}_backend_uploads" uploads.tar.gz
 archive_volume "${PROJECT_NAME}_fastembed_models" fastembed-models.tar.gz
@@ -84,8 +107,17 @@ archive_volume "${PROJECT_NAME}_fastembed_models" fastembed-models.tar.gz
 tar -czf "$TEMP_DIR/source-with-env.tar.gz" \
   --exclude='./backups' --exclude='./node_modules' --exclude='./*/node_modules' .
 docker ps --format '{{json .}}' > "$TEMP_DIR/containers.jsonl"
+{
+  printf 'container\tconfigured_image\trunning_image\n'
+  for name in "${BACKUP_CONTAINERS[@]}"; do
+    printf '%s\t%s\t%s\n' \
+      "$name" \
+      "$(docker inspect "$name" --format '{{.Config.Image}}')" \
+      "$(docker inspect "$name" --format '{{.Image}}')"
+  done
+} > "$TEMP_DIR/image-map.tsv"
 mapfile -t BACKUP_IMAGES < <(
-  for name in resume-web resume-admin resume-backend resume-agent resume-qdrant resume-proxy resume-mysql; do
+  for name in "${BACKUP_CONTAINERS[@]}"; do
     docker inspect "$name" --format '{{.Config.Image}}'
   done | sort -u
 )
