@@ -1673,6 +1673,26 @@ const coreResumePrintStyles = `
     break-inside: avoid;
   }
 
+  .ats-resume-header.has-avatar {
+    grid-template-columns: minmax(190px, .68fr) minmax(0, 1.32fr) auto;
+    align-items: center;
+  }
+
+  .ats-avatar-wrap {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+
+  .ats-avatar {
+    width: 72px;
+    height: 88px;
+    border: 1px solid #cbd5e1;
+    border-radius: 2px;
+    object-fit: cover;
+    box-shadow: none;
+  }
+
   .ats-identity h1 {
     margin: 0;
     color: #111827;

@@ -610,7 +610,7 @@
       </template>
 
       <template v-else-if="layoutKey === 'qm-minimal-ats'">
-        <header class="ats-resume-header">
+        <header class="ats-resume-header" :class="{ 'has-avatar': profileAvatar }">
           <div class="ats-identity">
             <h1>{{ document.profile.name || '张三' }}</h1>
             <p>{{ document.profile.title || '前端工程师' }}</p>
@@ -620,6 +620,15 @@
               <strong>{{ item.label }}</strong>
               <em>{{ item.value }}</em>
             </span>
+          </div>
+          <div v-if="profileAvatar" class="ats-avatar-wrap">
+            <img
+              class="resume-avatar ats-avatar"
+              :class="avatarImgClass"
+              :style="avatarStyle"
+              :src="profileAvatar"
+              alt="个人照片"
+            />
           </div>
         </header>
 
@@ -737,6 +746,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { DEFAULT_AVATAR_PLACEHOLDER, type CoreAvatarLayout, type CoreResumeDocument, type CoreResumeSectionItem, type CoreSectionType } from '@/core-resume/model'
+import { resolveResumeProfilePhoto } from '@/core-resume/photo'
 import { resolveTemplateLayoutKey, resolveTemplateVariant } from '@/core-resume/templates'
 
 interface ContactItem {
@@ -757,9 +767,9 @@ const profileAvatar = computed(() => {
   if (avatarConfig.value.enabled === false || avatarConfig.value.placement === 'hidden') {
     return ''
   }
-  return props.document.profile.avatar?.trim() || DEFAULT_AVATAR_PLACEHOLDER
+  return resolveResumeProfilePhoto(props.document.profile) || DEFAULT_AVATAR_PLACEHOLDER
 })
-const isAvatarPlaceholder = computed(() => !props.document.profile.avatar?.trim())
+const isAvatarPlaceholder = computed(() => !resolveResumeProfilePhoto(props.document.profile))
 const avatarClass = computed(() => `avatar-shape-${avatarConfig.value.shape || 'rounded'}`)
 const avatarImgClass = computed(() => [avatarClass.value, { 'avatar-placeholder': isAvatarPlaceholder.value }])
 const avatarStyle = computed(() => {
@@ -3334,6 +3344,26 @@ defineExpose({
   border-bottom: 2px solid var(--ats-rule);
 }
 
+.ats-resume-header.has-avatar {
+  grid-template-columns: minmax(190px, .68fr) minmax(0, 1.32fr) auto;
+  align-items: center;
+}
+
+.ats-avatar-wrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.ats-avatar {
+  width: 72px;
+  height: 88px;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: none;
+}
+
 .ats-identity h1 {
   margin: 0;
   color: #111827;
@@ -3894,6 +3924,15 @@ defineExpose({
   .timeline-hero,
   .spotlight-hero {
     grid-template-columns: 1fr;
+  }
+
+  .ats-resume-header,
+  .ats-resume-header.has-avatar {
+    grid-template-columns: 1fr;
+  }
+
+  .ats-avatar-wrap {
+    justify-content: flex-start;
   }
 
   .timeline-contact-grid {

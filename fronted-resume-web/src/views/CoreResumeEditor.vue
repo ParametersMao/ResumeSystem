@@ -44,19 +44,31 @@
           <span class="card-badge">固定模块</span>
         </div>
         <div class="profile-photo-editor">
-          <div class="profile-photo-preview" :class="{ 'has-photo': documentState.profile.avatar }">
-            <img v-if="documentState.profile.avatar" :src="documentState.profile.avatar" alt="个人照片" />
+          <div class="profile-photo-preview" :class="{ 'has-photo': editorAvatarUrl }">
+            <img v-if="editorAvatarUrl" :src="editorAvatarUrl" alt="个人照片" />
             <span v-else>照片</span>
           </div>
           <div class="profile-photo-copy">
             <strong>个人照片</strong>
-            <p>建议上传清晰证件照或职业头像，导出 PDF 时会同步显示。</p>
+            <p v-if="templateHidesAvatar" class="profile-photo-notice">
+              当前模板默认采用无照片排版；照片会正常保存，可点击下方按钮在当前版式显示。
+            </p>
+            <p v-else>建议上传清晰证件照或职业头像，导出 PDF 时会同步显示。</p>
             <div class="profile-photo-actions">
               <label class="profile-photo-upload">
                 {{ uploadingAvatar ? '上传中...' : '上传照片' }}
                 <input type="file" accept="image/png,image/jpeg,image/webp" :disabled="uploadingAvatar" @change="handleAvatarChange" />
               </label>
-              <el-button v-if="documentState.profile.avatar" text type="danger" size="small" @click="clearAvatar">移除</el-button>
+              <el-button
+                v-if="editorAvatarUrl && templateHidesAvatar"
+                plain
+                type="warning"
+                size="small"
+                @click="enableAvatarInCurrentLayout"
+              >
+                在当前版式显示
+              </el-button>
+              <el-button v-if="editorAvatarUrl" text type="danger" size="small" @click="clearAvatar">移除</el-button>
             </div>
           </div>
         </div>
@@ -909,6 +921,7 @@ import {
   parseResumeContent,
 } from '@/core-resume/model'
 import { buildCoreResumePrintHtml } from '@/core-resume/print'
+import { createVisibleResumeAvatarLayout, normalizeResumePhotoUrl } from '@/core-resume/photo'
 import { resolveTemplatePreset, resolveTemplateVariant } from '@/core-resume/templates'
 import {
   createResume,
@@ -1104,6 +1117,16 @@ const visibleSectionsCount = computed(() => documentState.value.sections.filter(
 const hasUnsavedChanges = computed(() => serializeDocument() !== lastSavedSnapshot.value)
 const currentVersionSummary = computed(() => summarizeVersionContent(serializeDocument()))
 const activeTemplatePreset = computed(() => resolveTemplatePreset(documentState.value))
+const editorAvatarUrl = computed(() => normalizeResumePhotoUrl(documentState.value.profile.avatar))
+const templateDefaultsToHiddenAvatar = computed(() =>
+  ['qm-minimal-ats', 'qm-spotlight-featured'].includes(activeTemplatePreset.value.layoutKey),
+)
+const templateHidesAvatar = computed(() => {
+  const avatar = documentState.value.templateLayout?.avatar
+  if (avatar?.enabled === true && avatar.placement !== 'hidden') return false
+  if (avatar?.enabled === false || avatar?.placement === 'hidden') return true
+  return templateDefaultsToHiddenAvatar.value
+})
 const hasThemeOverrides = computed(() => Object.keys(documentState.value.themeOverrides || {}).length > 0)
 const longItemWarnings = computed(() => documentState.value.sections
   .filter((section) => section.visible)
@@ -1336,8 +1359,13 @@ async function handleAvatarChange(event: Event) {
   uploadingAvatar.value = true
   try {
     const result = await uploadResumePhoto(file)
-    documentState.value.profile.avatar = result.url
-    ElMessage.success('照片上传成功')
+    const photoUrl = normalizeResumePhotoUrl(result.url)
+    if (!photoUrl) {
+      throw new Error('照片上传接口未返回可用地址')
+    }
+    documentState.value.profile.avatar = photoUrl
+    await nextTick()
+    ElMessage.success(templateHidesAvatar.value ? '照片已保存；当前模板为无照片版式' : '照片上传成功')
   } catch (error) {
     console.error('照片上传失败:', error)
     ElMessage.error('照片上传失败，请稍后重试')
@@ -1348,6 +1376,31 @@ async function handleAvatarChange(event: Event) {
 
 function clearAvatar() {
   documentState.value.profile.avatar = ''
+}
+
+async function enableAvatarInCurrentLayout() {
+  if (!editorAvatarUrl.value) {
+    ElMessage.warning('请先上传照片')
+    return
+  }
+
+  const layoutKey = activeTemplatePreset.value.layoutKey
+  documentState.value.templateLayout = {
+    ...(documentState.value.templateLayout || {}),
+    key: documentState.value.templateLayout?.key || layoutKey,
+    avatar: createVisibleResumeAvatarLayout(layoutKey),
+  }
+  await nextTick()
+
+  if (userStore.user?.id) {
+    await saveResumeInternal(false)
+  }
+
+  if (saveStatus.value === 'error') {
+    ElMessage.warning('照片已在当前版式显示，自动保存失败，请手动保存')
+    return
+  }
+  ElMessage.success('照片已在当前版式显示并保存')
 }
 
 function showSection(section: CoreResumeSection) {
@@ -3515,6 +3568,10 @@ function hasSectionContent(item: CoreResumeItem) {
   color: #64748b;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.profile-photo-copy .profile-photo-notice {
+  color: #b45309;
 }
 
 .profile-photo-actions {

@@ -1,5 +1,6 @@
 import http, { ApiResponse, PageResult } from './request'
 import type { Resume } from '@/store/resume'
+import { parseResumePhotoUploadResponse } from '@/core-resume/photo'
 
 export type ImportedSectionType =
   | 'education'
@@ -99,7 +100,7 @@ export async function uploadResumePhoto(file: File) {
   const { data } = await http.post<ApiResponse<{ url: string; key: string }>>('/api/resumes/assets/photo', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
-  return data.data
+  return parseResumePhotoUploadResponse(data)
 }
 
 export async function parseResumeImport(file: File) {

@@ -1,3 +1,5 @@
+import { resolveResumeProfilePhoto } from './photo'
+
 export type CoreSectionType =
   | 'intention'
   | 'education'
@@ -424,7 +426,12 @@ export function ensureAllSections(document: Partial<CoreResumeDocument>): CoreRe
     }
   })
 
-  base.profile = { ...base.profile, ...(document.profile || {}) }
+  const incomingProfile = document.profile || {}
+  base.profile = {
+    ...base.profile,
+    ...incomingProfile,
+    avatar: resolveResumeProfilePhoto(incomingProfile),
+  }
   base.documentTitle = typeof document.documentTitle === 'string' ? document.documentTitle : ''
   base.slogan = typeof document.slogan === 'string' ? document.slogan : ''
   base.templateTheme = normalizeThemePatch(document.templateTheme)
@@ -707,7 +714,7 @@ function normalizeProfile(profile: unknown): Partial<CoreResumeProfile> {
   return {
     name: toText(basic.name),
     title: toText(basic.title),
-    avatar: toText(basic.avatar || basic.photo || source.avatar || source.photo),
+    avatar: resolveResumeProfilePhoto(basic) || resolveResumeProfilePhoto(source),
     phone: toText(contacts.phone || basic.phone),
     email: toText(contacts.email || basic.email),
     gender: toText(basic.gender),

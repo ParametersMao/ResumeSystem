@@ -21,6 +21,7 @@ import { PaginationResponse } from '../../common/interfaces/pagination.interface
 import { StorageService } from '../storage/storage.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { handlePdfResourceRequest, waitForPdfAssets } from './pdf-render-assets';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -342,45 +343,14 @@ export class ResumesService {
       page.setDefaultTimeout(30_000);
       await page.setRequestInterception(true);
       page.on('request', (request) => {
-        if (isAllowedPdfResourceUrl(request.url(), request.resourceType())) {
-          void request.continue().catch(() => {});
-          return;
-        }
-        void request.abort('blockedbyclient').catch(() => {});
+        void handlePdfResourceRequest(request, this.storageService, userId).catch(() => {
+          void request.abort('failed').catch(() => {});
+        });
       });
 
       await page.setContent(injectPdfSafeMargins(html), { waitUntil: 'load', timeout: 30_000 });
       await page.emulateMediaType('print');
-
-      await page.evaluate(async () => {
-        const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-        const waitFonts = async () => {
-          const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
-          if (fonts?.ready) {
-            try {
-              await fonts.ready;
-            } catch {
-              // ignore font loading errors
-            }
-          }
-        };
-
-        const waitImages = async () => {
-          const images = Array.from(document.images || []);
-          await Promise.all(
-            images.map((img) => {
-              if (img.complete) return Promise.resolve();
-              return new Promise<void>((resolve) => {
-                const done = () => resolve();
-                img.addEventListener('load', done, { once: true });
-                img.addEventListener('error', done, { once: true });
-              });
-            }),
-          );
-        };
-
-        await Promise.race([Promise.all([waitFonts(), waitImages()]), sleep(15_000)]);
-      });
+      await page.evaluate(waitForPdfAssets, 15_000);
 
       const pdfBuffer = (await page.pdf({
         format: 'A4',
@@ -674,28 +644,6 @@ function validatePreviewImage(previewImage?: string): void {
   if (!previewImage) return;
   if (Buffer.byteLength(previewImage, 'utf8') > MAX_RESUME_PREVIEW_BYTES) {
     throw new BadRequestException('简历预览图过大，请重新生成或减少图片体积');
-  }
-}
-
-function isAllowedPdfResourceUrl(rawUrl: string, resourceType: string): boolean {
-  if (resourceType === 'document') return true;
-  if (!rawUrl) return true;
-  if (/^(about:blank|data:|blob:)/i.test(rawUrl)) return true;
-
-  try {
-    const url = new URL(rawUrl);
-    if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
-      return false;
-    }
-
-    return (
-      url.pathname.startsWith('/uploads/') ||
-      url.pathname.startsWith('/mock/') ||
-      url.pathname.startsWith('/assets/') ||
-      url.pathname === '/favicon.ico'
-    );
-  } catch {
-    return false;
   }
 }
 
