@@ -156,6 +156,12 @@ apiModel=deepseek-v4-pro
 temperature=0.3
 ```
 
+生产 Compose 必须把 `AI_PROVIDER` 与 `OPENAI_API_URL`、`OPENAI_API_KEY`、
+`OPENAI_MODEL` 一起注入 Agent 容器。`execution_mode=live` 只证明调用路径走了
+真实 LLM；发布验收还必须断言 Agent 响应中的 `provider=deepseek`、
+`model=deepseek-v4-pro`、`token_used > 0` 且 `sources` 非空，避免真实调用因
+遗漏 provider 环境映射而被错误审计为 `provider=mock`。
+
 生产环境优先从运行时 secret 注入 API key。若必须通过管理后台更新，落库前使用独立 `SYSTEM_CONFIG_MASTER_KEY` 做 AES-256-GCM 认证加密，数据库只保存 `enc:v1` 密文；主密钥只能存在于服务器 secret，不得与密文同库。后端启动时会自动把旧版明文 `apiKey/smtpPass` 迁移为密文，迁移失败会显式阻止静默丢密钥。API key 不得写入 Git、脚本默认值、Dockerfile、日志或本文档。系统配置读取接口只返回 `apiKeyConfigured`，不会回传明文密钥。NestJS 仅在发起内部 Agent 请求时短暂解密并透传；Agent 不持久化它。审计脱敏覆盖 `apiKey`、`smtpPass`、各类 token/secret/authorization，并使用大小写与命名变体归一化匹配。
 
 Agent 为 DeepSeek V4 请求启用 thinking 与 high reasoning effort，并要求 JSON object。`LLM_TIMEOUT_SECONDS` 默认 120 秒，NestJS 的 `AGENT_REQUEST_TIMEOUT_MS` 默认 150 秒，外层超时必须大于内层，避免 DeepSeek 尚在生成时被主业务提前中止。
