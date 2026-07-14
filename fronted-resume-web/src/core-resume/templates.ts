@@ -1,10 +1,12 @@
 import type { CoreTemplateLayoutKey, CoreTemplateVariant } from './model'
+import { createVisibleResumeAvatarLayout, type VisibleResumeAvatarLayout } from './photo'
 
 export interface CoreTemplatePreset {
   key: string
   label: string
   layoutKey: CoreTemplateLayoutKey
   variant: CoreTemplateVariant
+  avatar: VisibleResumeAvatarLayout
   description: string
   keywords: string[]
 }
@@ -15,7 +17,7 @@ export interface TemplateResolutionSource {
   templateLayout?: { key?: unknown }
 }
 
-const TEMPLATE_PRESETS: CoreTemplatePreset[] = [
+const TEMPLATE_PRESET_METADATA: Array<Omit<CoreTemplatePreset, 'avatar'>> = [
   {
     key: 'qm-blue-top-photo',
     layoutKey: 'qm-blue-top-photo',
@@ -61,7 +63,7 @@ const TEMPLATE_PRESETS: CoreTemplatePreset[] = [
     layoutKey: 'qm-minimal-ats',
     label: '技术开发 ATS 单栏',
     variant: 'ats',
-    description: '无照片、单一阅读顺序，个人优势和技术技能前置，职位、公司与时间层级清晰，适合技术岗位和 ATS 系统投递。',
+    description: '保留克制的右上职业照和单一阅读顺序，个人优势与技术技能前置，适合技术岗位和 ATS 系统投递。',
     keywords: ['ats', 'minimal', 'plain', '极简', '投递', '技术开发', '前端', '后端', '测试', '数据'],
   },
   {
@@ -106,6 +108,11 @@ const TEMPLATE_PRESETS: CoreTemplatePreset[] = [
   },
 ]
 
+const TEMPLATE_PRESETS: CoreTemplatePreset[] = TEMPLATE_PRESET_METADATA.map((preset) => ({
+  ...preset,
+  avatar: createVisibleResumeAvatarLayout(preset.layoutKey),
+}))
+
 const DEFAULT_TEMPLATE_PRESET = TEMPLATE_PRESETS[0]
 
 export function getTemplatePresets() {
@@ -130,21 +137,56 @@ export function resolveTemplatePreset(
   source?: TemplateResolutionSource,
   templateData?: any,
 ): CoreTemplatePreset {
-  const inlineLayoutKey = [
-    source?.templateLayout?.key,
+  const explicitTemplatePreset = findPresetFromTemplateData(templateData)
+  if (explicitTemplatePreset) return explicitTemplatePreset
+
+  const matchedByLayoutKey = TEMPLATE_PRESETS.find(
+    (preset) => preset.layoutKey === source?.templateLayout?.key,
+  )
+  if (matchedByLayoutKey) return matchedByLayoutKey
+
+  const matchedByName = findPresetByTemplateName(source?.templateName)
+  if (matchedByName) return matchedByName
+
+  if (isTemplateVariant(source?.templateVariant)) {
+    return findPresetByVariant(source.templateVariant)
+  }
+
+  return DEFAULT_TEMPLATE_PRESET
+}
+
+function findPresetFromTemplateData(templateData: any): CoreTemplatePreset | undefined {
+  if (!templateData || typeof templateData !== 'object') return undefined
+
+  const layoutKey = [
     templateData?.layout?.key,
     templateData?.layoutKey,
     templateData?.key,
   ].find((value) => typeof value === 'string')
+  const matchedByLayoutKey = TEMPLATE_PRESETS.find((preset) => preset.layoutKey === layoutKey)
+  if (matchedByLayoutKey) return matchedByLayoutKey
 
-  const matchedByLayoutKey = TEMPLATE_PRESETS.find((preset) => preset.layoutKey === inlineLayoutKey)
-  if (matchedByLayoutKey) {
-    return matchedByLayoutKey
-  }
+  const templateName = [
+    templateData?.templateName,
+    templateData?.name,
+    templateData?.title,
+  ].find((value) => typeof value === 'string')
+  const matchedByName = findPresetByTemplateName(templateName)
+  if (matchedByName) return matchedByName
 
-  const templateName = typeof source?.templateName === 'string' ? source.templateName : ''
+  const variant = [
+    templateData?.layout?.variant,
+    templateData?.theme?.variant,
+    templateData?.variant,
+  ].find((value) => typeof value === 'string')
+  return isTemplateVariant(variant) ? findPresetByVariant(variant) : undefined
+}
+
+function findPresetByTemplateName(templateName: unknown): CoreTemplatePreset | undefined {
+  if (typeof templateName !== 'string') return undefined
+
   const normalized = templateName.toLowerCase()
-  const matched = TEMPLATE_PRESETS
+  return TEMPLATE_PRESETS
     .map((preset) => {
       const keywords = preset.keywords.filter((keyword) => normalized.includes(keyword.toLowerCase()))
       return {
@@ -157,23 +199,6 @@ export function resolveTemplatePreset(
     .sort((left, right) =>
       right.matchCount - left.matchCount || right.specificity - left.specificity,
     )[0]?.preset
-
-  if (matched) {
-    return matched
-  }
-
-  const inlineVariant = [
-    source?.templateVariant,
-    templateData?.layout?.variant,
-    templateData?.theme?.variant,
-    templateData?.variant,
-  ].find((value) => typeof value === 'string')
-
-  if (isTemplateVariant(inlineVariant)) {
-    return findPresetByVariant(inlineVariant)
-  }
-
-  return DEFAULT_TEMPLATE_PRESET
 }
 
 export function getTemplateVariantLabel(variant: CoreTemplateVariant) {

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "node ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build",
-    "test": "node --experimental-strip-types --test tests/photo.test.ts tests/print-photo.test.ts",
+    "test": "node --experimental-strip-types --test",
+    "qa:template-photos": "node scripts/template-photo-layout-qa.mjs",
+    "qa:template-pdf": "node --experimental-strip-types scripts/template-pdf-layout-qa.mjs",
     "preview": "vite preview --port 5173"
   },
   "dependencies": {

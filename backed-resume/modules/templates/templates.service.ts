@@ -9,11 +9,17 @@ import {
   TemplateResponseDto,
   TemplateListResponseDto,
   TemplateDetailResponseDto,
+  type TemplateAvatarLayout,
   type TemplateLayoutKey,
   type TemplateVariant,
 } from '../../dto/template.dto';
 import { PaginationResponse } from '../../common/interfaces/pagination.interface';
 import { TemplateSearchDto } from '../../dto/template-search.dto';
+import {
+  DEFAULT_LAYOUT_BY_VARIANT,
+  getTemplateAvatarPreset,
+  isTemplateLayoutKey as isKnownTemplateLayoutKey,
+} from './template-avatar-contract';
 
 type TemplateSortBy = 'recommended' | 'latest' | 'popular';
 
@@ -220,11 +226,13 @@ export class TemplatesService {
   }
 
   private mapToListResponseDto(template: Template): TemplateListResponseDto {
+    const layoutKey = this.resolveTemplateLayoutKey(template.templateData);
     return {
       id: template.id,
       templateName: template.templateName,
       templateVariant: this.resolveTemplateVariant(template.templateData, template.templateName),
-      layoutKey: this.resolveTemplateLayoutKey(template.templateData),
+      layoutKey,
+      avatarLayout: layoutKey ? getTemplateAvatarPreset(layoutKey) : undefined,
       previewImage: template.previewImage,
       industryTags: template.industryTags ?? undefined,
       status: template.status,
@@ -236,12 +244,14 @@ export class TemplatesService {
   }
 
   private mapToDetailResponseDto(template: Template): TemplateDetailResponseDto {
+    const layoutKey = this.resolveTemplateLayoutKey(template.templateData);
     return {
       id: template.id,
       templateName: template.templateName,
       templateData: template.templateData,
       templateVariant: this.resolveTemplateVariant(template.templateData, template.templateName),
-      layoutKey: this.resolveTemplateLayoutKey(template.templateData),
+      layoutKey,
+      avatarLayout: layoutKey ? getTemplateAvatarPreset(layoutKey) : undefined,
       previewImage: template.previewImage,
       industryTags: template.industryTags ?? undefined,
       status: template.status,
@@ -253,12 +263,14 @@ export class TemplatesService {
   }
 
   private mapToResponseDto(template: Template): TemplateResponseDto {
+    const layoutKey = this.resolveTemplateLayoutKey(template.templateData);
     return {
       id: template.id,
       templateName: template.templateName,
       templateData: template.templateData,
       templateVariant: this.resolveTemplateVariant(template.templateData, template.templateName),
-      layoutKey: this.resolveTemplateLayoutKey(template.templateData),
+      layoutKey,
+      avatarLayout: layoutKey ? getTemplateAvatarPreset(layoutKey) : undefined,
       previewImage: template.previewImage,
       industryTags: template.industryTags ?? undefined,
       status: template.status,
@@ -359,7 +371,12 @@ export class TemplatesService {
       parsed?.key,
     ].find((value) => this.isTemplateLayoutKey(value));
 
-    return this.isTemplateLayoutKey(candidate) ? candidate : undefined;
+    if (this.isTemplateLayoutKey(candidate)) {
+      return candidate;
+    }
+
+    const variant = this.resolveTemplateVariant(templateData, '');
+    return DEFAULT_LAYOUT_BY_VARIANT[variant];
   }
 
   private safeParseTemplateData(templateData: string | null | undefined): any {
@@ -400,14 +417,17 @@ export class TemplatesService {
       : this.resolveTemplateVariant(templateData, '');
 
     if (this.isTemplateVariant(variant)) {
-      const avatar = this.resolveAvatarLayout(parsed, variant);
+      const layoutKey = this.resolveNormalizedLayoutKey(parsed, variant);
+      const avatar = this.resolveAvatarLayout(layoutKey);
       parsed.variant = variant;
+      parsed.layoutKey = layoutKey;
       parsed.profile = {
         ...(typeof parsed.profile === 'object' && parsed.profile ? parsed.profile : {}),
         avatar,
       };
       parsed.layout = {
         ...(typeof parsed.layout === 'object' && parsed.layout ? parsed.layout : {}),
+        key: layoutKey,
         variant,
         avatar,
       };
@@ -431,39 +451,18 @@ export class TemplatesService {
     return JSON.stringify(parsed, null, 2);
   }
 
-  private resolveAvatarLayout(parsed: any, variant: TemplateVariant) {
-    const existing =
-      typeof parsed?.profile?.avatar === 'object' && parsed.profile.avatar
-        ? parsed.profile.avatar
-        : typeof parsed?.layout?.avatar === 'object' && parsed.layout.avatar
-          ? parsed.layout.avatar
-          : {};
+  private resolveNormalizedLayoutKey(parsed: any, variant: TemplateVariant): TemplateLayoutKey {
+    const candidate = [
+      parsed?.layout?.key,
+      parsed?.layoutKey,
+      parsed?.key,
+    ].find((value) => this.isTemplateLayoutKey(value));
 
-    return {
-      ...this.getDefaultAvatarLayout(variant),
-      ...existing,
-    };
+    return this.isTemplateLayoutKey(candidate) ? candidate : DEFAULT_LAYOUT_BY_VARIANT[variant];
   }
 
-  private getDefaultAvatarLayout(variant: TemplateVariant) {
-    switch (variant) {
-      case 'sidebar':
-        return { enabled: true, placement: 'sidebar-top', shape: 'circle', width: 96, height: 96 };
-      case 'timeline':
-        return { enabled: true, placement: 'meta-card', shape: 'rounded', width: 86, height: 108 };
-      case 'spotlight':
-        return { enabled: true, placement: 'meta-card', shape: 'rounded', width: 96, height: 120 };
-      case 'ats':
-      case 'compact':
-        return { enabled: false, placement: 'hidden' };
-      case 'editorial':
-        return { enabled: true, placement: 'header-right', shape: 'square', width: 86, height: 108 };
-      case 'executive':
-        return { enabled: true, placement: 'header-right', shape: 'rounded', width: 82, height: 104 };
-      case 'classic':
-      default:
-        return { enabled: true, placement: 'header-right', shape: 'rounded', width: 86, height: 108 };
-    }
+  private resolveAvatarLayout(layoutKey: TemplateLayoutKey): TemplateAvatarLayout {
+    return getTemplateAvatarPreset(layoutKey);
   }
 
   private isTemplateVariant(value: unknown): value is TemplateVariant {
@@ -480,17 +479,7 @@ export class TemplatesService {
   }
 
   private isTemplateLayoutKey(value: unknown): value is TemplateLayoutKey {
-    return (
-      value === 'qm-blue-top-photo' ||
-      value === 'qm-sidebar-profile' ||
-      value === 'qm-classic-centered' ||
-      value === 'qm-ribbon-compact' ||
-      value === 'qm-timeline-icons' ||
-      value === 'qm-minimal-ats' ||
-      value === 'qm-executive-business' ||
-      value === 'qm-student-editorial' ||
-      value === 'qm-spotlight-featured'
-    );
+    return isKnownTemplateLayoutKey(value);
   }
 
   private async ensureFavoritesTable(): Promise<void> {

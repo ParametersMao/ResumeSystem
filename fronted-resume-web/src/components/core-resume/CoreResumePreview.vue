@@ -14,12 +14,12 @@
               <p class="resume-role">求职岗位：{{ document.profile.title || '前端工程师' }}</p>
             </div>
             <div class="qm-blue-meta">
-              <span v-for="item in contactItems" :key="item.label">
-                <strong>{{ item.label }}：</strong>{{ item.value }}
+              <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                <strong class="contact-label">{{ item.label }}：</strong><span class="contact-value">{{ item.displayValue }}</span>
               </span>
             </div>
             <div v-if="profileAvatar" class="resume-avatar-wrap qm-blue-avatar-wrap">
-              <img class="resume-avatar qm-blue-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+              <img class="resume-avatar qm-blue-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
             </div>
           </div>
         </header>
@@ -61,9 +61,11 @@
               class="section-item"
             >
               <div class="item-heading qm-blue-item-heading">
+                <div class="qm-blue-item-main">
+                  <h3>{{ getPrimaryText(section.type, item) }}</h3>
+                  <span v-if="getSecondaryText(section.type, item)">{{ getSecondaryText(section.type, item) }}</span>
+                </div>
                 <span class="qm-blue-date">{{ formatDuration(item.duration) || item.date }}</span>
-                <h3>{{ getPrimaryText(section.type, item) }}</h3>
-                <span v-if="getSecondaryText(section.type, item)">{{ getSecondaryText(section.type, item) }}</span>
               </div>
               <p v-if="getDescription(item)" class="item-description">{{ getDescription(item) }}</p>
             </article>
@@ -75,7 +77,7 @@
         <div class="sidebar-layout">
           <aside class="sidebar-column">
             <div class="sidebar-identity">
-              <img v-if="profileAvatar" class="resume-avatar sidebar-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+              <img v-if="profileAvatar" class="resume-avatar sidebar-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
               <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
               <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
             </div>
@@ -83,8 +85,8 @@
             <section v-if="contactItems.length" class="sidebar-block">
               <h2>联系方式</h2>
               <div class="sidebar-meta-list">
-                <span v-for="item in contactItems" :key="item.label">
-                  <strong>{{ item.label }}：</strong>{{ item.value }}
+                <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                  <strong class="contact-label">{{ item.label }}：</strong><span class="contact-value">{{ item.displayValue }}</span>
                 </span>
               </div>
             </section>
@@ -158,14 +160,14 @@
             <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
             <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
             <div class="classic-centered-meta">
-              <span v-for="item in contactItems" :key="item.label">
-                <strong>{{ item.label }}</strong>
-                <em>{{ item.value }}</em>
+              <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                <strong class="contact-label">{{ item.label }}</strong>
+                <em class="contact-value">{{ item.displayValue }}</em>
               </span>
             </div>
           </div>
           <div v-if="profileAvatar" class="classic-centered-avatar-wrap">
-            <img class="resume-avatar classic-centered-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+            <img class="resume-avatar classic-centered-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
           </div>
         </header>
 
@@ -206,9 +208,11 @@
               class="section-item"
             >
               <div class="item-heading classic-centered-item-heading">
-                <span>{{ formatDuration(item.duration) || item.date }}</span>
-                <h3>{{ getPrimaryText(section.type, item) }}</h3>
-                <span v-if="getSecondaryText(section.type, item)">{{ getSecondaryText(section.type, item) }}</span>
+                <span class="classic-centered-date">{{ formatDuration(item.duration) || item.date }}</span>
+                <div class="classic-centered-item-main">
+                  <h3>{{ getPrimaryText(section.type, item) }}</h3>
+                  <span v-if="getSecondaryText(section.type, item)">{{ getSecondaryText(section.type, item) }}</span>
+                </div>
               </div>
               <p v-if="getDescription(item)" class="item-description">{{ getDescription(item) }}</p>
             </article>
@@ -224,11 +228,11 @@
             <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
           </div>
           <div class="timeline-meta-panel">
-            <img v-if="profileAvatar" class="resume-avatar timeline-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+            <img v-if="profileAvatar" class="resume-avatar timeline-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
             <div class="timeline-contact-grid">
-              <span v-for="item in contactItems" :key="item.label">
-                <strong>{{ item.label }}</strong>
-                <em>{{ item.value }}</em>
+              <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                <strong class="contact-label">{{ item.label }}</strong>
+                <em class="contact-value">{{ item.displayValue }}</em>
               </span>
             </div>
           </div>
@@ -288,23 +292,23 @@
           <div class="spotlight-copy">
             <p class="spotlight-kicker">PRODUCT · GROWTH · OUTCOMES</p>
             <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
-            <p class="resume-role">{{ document.profile.title || '前端工程师' }}</p>
-            <p v-if="summarySection?.items?.length" class="spotlight-summary">
-              {{ getDescription(summarySection.items[0]) }}
+            <p class="resume-role">{{ spotlightIntention || document.profile.title || '前端工程师' }}</p>
+            <p v-if="spotlightSummary" class="spotlight-summary">
+              {{ spotlightSummary }}
             </p>
           </div>
           <div class="spotlight-meta-card">
-            <img v-if="profileAvatar" class="resume-avatar spotlight-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
-            <div v-for="item in contactItems" :key="item.label" class="spotlight-meta-item">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
+            <img v-if="profileAvatar" class="resume-avatar spotlight-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
+            <div v-for="item in contactItems" :key="item.kind" class="spotlight-meta-item" :data-contact-kind="item.kind">
+              <span class="contact-label">{{ item.label }}</span>
+              <strong class="contact-value">{{ item.displayValue }}</strong>
             </div>
           </div>
         </header>
 
         <div class="spotlight-body">
           <aside class="spotlight-side">
-            <section v-if="skillsSection" class="spotlight-panel">
+            <section v-if="skillsSection" class="spotlight-panel" data-section-type="skills">
               <div class="section-heading">
                 <span class="section-heading-bar"></span>
                 <h2>{{ skillsSection.title }}</h2>
@@ -321,9 +325,10 @@
             </section>
 
             <section
-              v-for="section in supportSections"
+              v-for="section in spotlightSideSections"
               :key="section.id"
               class="spotlight-panel"
+              :data-section-type="section.type"
             >
               <div class="section-heading">
                 <span class="section-heading-bar"></span>
@@ -361,9 +366,10 @@
 
           <main class="spotlight-main">
             <section
-              v-for="section in outcomeSections"
+              v-for="section in spotlightMainSections"
               :key="section.id"
               class="resume-section spotlight-section"
+              :data-section-type="section.type"
             >
               <div class="section-heading">
                 <span class="section-heading-bar"></span>
@@ -401,35 +407,42 @@
             <h1>{{ document.profile.name || '李妍' }}</h1>
             <p class="student-target">{{ studentIntention || document.profile.title || '产品运营实习生' }}</p>
             <div class="student-contact-list">
-              <span v-for="item in contactItems" :key="item.label">
-                <strong>{{ item.label }}</strong>{{ item.value }}
+              <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                <strong class="contact-label">{{ item.label }}</strong><span class="contact-value">{{ item.displayValue }}</span>
               </span>
             </div>
           </div>
           <img
-            v-if="document.profile.avatar?.trim() && document.profile.avatar !== DEFAULT_AVATAR_PLACEHOLDER"
-            class="student-avatar"
+            v-if="profileAvatar"
+            class="resume-avatar student-avatar"
             :class="avatarImgClass"
             :style="avatarStyle"
-            :src="document.profile.avatar"
+            :src="profileAvatar"
             alt="个人照片"
+            @error="handleAvatarImageError"
           />
         </header>
 
-        <section v-if="studentEducationSection" class="student-education-spotlight">
+        <section
+          v-if="studentEducationSection?.items?.length"
+          class="student-education-spotlight"
+          data-section-type="education"
+        >
           <div class="student-section-kicker">EDUCATION</div>
-          <article
-            v-for="(item, index) in studentEducationSection.items"
-            :key="`${studentEducationSection.id}-${index}`"
-            class="student-education-item"
-          >
-            <div>
-              <h2>{{ item.school || '学校名称' }}</h2>
-              <p>{{ item.degree || item.major || '专业与学历' }}</p>
-            </div>
-            <time>{{ formatDuration(item.duration) }}</time>
-            <p v-if="getDescription(item)" class="student-description">{{ getDescription(item) }}</p>
-          </article>
+          <div class="student-education-items">
+            <article
+              v-for="(item, index) in studentEducationSection.items"
+              :key="`${studentEducationSection.id}-${index}`"
+              class="student-education-item"
+            >
+              <div>
+                <h2>{{ item.school || '学校名称' }}</h2>
+                <p>{{ item.degree || item.major || '专业与学历' }}</p>
+              </div>
+              <time>{{ formatDuration(item.duration) }}</time>
+              <p v-if="getDescription(item)" class="student-description">{{ getDescription(item) }}</p>
+            </article>
+          </div>
         </section>
 
         <section
@@ -437,6 +450,7 @@
           :key="section.id"
           class="student-section"
           :class="`student-section-${section.type}`"
+          :data-section-type="section.type"
         >
           <header class="student-section-heading">
             <span>{{ getStudentSectionIndex(section.type) }}</span>
@@ -486,11 +500,11 @@
               <p>{{ asymmetricIntention }}</p>
             </header>
 
-            <section class="asymmetric-contact">
+            <section class="asymmetric-contact" data-section-type="contact">
               <h2>基本信息</h2>
               <div>
-                <span v-for="item in contactItems" :key="item.label">
-                  <strong>{{ item.label }}</strong><em>{{ item.value }}</em>
+                <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                  <strong class="contact-label">{{ item.label }}</strong><em class="contact-value">{{ item.displayValue }}</em>
                 </span>
               </div>
             </section>
@@ -499,6 +513,7 @@
               v-for="section in asymmetricLeftSections"
               :key="section.id"
               class="asymmetric-section asymmetric-left-section"
+              :data-section-type="section.type"
             >
               <h2>{{ section.title }}</h2>
               <div v-if="section.type === 'skills'" class="asymmetric-skills">
@@ -508,10 +523,16 @@
                 </div>
               </div>
               <div v-else class="asymmetric-compact-items">
-                <article v-for="(item, index) in section.items" :key="`${section.id}-${index}`">
-                  <strong>{{ getPrimaryText(section.type, item) }}</strong>
-                  <span>{{ getSecondaryText(section.type, item) }}</span>
-                  <time>{{ formatDuration(item.duration) || item.date }}</time>
+                <article
+                  v-for="(item, index) in section.items"
+                  :key="`${section.id}-${index}`"
+                  :class="{ 'asymmetric-compact-item-without-date': !(formatDuration(item.duration) || item.date) }"
+                >
+                  <div class="asymmetric-compact-main">
+                    <strong>{{ getPrimaryText(section.type, item) }}</strong>
+                    <span>{{ getSecondaryText(section.type, item) }}</span>
+                  </div>
+                  <time v-if="formatDuration(item.duration) || item.date">{{ formatDuration(item.duration) || item.date }}</time>
                   <p v-if="getDescription(item)">{{ getDescription(item) }}</p>
                 </article>
               </div>
@@ -520,7 +541,7 @@
 
           <main class="asymmetric-right">
             <header class="asymmetric-anchor">
-              <img v-if="profileAvatar" class="asymmetric-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+              <img v-if="profileAvatar" class="resume-avatar asymmetric-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
               <div>
                 <p>PROFILE / 个人陈述</p>
                 <h2>{{ document.documentTitle || document.profile.title || '职业简历' }}</h2>
@@ -533,6 +554,7 @@
               v-for="section in asymmetricRightSections"
               :key="section.id"
               class="asymmetric-section asymmetric-story-section"
+              :data-section-type="section.type"
             >
               <header><span></span><h2>{{ section.title }}</h2></header>
               <article v-for="(item, index) in section.items" :key="`${section.id}-${index}`">
@@ -567,7 +589,7 @@
               <th>姓名</th><td>{{ document.profile.name || '张三' }}</td>
               <th>求职岗位</th><td>{{ document.profile.title || '目标岗位' }}</td>
               <td class="formal-profile-photo" rowspan="3">
-                <img v-if="profileAvatar" class="resume-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+                <img v-if="profileAvatar" class="resume-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
                 <span v-else>照片</span>
               </td>
             </tr>
@@ -577,10 +599,10 @@
             </tr>
             <tr>
               <th>工作经验</th><td>{{ document.profile.yearsOfExperience || '待填写' }}</td>
-              <th>联系电话</th><td>{{ document.profile.phone || '待填写' }}</td>
+              <th>联系电话</th><td data-contact-kind="phone"><span class="contact-value">{{ formatContactDisplayValue(document.profile.phone || '待填写') }}</span></td>
             </tr>
             <tr>
-              <th>联系邮箱</th><td colspan="4">{{ document.profile.email || '待填写' }}</td>
+              <th>联系邮箱</th><td colspan="4" data-contact-kind="email"><span class="contact-value">{{ formatContactDisplayValue(document.profile.email || '待填写') }}</span></td>
             </tr>
             <tr class="formal-intention-row">
               <th>求职意向</th><td colspan="4">{{ formalIntention }}</td>
@@ -616,9 +638,9 @@
             <p>{{ document.profile.title || '前端工程师' }}</p>
           </div>
           <div class="ats-contact-list">
-            <span v-for="item in contactItems" :key="item.label">
-              <strong>{{ item.label }}</strong>
-              <em>{{ item.value }}</em>
+            <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+              <strong class="contact-label">{{ item.label }}</strong>
+              <em class="contact-value">{{ item.displayValue }}</em>
             </span>
           </div>
           <div v-if="profileAvatar" class="ats-avatar-wrap">
@@ -628,6 +650,7 @@
               :style="avatarStyle"
               :src="profileAvatar"
               alt="个人照片"
+              @error="handleAvatarImageError"
             />
           </div>
         </header>
@@ -676,7 +699,7 @@
       <template v-else>
         <header class="resume-header">
           <div v-if="profileAvatar" class="resume-avatar-wrap">
-            <img class="resume-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" />
+            <img class="resume-avatar" :class="avatarImgClass" :style="avatarStyle" :src="profileAvatar" alt="个人照片" @error="handleAvatarImageError" />
           </div>
           <div class="resume-identity">
             <h1 class="resume-name">{{ document.profile.name || '张三' }}</h1>
@@ -684,8 +707,8 @@
           </div>
           <div class="resume-header-side">
             <div class="resume-meta">
-              <span v-for="item in contactItems" :key="item.label">
-                <strong>{{ item.label }}：</strong>{{ item.value }}
+              <span v-for="item in contactItems" :key="item.kind" :data-contact-kind="item.kind">
+                <strong class="contact-label">{{ item.label }}：</strong><span class="contact-value">{{ item.displayValue }}</span>
               </span>
             </div>
           </div>
@@ -744,14 +767,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { DEFAULT_AVATAR_PLACEHOLDER, type CoreAvatarLayout, type CoreResumeDocument, type CoreResumeSectionItem, type CoreSectionType } from '@/core-resume/model'
-import { resolveResumeProfilePhoto } from '@/core-resume/photo'
+import { computed, ref, type CSSProperties } from 'vue'
+import { DEFAULT_AVATAR_PLACEHOLDER, type CoreResumeDocument, type CoreResumeSectionItem, type CoreSectionType } from '@/core-resume/model'
+import { normalizeVisibleResumeAvatarLayout, resolveResumeProfilePhoto } from '@/core-resume/photo'
 import { resolveTemplateLayoutKey, resolveTemplateVariant } from '@/core-resume/templates'
 
 interface ContactItem {
+  kind: 'phone' | 'email' | 'gender' | 'age' | 'experience' | 'site'
   label: string
   value: string
+  displayValue: string
 }
 
 interface Props {
@@ -762,39 +787,6 @@ const props = defineProps<Props>()
 
 const sheetRef = ref<HTMLElement | null>(null)
 
-const avatarConfig = computed<CoreAvatarLayout>(() => props.document.templateLayout?.avatar || {})
-const profileAvatar = computed(() => {
-  if (avatarConfig.value.enabled === false || avatarConfig.value.placement === 'hidden') {
-    return ''
-  }
-  return resolveResumeProfilePhoto(props.document.profile) || DEFAULT_AVATAR_PLACEHOLDER
-})
-const isAvatarPlaceholder = computed(() => !resolveResumeProfilePhoto(props.document.profile))
-const avatarClass = computed(() => `avatar-shape-${avatarConfig.value.shape || 'rounded'}`)
-const avatarImgClass = computed(() => [avatarClass.value, { 'avatar-placeholder': isAvatarPlaceholder.value }])
-const avatarStyle = computed(() => {
-  const style: Record<string, string> = {}
-  if (avatarConfig.value.width) {
-    style.width = `${avatarConfig.value.width}px`
-  }
-  if (avatarConfig.value.height) {
-    style.height = `${avatarConfig.value.height}px`
-  }
-  return style
-})
-
-const contactItems = computed<ContactItem[]>(() => {
-  const profile = props.document.profile
-  return [
-    { label: '电话', value: profile.phone },
-    { label: '邮箱', value: profile.email },
-    { label: '性别', value: profile.gender },
-    { label: '年龄', value: profile.age },
-    { label: '经验', value: profile.yearsOfExperience },
-    { label: '主页', value: profile.site },
-  ].filter((item) => item.value)
-})
-
 const templateVariant = computed(() =>
   resolveTemplateVariant(props.document as unknown as { templateVariant?: unknown; templateName?: unknown; templateLayout?: { key?: unknown } }),
 )
@@ -802,6 +794,45 @@ const layoutKey = computed(() =>
   props.document.templateLayout?.key ||
   resolveTemplateLayoutKey(props.document as unknown as { templateVariant?: unknown; templateName?: unknown; templateLayout?: { key?: unknown } }),
 )
+const avatarConfig = computed(() =>
+  normalizeVisibleResumeAvatarLayout(layoutKey.value, props.document.templateLayout?.avatar),
+)
+const profileAvatar = computed(() => resolveResumeProfilePhoto(props.document.profile) || DEFAULT_AVATAR_PLACEHOLDER)
+const isAvatarPlaceholder = computed(() => !resolveResumeProfilePhoto(props.document.profile))
+const avatarClass = computed(() => `avatar-shape-${avatarConfig.value.shape || 'rounded'}`)
+const avatarImgClass = computed(() => [avatarClass.value, { 'avatar-placeholder': isAvatarPlaceholder.value }])
+const avatarStyle = computed<CSSProperties>(() => {
+  const radius = avatarConfig.value.shape === 'circle'
+    ? '999px'
+    : avatarConfig.value.shape === 'rounded'
+      ? '10px'
+      : '2px'
+  return {
+    width: `${avatarConfig.value.width}px`,
+    height: `${avatarConfig.value.height}px`,
+    objectFit: 'cover',
+    objectPosition: avatarConfig.value.objectPosition,
+    borderRadius: radius,
+  }
+})
+
+const contactItems = computed<ContactItem[]>(() => {
+  const profile = props.document.profile
+  return [
+    { kind: 'phone' as const, label: '电话', value: profile.phone },
+    { kind: 'email' as const, label: '邮箱', value: profile.email },
+    { kind: 'gender' as const, label: '性别', value: profile.gender },
+    { kind: 'age' as const, label: '年龄', value: profile.age },
+    { kind: 'experience' as const, label: '经验', value: profile.yearsOfExperience },
+    { kind: 'site' as const, label: '主页', value: profile.site },
+  ]
+    .filter((item) => item.value)
+    .map((item) => ({
+      ...item,
+      displayValue: formatContactDisplayValue(item.value),
+    }))
+})
+
 const sheetClasses = computed(() => [
   `variant-${templateVariant.value}`,
   `layout-${layoutKey.value}`,
@@ -811,18 +842,35 @@ const visibleSections = computed(() => props.document.sections.filter((section) 
 const skillsSection = computed(() => visibleSections.value.find((section) => section.type === 'skills'))
 const summarySection = computed(() => visibleSections.value.find((section) => section.type === 'summary'))
 const mainSections = computed(() => visibleSections.value.filter((section) => section.type !== 'skills'))
-const featuredSections = computed(() =>
-  visibleSections.value.filter((section) => ['experience', 'projects', 'internship'].includes(section.type)),
+const SPOTLIGHT_MAIN_SECTION_ORDER: CoreSectionType[] = [
+  'projects',
+  'experience',
+  'internship',
+  'education',
+  'campus',
+  'custom',
+]
+const spotlightMainSections = computed(() =>
+  visibleSections.value
+    .filter((section) => SPOTLIGHT_MAIN_SECTION_ORDER.includes(section.type))
+    .map((section, documentIndex) => ({ section, documentIndex }))
+    .sort((left, right) => {
+      const orderDelta = SPOTLIGHT_MAIN_SECTION_ORDER.indexOf(left.section.type)
+        - SPOTLIGHT_MAIN_SECTION_ORDER.indexOf(right.section.type)
+      return orderDelta || left.documentIndex - right.documentIndex
+    })
+    .map(({ section }) => section),
 )
-const OUTCOME_SECTION_ORDER: CoreSectionType[] = ['projects', 'experience', 'internship']
-const outcomeSections = computed(() =>
-  [...featuredSections.value].sort((left, right) =>
-    OUTCOME_SECTION_ORDER.indexOf(left.type) - OUTCOME_SECTION_ORDER.indexOf(right.type),
-  ),
+const spotlightSideSections = computed(() =>
+  visibleSections.value.filter((section) => ['awards', 'hobbies'].includes(section.type)),
 )
-const supportSections = computed(() =>
-  visibleSections.value.filter((section) => !['experience', 'projects', 'internship', 'skills', 'summary'].includes(section.type)),
+const spotlightSummary = computed(() =>
+  summarySection.value?.items.map((item) => getDescription(item)).find(Boolean) || '',
 )
+const spotlightIntention = computed(() => {
+  const section = visibleSections.value.find((item) => item.type === 'intention')
+  return String(section?.items[0]?.intention || '').trim()
+})
 const ATS_SECTION_ORDER: CoreSectionType[] = [
   'summary',
   'skills',
@@ -883,10 +931,10 @@ const asymmetricSummary = computed(() => {
   return text || '用清晰的经历与可验证成果说明专业能力。'
 })
 const asymmetricLeftSections = computed(() =>
-  visibleSections.value.filter((section) => ['education', 'skills', 'awards'].includes(section.type)),
+  visibleSections.value.filter((section) => ['skills', 'awards', 'hobbies'].includes(section.type)),
 )
 const asymmetricRightSections = computed(() =>
-  visibleSections.value.filter((section) => ['experience', 'internship', 'projects', 'campus', 'custom', 'hobbies'].includes(section.type)),
+  visibleSections.value.filter((section) => ['education', 'experience', 'internship', 'projects', 'campus', 'custom'].includes(section.type)),
 )
 const showCustomDocumentHeading = computed(() =>
   !['qm-table-formal', 'qm-asymmetric-profile'].includes(layoutKey.value) && Boolean(props.document.documentTitle || props.document.slogan),
@@ -1028,6 +1076,24 @@ function formatDuration(value: unknown) {
   }
   const duration = value as { start?: string; end?: string }
   return [duration.start, duration.end].filter(Boolean).join(' - ')
+}
+
+/**
+ * Give emails and URLs natural break opportunities at semantic separators.
+ * This keeps narrow template columns from splitting ordinary words in half,
+ * while preserving the original profile value used for saving and export.
+ */
+function formatContactDisplayValue(value: unknown) {
+  return String(value || '').replace(/([@._/\\-])/g, '$1\u200B')
+}
+
+function handleAvatarImageError(event: Event) {
+  const image = event.currentTarget as HTMLImageElement | null
+  if (!image || image.getAttribute('src') === DEFAULT_AVATAR_PLACEHOLDER) {
+    return
+  }
+  image.src = DEFAULT_AVATAR_PLACEHOLDER
+  image.classList.add('avatar-placeholder')
 }
 
 defineExpose({
@@ -1184,6 +1250,7 @@ defineExpose({
 }
 
 .spotlight-avatar {
+  grid-column: 1 / -1;
   justify-self: center;
   width: 96px;
   height: 120px;
@@ -1198,9 +1265,11 @@ defineExpose({
 
 .resume-role {
   margin: 0;
+  min-width: 0;
   font-size: 16px;
   color: var(--resume-primary);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .resume-meta,
@@ -1212,7 +1281,37 @@ defineExpose({
 }
 
 .resume-meta {
-  min-width: 220px;
+  min-width: 0;
+}
+
+.resume-meta span,
+.sidebar-meta-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resume-meta strong,
+.sidebar-meta-list strong {
+  white-space: nowrap;
+}
+
+/*
+ * Contact values receive zero-width break opportunities from
+ * formatContactDisplayValue(). Prefer those semantic boundaries before the
+ * browser considers an emergency break inside an ordinary word.
+ */
+.qm-blue-meta span,
+.sidebar-meta-list span,
+.classic-centered-meta em,
+.timeline-contact-grid em,
+.spotlight-meta-item strong,
+.student-contact-list span,
+.asymmetric-contact em,
+.ats-contact-list em,
+.resume-meta span,
+.formal-profile-table td {
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .sidebar-layout {
@@ -1288,6 +1387,7 @@ defineExpose({
 .timeline-contact-grid span {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 4px;
   padding: 10px 12px;
   border-radius: 16px;
@@ -1301,8 +1401,10 @@ defineExpose({
 }
 
 .timeline-contact-grid em {
+  min-width: 0;
   font-style: normal;
   color: #0f172a;
+  overflow-wrap: anywhere;
 }
 
 .timeline-section {
@@ -1367,21 +1469,27 @@ defineExpose({
 }
 
 .timeline-card-top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
   gap: 14px;
   align-items: flex-start;
+}
+
+.timeline-card-top > div {
+  min-width: 0;
 }
 
 .timeline-card-top h3 {
   margin: 0;
   font-size: 16px;
+  overflow-wrap: anywhere;
 }
 
 .timeline-card-top p {
   margin: 4px 0 0;
   color: #475569;
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .timeline-date {
@@ -1391,6 +1499,7 @@ defineExpose({
   color: var(--resume-primary);
   font-size: 12px;
   font-weight: 600;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -1417,7 +1526,7 @@ defineExpose({
 
 .spotlight-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) 280px;
+  grid-template-columns: minmax(0, 1.3fr) 240px;
   gap: 20px;
   padding: 34px 42px 24px;
   background:
@@ -1448,8 +1557,9 @@ defineExpose({
 
 .spotlight-meta-card {
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+  padding: 15px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -1460,7 +1570,37 @@ defineExpose({
 .spotlight-meta-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  min-width: 0;
+  gap: 3px;
+}
+
+.spotlight-meta-item[data-contact-kind="email"],
+.spotlight-meta-item[data-contact-kind="site"] {
+  grid-column: 1 / -1;
+}
+
+.spotlight-meta-item[data-contact-kind="phone"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.spotlight-meta-item[data-contact-kind="experience"] {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.spotlight-meta-item[data-contact-kind="email"] {
+  grid-row: 3;
+}
+
+.spotlight-meta-item[data-contact-kind="gender"] {
+  grid-column: 1;
+  grid-row: 4;
+}
+
+.spotlight-meta-item[data-contact-kind="age"] {
+  grid-column: 2;
+  grid-row: 4;
 }
 
 .spotlight-meta-item span {
@@ -1470,27 +1610,41 @@ defineExpose({
 }
 
 .spotlight-meta-item strong {
+  min-width: 0;
   color: #0f172a;
+  overflow-wrap: anywhere;
 }
 
 .spotlight-body {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
 }
 
 .spotlight-side {
-  padding: 26px 24px 30px;
+  padding: 22px 20px 26px;
   background: #f8fafc;
   border-right: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .spotlight-main {
-  padding: 26px 30px 32px;
+  padding: 18px 24px 22px;
 }
 
 .spotlight-panel + .spotlight-panel,
 .spotlight-section + .spotlight-section {
-  margin-top: 20px;
+  margin-top: 12px;
+}
+
+.spotlight-panel,
+.spotlight-section {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+.spotlight-panel > .section-heading,
+.spotlight-section > .section-heading {
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .spotlight-skill-grid {
@@ -1511,42 +1665,61 @@ defineExpose({
 
 .compact-item {
   padding: 14px 16px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.spotlight-side .compact-item .item-heading {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .spotlight-card {
-  padding: 17px 20px;
+  padding: 11px 14px;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95));
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .spotlight-card-head {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
   gap: 16px;
   align-items: flex-start;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.spotlight-card-head > div {
+  min-width: 0;
 }
 
 .spotlight-card-head h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 15px;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .spotlight-card-head p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
+  font-size: 12px;
   color: #475569;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .outcome-metrics {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .outcome-metrics span {
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   color: var(--resume-primary);
   font-size: 11px;
@@ -1556,13 +1729,32 @@ defineExpose({
 }
 
 .spotlight-date {
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.05);
   color: var(--resume-primary);
   font-size: 12px;
   font-weight: 700;
+  text-align: right;
   white-space: nowrap;
+}
+
+.spotlight-section > .section-heading {
+  margin-bottom: 9px;
+}
+
+.spotlight-section > .section-heading h2 {
+  font-size: 16px;
+}
+
+.spotlight-section .section-items {
+  gap: 10px;
+}
+
+.spotlight-card > .item-description {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .resume-section + .resume-section {
@@ -1574,6 +1766,8 @@ defineExpose({
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .section-heading-bar {
@@ -1609,26 +1803,41 @@ defineExpose({
 }
 
 .item-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .72fr);
+  gap: 6px 16px;
+  align-items: start;
 }
 
 .item-heading h3 {
+  min-width: 0;
   margin: 0;
   font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
 .item-heading span {
+  min-width: 0;
   color: #475569;
   font-size: 13px;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .item-subheading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
   margin-top: 6px;
   color: #64748b;
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.item-subheading > span:last-child {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .item-description {
@@ -2467,7 +2676,8 @@ defineExpose({
   font-size: 30px;
   font-weight: 800;
   line-height: 1.18;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .layout-qm-blue-top-photo .resume-role {
@@ -2490,6 +2700,7 @@ defineExpose({
 
 .layout-qm-blue-top-photo .qm-blue-meta span {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .layout-qm-blue-top-photo .qm-blue-avatar-wrap {
@@ -2540,17 +2751,40 @@ defineExpose({
 
 .layout-qm-blue-top-photo .qm-blue-item-heading {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) minmax(120px, auto);
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px 18px;
+  align-items: start;
+}
+
+.layout-qm-blue-top-photo .qm-blue-item-main {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
+  gap: 5px 14px;
+}
+
+.layout-qm-blue-top-photo .qm-blue-item-main > span::before {
+  content: '—';
+  margin-right: 8px;
+  color: #657278;
 }
 
 .layout-qm-blue-top-photo .qm-blue-date,
-.layout-qm-blue-top-photo .item-heading h3,
-.layout-qm-blue-top-photo .item-heading span {
+.layout-qm-blue-top-photo .qm-blue-item-main h3,
+.layout-qm-blue-top-photo .qm-blue-item-main span {
   font-size: 15px;
   font-weight: 800;
   color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.layout-qm-blue-top-photo .qm-blue-date {
+  min-width: 132px;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .layout-qm-blue-top-photo .item-description {
@@ -2768,16 +3002,40 @@ defineExpose({
 
 .layout-qm-classic-centered .classic-centered-item-heading {
   display: grid;
-  grid-template-columns: minmax(150px, 0.32fr) minmax(0, 1fr) minmax(120px, 0.28fr);
-  gap: 18px;
-  align-items: baseline;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 8px 18px;
+  align-items: start;
 }
 
-.layout-qm-classic-centered .classic-centered-item-heading h3,
-.layout-qm-classic-centered .classic-centered-item-heading span {
+.layout-qm-classic-centered .classic-centered-item-main {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 14px;
+}
+
+.layout-qm-classic-centered .classic-centered-item-main > span::before {
+  content: '—';
+  margin-right: 8px;
+  color: #657278;
+}
+
+.layout-qm-classic-centered .classic-centered-item-main h3,
+.layout-qm-classic-centered .classic-centered-item-main span,
+.layout-qm-classic-centered .classic-centered-date {
   color: #111827;
   font-size: 15px;
   font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.layout-qm-classic-centered .classic-centered-date {
+  min-width: 150px;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .layout-qm-classic-centered .skills-list {
@@ -3067,6 +3325,8 @@ defineExpose({
 .formal-item-meta time {
   color: #526174;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .formal-table-items article > p,
@@ -3103,7 +3363,7 @@ defineExpose({
 
 .asymmetric-layout {
   display: grid;
-  grid-template-columns: 44% 56%;
+  grid-template-columns: 40% 60%;
   min-height: 1120px;
 }
 
@@ -3195,15 +3455,31 @@ defineExpose({
 
 .asymmetric-compact-items article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 104px;
   gap: 4px 12px;
   break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.asymmetric-compact-items article.asymmetric-compact-item-without-date {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.asymmetric-compact-items article > * {
+  min-width: 0;
+}
+
+.asymmetric-compact-main {
+  display: grid;
+  gap: 3px;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .asymmetric-compact-items strong { font-size: 12px; }
 .asymmetric-compact-items span,
 .asymmetric-compact-items time { color: #657278; font-size: 10px; }
-.asymmetric-compact-items time { text-align: right; }
+.asymmetric-compact-items time { min-width: 104px; text-align: right; white-space: nowrap; }
 .asymmetric-compact-items p { grid-column: 1 / -1; margin: 3px 0 0; font-size: 10px; white-space: pre-line; }
 
 .asymmetric-skill > div {
@@ -3266,11 +3542,19 @@ defineExpose({
   margin-top: var(--resume-section-spacing);
 }
 
+.asymmetric-left-section,
+.asymmetric-story-section {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
 .asymmetric-story-section > header {
   display: flex;
   align-items: center;
   gap: 9px;
   margin-bottom: 16px;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .asymmetric-story-section > header span {
@@ -3289,6 +3573,7 @@ defineExpose({
 .asymmetric-story-section article {
   padding-left: 27px;
   break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .asymmetric-story-section article + article {
@@ -3298,14 +3583,18 @@ defineExpose({
 }
 
 .asymmetric-story-head {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
   gap: 14px;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
-.asymmetric-story-head h3 { margin: 0; color: #1f2b30; font-size: 13px; }
-.asymmetric-story-head p { margin: 4px 0 0; color: var(--resume-primary); font-size: 10px; font-weight: 700; }
-.asymmetric-story-head time { flex: 0 0 auto; color: #718087; font-size: 9px; }
+.asymmetric-story-head > div { min-width: 0; }
+
+.asymmetric-story-head h3 { margin: 0; color: #1f2b30; font-size: 13px; word-break: normal; overflow-wrap: break-word; }
+.asymmetric-story-head p { margin: 4px 0 0; color: var(--resume-primary); font-size: 10px; font-weight: 700; word-break: normal; overflow-wrap: break-word; }
+.asymmetric-story-head time { min-width: 104px; color: #718087; font-size: 9px; text-align: right; white-space: nowrap; }
 .asymmetric-description { margin: 9px 0 0; color: #46565d; font-size: 10.5px; line-height: 1.75; white-space: pre-line; }
 
 .resume-sheet.has-custom-page-margin.layout-qm-asymmetric-profile {
@@ -3454,9 +3743,13 @@ defineExpose({
 
 .ats-item-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 104px;
   gap: 20px;
   align-items: baseline;
+}
+
+.ats-item-header > div {
+  min-width: 0;
 }
 
 .ats-item-header h3 {
@@ -3464,6 +3757,7 @@ defineExpose({
   color: #111827;
   font-size: 14px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .ats-item-header p {
@@ -3471,12 +3765,15 @@ defineExpose({
   color: var(--ats-muted);
   font-size: 12px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .ats-item-header time {
+  min-width: 104px;
   color: var(--ats-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -3604,7 +3901,7 @@ defineExpose({
 }
 
 .resume-sheet.layout-qm-student-editorial {
-  padding: 34px 48px 38px;
+  padding: 28px 48px 30px;
   border-radius: 0;
   overflow: hidden;
   background:
@@ -3619,12 +3916,12 @@ defineExpose({
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 30px;
   align-items: start;
-  padding-bottom: 20px;
+  padding-bottom: 14px;
   border-bottom: 2px solid #172033;
 }
 
 .student-eyebrow {
-  margin: 0 0 10px;
+  margin: 0 0 6px;
   color: var(--resume-primary);
   font-size: 11px;
   font-weight: 800;
@@ -3641,7 +3938,7 @@ defineExpose({
 }
 
 .student-target {
-  margin: 10px 0 16px;
+  margin: 7px 0 12px;
   color: #334155;
   font-size: 15px;
   font-weight: 700;
@@ -3661,6 +3958,12 @@ defineExpose({
   font-style: normal;
 }
 
+.student-contact-list span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .student-avatar {
   width: 88px;
   height: 112px;
@@ -3674,13 +3977,16 @@ defineExpose({
   display: grid;
   grid-template-columns: 118px minmax(0, 1fr);
   gap: 24px;
-  margin: 18px 0 22px;
-  padding: 14px 18px;
+  margin: 12px 0 14px;
+  padding: 12px 16px;
   background: #eff7fa;
   border-left: 4px solid var(--resume-primary);
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 .student-section-kicker {
+  grid-column: 1;
   padding-top: 4px;
   color: var(--resume-primary);
   font-size: 11px;
@@ -3688,10 +3994,23 @@ defineExpose({
   letter-spacing: 0.13em;
 }
 
+.student-education-items {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+}
+
 .student-education-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 104px;
   gap: 4px 20px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.student-education-item > div,
+.student-item-header > div {
+  min-width: 0;
 }
 
 .student-education-item + .student-education-item {
@@ -3706,6 +4025,8 @@ defineExpose({
   color: #172033;
   font-size: 15px;
   line-height: 1.35;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .student-education-item p,
@@ -3713,12 +4034,16 @@ defineExpose({
   margin: 3px 0 0;
   color: #526174;
   font-size: 12px;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .student-education-item time,
 .student-item time {
+  min-width: 104px;
   color: #64748b;
   font-size: 11px;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -3727,7 +4052,12 @@ defineExpose({
 }
 
 .student-section + .student-section {
-  margin-top: max(14px, calc(var(--resume-section-spacing) - 5px));
+  margin-top: 8px;
+}
+
+.student-section {
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 .student-section-heading {
@@ -3735,7 +4065,9 @@ defineExpose({
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 12px;
   align-items: end;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .student-section-heading > span {
@@ -3769,8 +4101,10 @@ defineExpose({
 }
 
 .student-item {
-  padding: 0 0 10px;
+  padding: 0 0 6px;
   border-bottom: 1px solid #e2e8f0;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .student-item:last-child {
@@ -3780,16 +4114,18 @@ defineExpose({
 
 .student-item-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 104px;
   gap: 18px;
   align-items: start;
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 .student-description {
-  margin: 7px 0 0;
+  margin: 5px 0 0;
   color: #3f4d60;
   font-size: var(--resume-font-size);
-  line-height: var(--resume-line-height);
+  line-height: 1.6;
   white-space: pre-line;
 }
 
@@ -3801,7 +4137,7 @@ defineExpose({
 }
 
 .student-skills-list span {
-  padding: 5px 10px;
+  padding: 4px 9px;
   color: #223247;
   font-size: 11px;
   font-weight: 700;
@@ -3811,7 +4147,7 @@ defineExpose({
 
 .student-summary {
   margin-left: 46px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: #f8fafc;
   border-left: 3px solid #cbd5e1;
 }
@@ -3861,8 +4197,30 @@ defineExpose({
   .student-resume-header,
   .student-education-spotlight,
   .student-education-item,
-  .student-item-header {
+  .student-item-header,
+  .timeline-card-top,
+  .spotlight-card-head,
+  .ats-item-header,
+  .asymmetric-story-head,
+  .qm-blue-item-heading,
+  .classic-centered-item-heading {
     grid-template-columns: 1fr;
+  }
+
+  .student-section-kicker,
+  .student-education-items {
+    grid-column: 1;
+  }
+
+  .timeline-date,
+  .spotlight-date,
+  .ats-item-header time,
+  .student-education-item time,
+  .student-item time,
+  .asymmetric-story-head time,
+  .qm-blue-date,
+  .classic-centered-date {
+    text-align: left;
   }
 
   .student-avatar {
@@ -3971,5 +4329,17 @@ defineExpose({
   .spotlight-main {
     padding: 26px 22px;
   }
+}
+
+/* Contact values wrap only at semantic boundaries inserted by formatContactDisplayValue(). */
+.resume-sheet [data-contact-kind] {
+  min-width: 0;
+}
+
+.resume-sheet [data-contact-kind] > .contact-value,
+.resume-sheet [data-contact-kind] .contact-value {
+  min-width: 0;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 </style>

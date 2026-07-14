@@ -1,5 +1,6 @@
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import type { Resume } from '@/store/resume'
+import { createVisibleResumeAvatarLayout } from '@/core-resume/photo'
 
 interface MockDB {
   templates: Array<{ id: number; templateName: string; templateVariant?: string; layoutKey?: string; previewImage?: string; templateData?: any; description?: string; industryTags?: string; status?: boolean; useCount?: number; downloadCount?: number }>
@@ -27,7 +28,7 @@ const atsDeveloperTemplateData = {
   layout: {
     key: 'qm-minimal-ats',
     variant: 'ats',
-    avatar: { enabled: false, placement: 'hidden' }
+    avatar: createVisibleResumeAvatarLayout('qm-minimal-ats')
   },
   theme: {
     variant: 'ats',
@@ -43,7 +44,7 @@ const campusStudentTemplateData = {
   layout: {
     key: 'qm-student-editorial',
     variant: 'editorial',
-    avatar: { enabled: true, placement: 'header-right', shape: 'square', width: 88, height: 112 }
+    avatar: createVisibleResumeAvatarLayout('qm-student-editorial')
   },
   sectionDefaults: {
     order: ['education', 'projects', 'internship', 'campus', 'skills', 'awards', 'summary', 'experience', 'intention', 'custom', 'hobbies'],
@@ -64,7 +65,7 @@ const productOutcomeTemplateData = {
   layout: {
     key: 'qm-spotlight-featured',
     variant: 'spotlight',
-    avatar: { enabled: false, placement: 'hidden' }
+    avatar: createVisibleResumeAvatarLayout('qm-spotlight-featured')
   },
   sectionDefaults: {
     order: ['summary', 'projects', 'experience', 'internship', 'skills', 'education', 'awards', 'intention', 'campus', 'custom', 'hobbies'],
@@ -84,7 +85,7 @@ const formalTableTemplateData = {
   layout: {
     key: 'qm-table-formal',
     variant: 'classic',
-    avatar: { enabled: true, placement: 'header-right', shape: 'square', width: 78, height: 98 }
+    avatar: createVisibleResumeAvatarLayout('qm-table-formal')
   },
   theme: {
     variant: 'classic',
@@ -103,7 +104,7 @@ const db: MockDB = {
         layoutKey: 'qm-minimal-ats',
         previewImage: sampleCover,
         templateData: atsDeveloperTemplateData,
-        industryTags: 'ATS,技术开发,前端,后端,测试,数据,无照片,单栏',
+        industryTags: 'ATS,技术开发,前端,后端,测试,数据,职业照,单栏',
         status: true,
         useCount: 0,
         downloadCount: 0

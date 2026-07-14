@@ -1,10 +1,13 @@
-const puppeteer = require('puppeteer')
 const { existsSync } = require('fs')
 
 const baseUrl = process.env.QA_BASE_URL || 'http://127.0.0.1:5173'
 const expectedTemplateCount = Number(process.env.QA_TEMPLATE_COUNT || 11)
+const PAGE_HEIGHT = 1120
+const LONG_CONTENT_TEXT_THRESHOLD = 1800
+const LONG_CONTENT_ITEM_THRESHOLD = 22
 
 async function main() {
+  const puppeteer = require('puppeteer')
   const executablePath = resolveBrowserPath()
   const browser = await puppeteer.launch({
     headless: true,
@@ -51,10 +54,11 @@ async function main() {
         width: Math.round(sheet.getBoundingClientRect().width),
         overflowX: Math.max(sheet.scrollWidth - sheet.clientWidth, 0),
         scrollHeight: sheet.scrollHeight,
-        verticalOverflow: Math.max(sheet.scrollHeight - 1120, 0),
+        textLength: (sheet.textContent || '').replace(/\s+/g, '').length,
+        itemCount: sheet.querySelectorAll('article, .section-item, .ats-item, .timeline-card, .spotlight-card').length,
         layoutClass: [...sheet.classList].find((value) => value.startsWith('layout-')) || '',
       }))
-      results.push({ ...expected, ...metrics })
+      results.push({ ...expected, ...metrics, ...evaluatePagination(metrics) })
       await page.click('.el-dialog__headerbtn')
       await page.waitForFunction(() => !document.querySelector('.el-dialog')?.offsetParent, { timeout: 5000 })
     }
@@ -67,24 +71,52 @@ async function main() {
 
   await browser.close()
   const uniqueLayouts = new Set(results.map((item) => item.layoutClass))
-  const failures = results.filter((item) => item.width < 790 || item.overflowX > 0 || item.verticalOverflow > 0 || !item.layoutClass)
-  const multiPageCandidates = results
-    .filter((item) => item.scrollHeight > 1120)
-    .map((item) => ({ name: item.name, scrollHeight: item.scrollHeight }))
+  const failures = results.filter(isStructuralFailure)
+  const shortDataPageFailures = results
+    .filter((item) => item.contentProfile === 'short' && item.pageCount !== 1)
+    .map((item) => ({ name: item.name, scrollHeight: item.scrollHeight, pageCount: item.pageCount }))
+  const naturalMultiPage = results
+    .filter((item) => item.contentProfile === 'long' && item.pageCount > 1)
+    .map((item) => ({ name: item.name, scrollHeight: item.scrollHeight, pageCount: item.pageCount }))
   const report = {
     expectedTemplateCount,
     renderedTemplateCount: results.length,
     uniqueLayoutCount: uniqueLayouts.size,
     failures,
-    multiPageCandidates,
+    shortDataPageFailures,
+    naturalMultiPage,
     runtimeErrors,
     results,
   }
   console.log(JSON.stringify(report, null, 2))
 
-  if (results.length !== expectedTemplateCount || failures.length || runtimeErrors.length) {
+  if (results.length !== expectedTemplateCount || failures.length || shortDataPageFailures.length || runtimeErrors.length) {
     process.exitCode = 1
   }
+}
+
+function evaluatePagination(metrics) {
+  const scrollHeight = Math.max(0, Number(metrics.scrollHeight) || 0)
+  const textLength = Math.max(0, Number(metrics.textLength) || 0)
+  const itemCount = Math.max(0, Number(metrics.itemCount) || 0)
+  const contentProfile = textLength > LONG_CONTENT_TEXT_THRESHOLD || itemCount > LONG_CONTENT_ITEM_THRESHOLD
+    ? 'long'
+    : 'short'
+
+  return {
+    contentProfile,
+    pageCount: Math.max(1, Math.ceil(scrollHeight / PAGE_HEIGHT)),
+    naturalMultiPage: contentProfile === 'long' && scrollHeight > PAGE_HEIGHT,
+  }
+}
+
+function isStructuralFailure(item) {
+  return !Number.isFinite(item.width)
+    || item.width < 790
+    || !Number.isFinite(item.scrollHeight)
+    || item.scrollHeight <= 0
+    || item.overflowX > 0
+    || !item.layoutClass
 }
 
 function resolveBrowserPath() {
@@ -108,7 +140,14 @@ function browserLaunchArgs() {
     : []
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
+}
+
+module.exports = {
+  evaluatePagination,
+  isStructuralFailure,
+}

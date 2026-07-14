@@ -61,13 +61,14 @@ test('reloads legacy photo fields into the canonical avatar URL', () => {
   )
 })
 
-test('creates deliberate visible-avatar overrides for no-photo layouts', () => {
+test('creates visible-by-default portrait layouts for every template family', () => {
   assert.deepEqual(createVisibleResumeAvatarLayout('qm-minimal-ats'), {
     enabled: true,
     placement: 'header-right',
     shape: 'square',
     width: 72,
-    height: 88,
+    height: 90,
+    objectPosition: 'center 20%',
   })
   assert.deepEqual(createVisibleResumeAvatarLayout('qm-spotlight-featured'), {
     enabled: true,
@@ -75,5 +76,6 @@ test('creates deliberate visible-avatar overrides for no-photo layouts', () => {
     shape: 'rounded',
     width: 96,
     height: 120,
+    objectPosition: 'center 20%',
   })
 })

@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise')
+const { getTemplateAvatarPreset } = require('./template-avatar-contract')
 
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
@@ -32,7 +33,6 @@ const templates = [
     accent: '#8AA6E8',
     weight: 180,
     useCount: 92,
-    avatar: { placement: 'header-right', shape: 'square', width: 94, height: 118 },
     description: '参考正式投递场景的单栏结构：姓名和求职信息在左，证件照固定右上，正文分组清晰。',
     thumb: 'top-photo',
   }),
@@ -45,7 +45,6 @@ const templates = [
     accent: '#EAF4FB',
     weight: 172,
     useCount: 88,
-    avatar: { placement: 'sidebar-top', shape: 'square', width: 112, height: 136 },
     description: '左侧栏集中头像、基本信息和技能，右侧承载教育、经历和项目，适合信息较多的候选人。',
     thumb: 'sidebar',
   }),
@@ -58,7 +57,6 @@ const templates = [
     accent: '#DCE9F5',
     weight: 168,
     useCount: 77,
-    avatar: { placement: 'header-right', shape: 'square', width: 92, height: 116 },
     description: '顶部标题居中，头像在右侧，个人信息横向排列，接近传统中文简历的正式版式。',
     thumb: 'center-title',
   }),
@@ -71,7 +69,6 @@ const templates = [
     accent: '#E5EEF5',
     weight: 162,
     useCount: 74,
-    avatar: { placement: 'default', shape: 'square', width: 94, height: 118 },
     description: '深蓝模块标题条和紧凑信息流，适合希望一页承载较多经历的职能岗位。',
     thumb: 'ribbon',
   }),
@@ -84,7 +81,6 @@ const templates = [
     accent: '#E8F3F8',
     weight: 154,
     useCount: 68,
-    avatar: { placement: 'meta-card', shape: 'square', width: 90, height: 112 },
     description: '用时间线组织工作和项目经历，适合项目较多、成长路径明确的技术/产品/数据岗位。',
     thumb: 'timeline',
   }),
@@ -97,7 +93,6 @@ const templates = [
     accent: '#EDF3F8',
     weight: 176,
     useCount: 0,
-    avatar: { placement: 'header-right', shape: 'square', width: 78, height: 98 },
     description: '用规范表格承载基本信息与经历，字段边界清晰，适合国企、事业单位、教师和医护岗位。',
     thumb: 'table',
   }),
@@ -105,13 +100,12 @@ const templates = [
     name: '技术开发 · ATS 单栏投递版',
     variant: 'ats',
     category: '技术',
-    tags: 'ATS,技术开发,前端,后端,测试,数据,无照片,单栏',
+    tags: 'ATS,技术开发,前端,后端,测试,数据,右上证件照,单栏',
     primary: '#243B53',
     accent: '#E8EDF3',
     weight: 190,
     useCount: 0,
-    avatar: { enabled: false, placement: 'hidden', shape: 'square', width: 0, height: 0 },
-    description: '无照片、单一阅读顺序，个人优势和技术技能前置，职位、公司和时间层级清晰，适合技术岗位与 ATS 系统投递。',
+    description: '单一阅读顺序配合右上证件照，个人优势和技术技能前置，职位、公司和时间层级清晰，适合技术岗位与 ATS 系统投递。',
     thumb: 'ats',
   }),
   makeTemplate({
@@ -123,7 +117,6 @@ const templates = [
     accent: '#C8A96A',
     weight: 138,
     useCount: 43,
-    avatar: { placement: 'header-right', shape: 'square', width: 88, height: 112 },
     description: '稳重商务风，强调可信度、业绩和管理经验。',
     thumb: 'executive',
   }),
@@ -136,7 +129,6 @@ const templates = [
     accent: '#E8EFEC',
     weight: 182,
     useCount: 0,
-    avatar: { placement: 'header-right', shape: 'square', width: 112, height: 142 },
     description: '左栏组织身份、基础信息、教育、技能与证书，右栏以照片和个人陈述起笔，再展开工作与项目主线。',
     thumb: 'asymmetric',
   }),
@@ -149,7 +141,6 @@ const templates = [
     accent: '#D9ECF5',
     weight: 185,
     useCount: 0,
-    avatar: { placement: 'header-right', shape: 'square', width: 88, height: 112 },
     description: '教育信息压缩为顶部摘要，项目和实习进入正文主线，再补充校园成果、技能与荣誉。',
     thumb: 'student',
   }),
@@ -162,13 +153,12 @@ const templates = [
     accent: '#E8EDFF',
     weight: 188,
     useCount: 0,
-    avatar: { enabled: false, placement: 'hidden', shape: 'square', width: 0, height: 0 },
-    description: '用业务问题、个人行动和指标结果组织项目与经历，侧栏承载能力、教育和补充信息。',
+    description: '用业务问题、个人行动和指标结果组织项目与经历，顶部照片信息卡与侧栏承载能力、教育和补充信息。',
     thumb: 'spotlight',
   }),
 ]
 
-function makeTemplate({ name, variant, category, tags, primary, accent, weight, useCount, avatar, description, thumb }) {
+function makeTemplate({ name, variant, category, tags, primary, accent, weight, useCount, description, thumb }) {
   const layoutKey = {
     'top-photo': 'qm-blue-top-photo',
     sidebar: 'qm-sidebar-profile',
@@ -182,6 +172,7 @@ function makeTemplate({ name, variant, category, tags, primary, accent, weight, 
     spotlight: 'qm-spotlight-featured',
     asymmetric: 'qm-asymmetric-profile',
   }[thumb] || 'qm-blue-top-photo'
+  const avatar = getTemplateAvatarPreset(layoutKey)
 
   return {
     name,
@@ -452,7 +443,14 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })
+}
+
+module.exports = {
+  makeTemplate,
+  templates,
+}

@@ -6,6 +6,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 BACKUP_ROOT="${BACKUP_ROOT:-/opt/resumesystem-backups}"
 INCLUDE_IMAGES="${INCLUDE_IMAGES:-false}"
 RETENTION_COUNT="${RETENTION_COUNT:-7}"
+REQUESTED_RELEASE_COMMIT="${RELEASE_COMMIT:-}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FINAL_DIR="${BACKUP_ROOT%/}/v1.3-${STAMP}"
 TEMP_DIR="${FINAL_DIR}.partial"
@@ -33,6 +34,9 @@ set -a
 source "$ENV_FILE"
 set +a
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-resumesystem}"
+# A caller-supplied immutable SHA is authoritative. Production .env files can
+# carry a stale RELEASE_COMMIT from an older rollout and must not overwrite it.
+RELEASE_COMMIT="${REQUESTED_RELEASE_COMMIT:-${RELEASE_COMMIT:-unknown}}"
 
 for name in resume-mysql resume-backend resume-agent resume-qdrant; do
   docker inspect "$name" >/dev/null

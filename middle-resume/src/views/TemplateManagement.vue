@@ -52,7 +52,14 @@
       <template #header>
         <div class="card-header">
           <span>模板列表</span>
-          <el-button v-if="canWrite" type="primary" @click="handleAdd">新增模板</el-button>
+          <el-button
+            v-if="canWrite"
+            type="primary"
+            :disabled="editingTemplateId !== null || submitLoading"
+            @click="handleAdd"
+          >
+            新增模板
+          </el-button>
         </div>
       </template>
 
@@ -71,6 +78,7 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="layoutKey" label="布局 Key" min-width="190" />
         <el-table-column prop="recommendWeight" label="推荐权重" width="110" />
         <el-table-column prop="description" label="描述" />
         <el-table-column label="预览图" width="120">
@@ -101,7 +109,16 @@
         <el-table-column label="操作" min-width="180">
           <template #default="{ row }">
             <div class="action-btns">
-              <el-button v-if="canWrite" type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button
+                v-if="canWrite"
+                type="primary"
+                size="small"
+                :loading="editingTemplateId === row.id"
+                :disabled="(editingTemplateId !== null && editingTemplateId !== row.id) || submitLoading"
+                @click="handleEdit(row)"
+              >
+                编辑
+              </el-button>
               <el-button type="success" size="small" @click="handlePreview(row)">预览</el-button>
               <el-button
                 v-if="canWrite"
@@ -136,12 +153,16 @@
       v-model="dialogVisible"
       :title="dialogTitle"
       width="800px"
+      :close-on-click-modal="!submitLoading"
+      :close-on-press-escape="!submitLoading"
+      :show-close="!submitLoading"
       @close="handleDialogClose"
     >
       <el-form
         ref="formRef"
         :model="form"
         :rules="rules"
+        :disabled="submitLoading"
         label-width="100px"
       >
         <el-form-item label="模板名称" prop="templateName">
@@ -156,7 +177,7 @@
           />
         </el-form-item>
         <el-form-item label="模板版式" prop="templateVariant">
-          <el-select v-model="form.templateVariant" placeholder="请选择模板版式">
+          <el-select v-model="form.templateVariant" placeholder="请选择模板版式" @change="handleVariantChange">
             <el-option label="经典单栏" value="classic" />
             <el-option label="侧栏双栏" value="sidebar" />
             <el-option label="时间轴版" value="timeline" />
@@ -166,6 +187,19 @@
             <el-option label="紧凑信息流" value="compact" />
             <el-option label="编辑创意" value="editorial" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="布局 Key" prop="layoutKey">
+          <el-select v-model="form.layoutKey" placeholder="请选择具体模板布局" filterable style="width: 100%" @change="handleLayoutKeyChange">
+            <el-option
+              v-for="option in TEMPLATE_LAYOUT_OPTIONS"
+              :key="option.key"
+              :label="option.label"
+              :value="option.key"
+            />
+          </el-select>
+          <div class="layout-contract-tip">
+            头像默认开启；位置、尺寸和裁切锚点由布局 Key 的统一契约决定。
+          </div>
         </el-form-item>
         <el-form-item label="场景标签">
           <el-input
@@ -222,8 +256,15 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSubmit">确定</el-button>
+          <el-button :disabled="submitLoading" @click="dialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="submitLoading"
+            :disabled="!formReadyForSubmit || editingTemplateId !== null"
+            @click="handleSubmit"
+          >
+            确定
+          </el-button>
         </span>
       </template>
     </el-dialog>
@@ -283,7 +324,7 @@
             <el-radio-button label="editorial">编辑创意</el-radio-button>
           </el-radio-group>
           <div class="spec-toolbar-actions">
-            <el-tooltip content="示例会自动写入 variant、layout.variant 和 theme.variant；可继续补充颜色、字体、区块配置和封面图。" placement="bottom">
+            <el-tooltip content="示例会自动写入 layout.key、统一头像预设、variant 和 theme.variant；可继续补充颜色、字体、区块配置和封面图。" placement="bottom">
               <span class="help-link">规范说明</span>
             </el-tooltip>
             <el-button @click="copyCurrentSpec">复制示例</el-button>
@@ -316,7 +357,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, onMounted } from 'vue'
+import { computed, nextTick, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, UploadFile } from 'element-plus'
 import type { Template } from '@/types'
@@ -326,19 +367,98 @@ import { formatDate } from '@/utils/common'
 import { useUserStore } from '@/store/modules/user'
 
 type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
+type TemplateLayoutKey =
+  | 'qm-blue-top-photo'
+  | 'qm-sidebar-profile'
+  | 'qm-classic-centered'
+  | 'qm-ribbon-compact'
+  | 'qm-timeline-icons'
+  | 'qm-table-formal'
+  | 'qm-minimal-ats'
+  | 'qm-executive-business'
+  | 'qm-asymmetric-profile'
+  | 'qm-student-editorial'
+  | 'qm-spotlight-featured'
 
 const userStore = useUserStore()
 const canWrite = computed(() => userStore.user?.role !== 'viewer')
 
-const TEMPLATE_AVATAR_PRESETS: Record<TemplateVariant, Record<string, any>> = {
-  classic: { enabled: true, placement: 'header-right', shape: 'rounded', width: 86, height: 108 },
-  sidebar: { enabled: true, placement: 'sidebar-top', shape: 'circle', width: 96, height: 96 },
-  timeline: { enabled: true, placement: 'meta-card', shape: 'rounded', width: 86, height: 108 },
-  spotlight: { enabled: true, placement: 'meta-card', shape: 'rounded', width: 96, height: 120 },
-  ats: { enabled: false, placement: 'hidden' },
-  executive: { enabled: true, placement: 'header-right', shape: 'rounded', width: 82, height: 104 },
-  compact: { enabled: false, placement: 'hidden' },
-  editorial: { enabled: true, placement: 'header-right', shape: 'square', width: 86, height: 108 },
+const TEMPLATE_AVATAR_PRESETS: Readonly<Record<TemplateLayoutKey, Readonly<Record<string, any>>>> = {
+  'qm-blue-top-photo': avatarPreset('header-right', 'square', 96, 120),
+  'qm-sidebar-profile': avatarPreset('sidebar-top', 'square', 104, 130),
+  'qm-classic-centered': avatarPreset('header-right', 'square', 88, 110),
+  'qm-ribbon-compact': avatarPreset('default', 'square', 96, 120),
+  'qm-timeline-icons': avatarPreset('meta-card', 'square', 88, 110),
+  'qm-table-formal': avatarPreset('header-right', 'square', 78, 98),
+  'qm-minimal-ats': avatarPreset('header-right', 'square', 72, 90),
+  'qm-executive-business': avatarPreset('header-right', 'square', 96, 120),
+  'qm-asymmetric-profile': avatarPreset('header-right', 'square', 104, 130),
+  'qm-student-editorial': avatarPreset('header-right', 'square', 88, 110),
+  'qm-spotlight-featured': avatarPreset('meta-card', 'rounded', 96, 120),
+}
+
+const TEMPLATE_LAYOUT_OPTIONS: ReadonlyArray<{ key: TemplateLayoutKey; label: string; variant: TemplateVariant }> = [
+  { key: 'qm-blue-top-photo', label: '蓝色右上证件照', variant: 'ats' },
+  { key: 'qm-sidebar-profile', label: '左栏头像信息版', variant: 'sidebar' },
+  { key: 'qm-classic-centered', label: '居中标题头像版', variant: 'classic' },
+  { key: 'qm-ribbon-compact', label: '深蓝横条标题版', variant: 'compact' },
+  { key: 'qm-timeline-icons', label: '图标时间轴版', variant: 'timeline' },
+  { key: 'qm-table-formal', label: '正式表格信息版', variant: 'classic' },
+  { key: 'qm-minimal-ats', label: '技术开发 ATS 单栏', variant: 'ats' },
+  { key: 'qm-executive-business', label: '商务高管深色版', variant: 'executive' },
+  { key: 'qm-asymmetric-profile', label: '非对称能力叙事版', variant: 'editorial' },
+  { key: 'qm-student-editorial', label: '应届校招项目版', variant: 'editorial' },
+  { key: 'qm-spotlight-featured', label: '产品运营成果版', variant: 'spotlight' },
+]
+
+const DEFAULT_LAYOUT_BY_VARIANT: Readonly<Record<TemplateVariant, TemplateLayoutKey>> = {
+  classic: 'qm-classic-centered',
+  sidebar: 'qm-sidebar-profile',
+  timeline: 'qm-timeline-icons',
+  spotlight: 'qm-spotlight-featured',
+  ats: 'qm-minimal-ats',
+  executive: 'qm-executive-business',
+  compact: 'qm-ribbon-compact',
+  editorial: 'qm-student-editorial',
+}
+
+function avatarPreset(placement: string, shape: string, width: number, height: number) {
+  return Object.freeze({
+    enabled: true,
+    placement,
+    shape,
+    width,
+    height,
+    objectPosition: 'center 20%',
+  })
+}
+
+function isTemplateLayoutKey(value: unknown): value is TemplateLayoutKey {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(TEMPLATE_AVATAR_PRESETS, value)
+}
+
+function resolveTemplateLayoutKey(
+  explicitLayoutKey: unknown,
+  templateData: unknown,
+  variant: TemplateVariant,
+): TemplateLayoutKey {
+  const parsed = typeof templateData === 'string' ? safeParseTemplateData(templateData) : templateData
+  const candidate = [
+    explicitLayoutKey,
+    (parsed as any)?.layout?.key,
+    (parsed as any)?.layoutKey,
+    (parsed as any)?.key,
+  ].find(isTemplateLayoutKey)
+  return isTemplateLayoutKey(candidate) ? candidate : DEFAULT_LAYOUT_BY_VARIANT[variant]
+}
+
+function handleVariantChange(value: TemplateVariant) {
+  form.layoutKey = DEFAULT_LAYOUT_BY_VARIANT[value]
+}
+
+function handleLayoutKeyChange(value: TemplateLayoutKey) {
+  const option = TEMPLATE_LAYOUT_OPTIONS.find((item) => item.key === value)
+  if (option) form.templateVariant = option.variant
 }
 
 // 搜索表单
@@ -371,6 +491,9 @@ const specDialogVisible = ref(false)
 const currentPreviewImage = ref('')
 const formRef = ref<FormInstance>()
 const specVariant = ref<TemplateVariant>('classic')
+const editingTemplateId = ref<number | null>(null)
+const submitLoading = ref(false)
+const formReadyForSubmit = ref(false)
 
 // 表单
 const form = reactive({
@@ -379,6 +502,7 @@ const form = reactive({
   description: '',
   industryTags: '',
   templateVariant: 'classic' as TemplateVariant,
+  layoutKey: 'qm-classic-centered' as TemplateLayoutKey,
   recommendWeight: 0,
   previewImage: '',
   templateData: '' as any,
@@ -410,16 +534,18 @@ function resolveTemplateVariantFromData(templateData: unknown): TemplateVariant 
 const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   classic: {
     variant: 'classic',
+    layoutKey: 'qm-classic-centered',
     recommendWeight: 0,
     meta: {
       recommendWeight: 0,
     },
     profile: {
-      avatar: TEMPLATE_AVATAR_PRESETS.classic,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-classic-centered'],
     },
     layout: {
+      key: 'qm-classic-centered',
       variant: 'classic',
-      avatar: TEMPLATE_AVATAR_PRESETS.classic,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-classic-centered'],
     },
     theme: {
       variant: 'classic',
@@ -437,17 +563,19 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   sidebar: {
     variant: 'sidebar',
+    layoutKey: 'qm-sidebar-profile',
     recommendWeight: 0,
     meta: {
       recommendWeight: 0,
     },
     profile: {
-      avatar: TEMPLATE_AVATAR_PRESETS.sidebar,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-sidebar-profile'],
     },
     layout: {
+      key: 'qm-sidebar-profile',
       variant: 'sidebar',
       sidebarWidth: 250,
-      avatar: TEMPLATE_AVATAR_PRESETS.sidebar,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-sidebar-profile'],
     },
     theme: {
       variant: 'sidebar',
@@ -465,17 +593,19 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   timeline: {
     variant: 'timeline',
+    layoutKey: 'qm-timeline-icons',
     recommendWeight: 0,
     meta: {
       recommendWeight: 0,
     },
     profile: {
-      avatar: TEMPLATE_AVATAR_PRESETS.timeline,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-timeline-icons'],
     },
     layout: {
+      key: 'qm-timeline-icons',
       variant: 'timeline',
       emphasis: 'experience',
-      avatar: TEMPLATE_AVATAR_PRESETS.timeline,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-timeline-icons'],
     },
     theme: {
       variant: 'timeline',
@@ -493,17 +623,19 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   spotlight: {
     variant: 'spotlight',
+    layoutKey: 'qm-spotlight-featured',
     recommendWeight: 0,
     meta: {
       recommendWeight: 0,
     },
     profile: {
-      avatar: TEMPLATE_AVATAR_PRESETS.spotlight,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-spotlight-featured'],
     },
     layout: {
+      key: 'qm-spotlight-featured',
       variant: 'spotlight',
       emphasis: 'brand',
-      avatar: TEMPLATE_AVATAR_PRESETS.spotlight,
+      avatar: TEMPLATE_AVATAR_PRESETS['qm-spotlight-featured'],
     },
     theme: {
       variant: 'spotlight',
@@ -521,10 +653,11 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   ats: {
     variant: 'ats',
+    layoutKey: 'qm-minimal-ats',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    profile: { avatar: TEMPLATE_AVATAR_PRESETS.ats },
-    layout: { variant: 'ats', emphasis: 'readability', avatar: TEMPLATE_AVATAR_PRESETS.ats },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS['qm-minimal-ats'] },
+    layout: { key: 'qm-minimal-ats', variant: 'ats', emphasis: 'readability', avatar: TEMPLATE_AVATAR_PRESETS['qm-minimal-ats'] },
     theme: {
       variant: 'ats',
       colors: { primary: '#111827' },
@@ -534,10 +667,11 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   executive: {
     variant: 'executive',
+    layoutKey: 'qm-executive-business',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    profile: { avatar: TEMPLATE_AVATAR_PRESETS.executive },
-    layout: { variant: 'executive', emphasis: 'leadership', avatar: TEMPLATE_AVATAR_PRESETS.executive },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS['qm-executive-business'] },
+    layout: { key: 'qm-executive-business', variant: 'executive', emphasis: 'leadership', avatar: TEMPLATE_AVATAR_PRESETS['qm-executive-business'] },
     theme: {
       variant: 'executive',
       colors: { primary: '#92400e' },
@@ -547,10 +681,11 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   compact: {
     variant: 'compact',
+    layoutKey: 'qm-ribbon-compact',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    profile: { avatar: TEMPLATE_AVATAR_PRESETS.compact },
-    layout: { variant: 'compact', emphasis: 'dense', avatar: TEMPLATE_AVATAR_PRESETS.compact },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS['qm-ribbon-compact'] },
+    layout: { key: 'qm-ribbon-compact', variant: 'compact', emphasis: 'dense', avatar: TEMPLATE_AVATAR_PRESETS['qm-ribbon-compact'] },
     theme: {
       variant: 'compact',
       colors: { primary: '#334155' },
@@ -560,10 +695,11 @@ const TEMPLATE_SPEC_MAP: Record<TemplateVariant, Record<string, any>> = {
   },
   editorial: {
     variant: 'editorial',
+    layoutKey: 'qm-student-editorial',
     recommendWeight: 0,
     meta: { recommendWeight: 0 },
-    profile: { avatar: TEMPLATE_AVATAR_PRESETS.editorial },
-    layout: { variant: 'editorial', emphasis: 'creative', avatar: TEMPLATE_AVATAR_PRESETS.editorial },
+    profile: { avatar: TEMPLATE_AVATAR_PRESETS['qm-student-editorial'] },
+    layout: { key: 'qm-student-editorial', variant: 'editorial', emphasis: 'creative', avatar: TEMPLATE_AVATAR_PRESETS['qm-student-editorial'] },
     theme: {
       variant: 'editorial',
       colors: { primary: '#e11d48' },
@@ -581,39 +717,79 @@ const rules = {
   templateVariant: [
     { required: true, message: '请选择模板版式', trigger: 'change' }
   ],
+  layoutKey: [
+    { required: true, message: '请选择布局 Key', trigger: 'change' }
+  ],
   templateData: [
-    { required: true, message: '请输入模板数据', trigger: 'blur' }
+    { required: true, message: '请输入模板数据', trigger: 'blur' },
+    { validator: validateTemplateData, trigger: 'blur' }
   ]
 }
 
 // 新增模板
 const handleAdd = () => {
+  if (editingTemplateId.value !== null || submitLoading.value) return
+
   dialogTitle.value = '新增模板'
   form.id = 0
   form.templateName = ''
   form.description = ''
   form.industryTags = ''
   form.templateVariant = 'classic'
+  form.layoutKey = 'qm-classic-centered'
   form.recommendWeight = 0
   form.previewImage = ''
   form.templateData = JSON.stringify(TEMPLATE_SPEC_MAP.classic, null, 2)
   form.status = 'active'
+  formReadyForSubmit.value = true
   dialogVisible.value = true
 }
 
 // 编辑模板
-const handleEdit = (row: Template) => {
-  dialogTitle.value = '编辑模板'
-  form.id = row.id
-  form.templateName = row.templateName ?? ''
-  form.description = row.description ?? ''
-  form.industryTags = row.industryTags ?? ''
-  form.templateVariant = row.templateVariant ?? resolveTemplateVariantFromData(row.templateData)
-  form.recommendWeight = row.recommendWeight ?? readRecommendWeight(row.templateData)
-  form.previewImage = row.previewImage ?? ''
-  form.templateData = JSON.stringify(row.templateData, null, 2)
-  form.status = row.status ? 'active' : 'inactive'
-  dialogVisible.value = true
+const handleEdit = async (row: Template) => {
+  if (editingTemplateId.value !== null || submitLoading.value) return
+
+  editingTemplateId.value = row.id
+  formReadyForSubmit.value = false
+
+  try {
+    const response = await getTemplateDetail(row.id)
+    const templateDetail = response.data
+
+    if (!templateDetail || templateDetail.id !== row.id) {
+      throw new Error('服务端返回的模板详情与当前记录不匹配')
+    }
+
+    const templateData = requireNonEmptyTemplateData(templateDetail.templateData)
+    const templateVariant = isTemplateVariant(templateDetail.templateVariant)
+      ? templateDetail.templateVariant
+      : resolveTemplateVariantFromData(templateData)
+    const layoutKey = resolveTemplateLayoutKey(templateDetail.layoutKey, templateData, templateVariant)
+
+    Object.assign(form, {
+      id: templateDetail.id,
+      templateName: templateDetail.templateName ?? '',
+      description: templateDetail.description ?? row.description ?? '',
+      industryTags: templateDetail.industryTags ?? row.industryTags ?? '',
+      templateVariant,
+      layoutKey,
+      recommendWeight: templateDetail.recommendWeight ?? readRecommendWeight(templateData),
+      previewImage: templateDetail.previewImage ?? row.previewImage ?? '',
+      templateData: JSON.stringify(templateData, null, 2),
+      status: (templateDetail.status ?? row.status) ? 'active' : 'inactive',
+    })
+
+    dialogTitle.value = '编辑模板'
+    formReadyForSubmit.value = true
+    dialogVisible.value = true
+    await nextTick()
+    formRef.value?.clearValidate()
+  } catch (error) {
+    console.error('加载模板详情失败:', error)
+    ElMessage.error('模板详情加载失败，已阻止打开编辑表单')
+  } finally {
+    editingTemplateId.value = null
+  }
 }
 
 // 当前预览的模板数据
@@ -657,11 +833,32 @@ function parseTemplateData(templateData: unknown): Record<string, any> {
   throw new Error('模板 JSON 解析失败')
 }
 
+function requireNonEmptyTemplateData(templateData: unknown): Record<string, any> {
+  const parsed = parseTemplateData(templateData)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+    throw new Error('模板 JSON 必须是非空对象')
+  }
+  return parsed
+}
+
+function validateTemplateData(
+  _rule: unknown,
+  value: unknown,
+  callback: (error?: Error) => void,
+) {
+  try {
+    requireNonEmptyTemplateData(value)
+    callback()
+  } catch (error) {
+    callback(error instanceof Error ? error : new Error('模板 JSON 格式无效'))
+  }
+}
+
 // 预览模板
 const handlePreview = async (row: Template) => {
   try {
     const response = await getTemplateDetail(row.id)
-    const templateDetail = response.data?.data || response.data
+    const templateDetail = response.data
     const templateDataObj = parseTemplateData(templateDetail.templateData)
     currentTemplateData.value = templateDataObj
     generatePreviewHtml(templateDataObj)
@@ -1242,6 +1439,7 @@ const openTemplateSpecDialog = () => {
 
 const applyTemplateSpec = (variant: TemplateVariant) => {
   form.templateVariant = variant
+  form.layoutKey = DEFAULT_LAYOUT_BY_VARIANT[variant]
   form.recommendWeight = readRecommendWeight(TEMPLATE_SPEC_MAP[variant])
   form.templateData = JSON.stringify(TEMPLATE_SPEC_MAP[variant], null, 2)
   ElMessage.success('已将示例模板 JSON 写入编辑表单')
@@ -1259,11 +1457,17 @@ const copyCurrentSpec = async () => {
 
 // 提交表单
 const handleSubmit = async () => {
-  if (!formRef.value) return
-  
+  if (!formRef.value || submitLoading.value) return
+  if (!formReadyForSubmit.value) {
+    ElMessage.error('模板详情尚未完整加载，已阻止提交')
+    return
+  }
+
+  submitLoading.value = true
+
   try {
     await formRef.value.validate()
-    const normalizedTemplateData = normalizeTemplateDataWithVariant(form.templateData, form.templateVariant)
+    const normalizedTemplateData = normalizeTemplateDataWithVariant(form.templateData, form.templateVariant, form.layoutKey)
 
     const data = {
       templateName: form.templateName,
@@ -1287,12 +1491,15 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     refresh()
   } catch (error) {
-    console.error('表单验证失败:', error)
+    console.error('模板提交失败:', error)
+  } finally {
+    submitLoading.value = false
   }
 }
 
 // 瀵硅瘽妗嗗叧闂?
 const handleDialogClose = () => {
+  formReadyForSubmit.value = false
   formRef.value?.resetFields()
 }
 
@@ -1364,10 +1571,16 @@ function splitIndustryTags(value?: string) {
     .filter(Boolean)
 }
 
-function normalizeTemplateDataWithVariant(templateData: string, templateVariant: TemplateVariant) {
-  const parsed = safeParseTemplateData(templateData)
+function normalizeTemplateDataWithVariant(
+  templateData: string,
+  templateVariant: TemplateVariant,
+  layoutKey: TemplateLayoutKey,
+) {
+  const parsed = requireNonEmptyTemplateData(templateData)
   const recommendWeight = Math.max(0, Number(form.recommendWeight) || 0)
+  const avatar = { ...TEMPLATE_AVATAR_PRESETS[layoutKey] }
   parsed.variant = templateVariant
+  parsed.layoutKey = layoutKey
   parsed.recommendWeight = recommendWeight
   parsed.meta = {
     ...(typeof parsed.meta === 'object' && parsed.meta ? parsed.meta : {}),
@@ -1375,7 +1588,13 @@ function normalizeTemplateDataWithVariant(templateData: string, templateVariant:
   }
   parsed.layout = {
     ...(typeof parsed.layout === 'object' && parsed.layout ? parsed.layout : {}),
+    key: layoutKey,
     variant: templateVariant,
+    avatar,
+  }
+  parsed.profile = {
+    ...(typeof parsed.profile === 'object' && parsed.profile ? parsed.profile : {}),
+    avatar,
   }
   parsed.theme = {
     ...(typeof parsed.theme === 'object' && parsed.theme ? parsed.theme : {}),
@@ -1541,6 +1760,14 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 600;
   cursor: help;
+}
+
+.layout-contract-tip {
+  width: 100%;
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .preview-placeholder {

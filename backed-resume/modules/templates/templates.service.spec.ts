@@ -5,6 +5,11 @@ import { Template } from '../../entities/template.entity';
 import { TemplateFavorite } from '../../entities/template-favorite.entity';
 import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
+import {
+  TEMPLATE_AVATAR_PRESETS,
+  TEMPLATE_LAYOUT_KEYS,
+  TEMPLATE_VARIANT_BY_LAYOUT,
+} from './template-avatar-contract';
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
@@ -183,6 +188,63 @@ describe('TemplatesService', () => {
       expect(mockRepository.create).toHaveBeenCalled();
       expect(mockRepository.save).toHaveBeenCalled();
       expect(result.templateName).toBe('技术简历模板');
+    });
+  });
+
+  describe('layout avatar contract', () => {
+    it('recognizes all eleven public layout keys, including formal and asymmetric layouts', () => {
+      expect(TEMPLATE_LAYOUT_KEYS).toHaveLength(11);
+      expect((service as any).resolveTemplateLayoutKey('{"layout":{"key":"qm-table-formal"}}')).toBe('qm-table-formal');
+      expect((service as any).resolveTemplateLayoutKey('{"layout":{"key":"qm-asymmetric-profile"}}')).toBe('qm-asymmetric-profile');
+    });
+
+    it.each(TEMPLATE_LAYOUT_KEYS)('normalizes %s to its visible key-specific photo preset', (layoutKey) => {
+      const variant = TEMPLATE_VARIANT_BY_LAYOUT[layoutKey];
+      const normalized = JSON.parse((service as any).normalizeTemplateData(JSON.stringify({
+        layoutKey,
+        layout: {
+          key: layoutKey,
+          variant,
+          avatar: { enabled: false, placement: 'hidden', shape: 'square', width: 0, height: 0 },
+        },
+      }), variant));
+
+      expect(normalized.layoutKey).toBe(layoutKey);
+      expect(normalized.layout.key).toBe(layoutKey);
+      expect(normalized.layout.avatar).toEqual(TEMPLATE_AVATAR_PRESETS[layoutKey]);
+      expect(normalized.profile.avatar).toEqual(TEMPLATE_AVATAR_PRESETS[layoutKey]);
+      expect(normalized.layout.avatar.enabled).toBe(true);
+      expect(normalized.layout.avatar.objectPosition).toBe('center 20%');
+    });
+
+    it.each([
+      ['ats', 'qm-minimal-ats'],
+      ['compact', 'qm-ribbon-compact'],
+    ] as const)('keeps the %s variant photo visible when no layout key was supplied', (variant, layoutKey) => {
+      const normalized = JSON.parse((service as any).normalizeTemplateData('{}', variant));
+      expect(normalized.layout.key).toBe(layoutKey);
+      expect(normalized.layout.avatar).toEqual(TEMPLATE_AVATAR_PRESETS[layoutKey]);
+      expect(normalized.layout.avatar.enabled).toBe(true);
+    });
+
+    it('exposes the key-specific avatar contract in list responses', async () => {
+      const formalTemplate = {
+        ...mockTemplate,
+        templateData: '{"layout":{"key":"qm-table-formal","variant":"classic"}}',
+      };
+      const mockQueryBuilder = {
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([formalTemplate]),
+        getManyAndCount: jest.fn().mockResolvedValue([[formalTemplate], 1]),
+      };
+      mockRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+
+      const result = await service.findAll({ page: 1, limit: 10 });
+      expect(result.list[0].layoutKey).toBe('qm-table-formal');
+      expect(result.list[0].avatarLayout).toEqual(TEMPLATE_AVATAR_PRESETS['qm-table-formal']);
     });
   });
 

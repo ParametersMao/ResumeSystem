@@ -968,7 +968,9 @@ const coreResumePrintStyles = `
 
   .variant-sidebar .sidebar-layout {
     grid-template-columns: 250px minmax(0, 1fr);
-    min-height: 1120px;
+    /* The backend reserves 5mm on both A4 edges. A 1120px minimum plus
+       those margins created a visually empty second page. */
+    min-height: calc(297mm - 10mm);
   }
 
   .variant-sidebar .sidebar-column {
@@ -2470,7 +2472,679 @@ const coreResumePrintStyles = `
   .resume-sheet.has-custom-page-margin.layout-qm-asymmetric-profile .asymmetric-left,
   .resume-sheet.has-custom-page-margin.layout-qm-asymmetric-profile .asymmetric-right { padding-left: var(--resume-page-margin); padding-right: var(--resume-page-margin); }
 
-`
+  /*
+   * Resume layout v3 preview/print parity overrides.
+   *
+   * Keep this block after the historical print rules: several templates have
+   * older duplicate selectors above, while the live preview now uses fixed
+   * date columns, semantic contact wrapping and visible photo contracts.
+   */
+
+  .resume-sheet.variant-sidebar,
+  .resume-sheet.variant-timeline,
+  .resume-sheet.variant-spotlight,
+  .resume-sheet.variant-editorial,
+  .resume-sheet.layout-qm-timeline-icons,
+  .resume-sheet.layout-qm-executive-business,
+  .resume-sheet.layout-qm-student-editorial,
+  .resume-sheet.layout-qm-asymmetric-profile {
+    overflow: visible;
+  }
+
+  .resume-avatar.avatar-placeholder {
+    opacity: 0.9;
+  }
+
+  .resume-sheet .resume-role {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet .resume-meta {
+    min-width: 0;
+  }
+
+  .resume-sheet .resume-meta span,
+  .resume-sheet .sidebar-meta-list span,
+  .resume-sheet .timeline-contact-grid span,
+  .resume-sheet .spotlight-meta-item,
+  .resume-sheet .spotlight-meta-item strong,
+  .resume-sheet .student-contact-list span {
+    min-width: 0;
+  }
+
+  .resume-sheet .student-contact-list span {
+    max-width: 100%;
+  }
+
+  .resume-sheet .resume-meta strong,
+  .resume-sheet .sidebar-meta-list strong {
+    white-space: nowrap;
+  }
+
+  /* Contact strings include zero-width opportunities after @ . _ / and -. */
+  .resume-sheet .qm-blue-meta span,
+  .resume-sheet .sidebar-meta-list span,
+  .resume-sheet .classic-centered-meta em,
+  .resume-sheet .timeline-contact-grid em,
+  .resume-sheet .spotlight-meta-item strong,
+  .resume-sheet .student-contact-list span,
+  .resume-sheet .asymmetric-contact em,
+  .resume-sheet .ats-contact-list em,
+  .resume-sheet .resume-meta span,
+  .resume-sheet .formal-profile-table td {
+    min-width: 0;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+
+  .resume-sheet .item-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+    gap: 6px 16px;
+    align-items: start;
+  }
+
+  .resume-sheet .item-heading h3,
+  .resume-sheet .item-heading span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet .item-heading span {
+    text-align: right;
+  }
+
+  .resume-sheet .item-subheading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet .item-subheading > span:last-child {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .resume-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-meta span {
+    min-width: 0;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 132px;
+    gap: 8px 18px;
+    align-items: start;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    min-width: 0;
+    gap: 5px 14px;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-main > span::before {
+    content: '—';
+    margin-right: 8px;
+    color: #657278;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-main h3,
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-main span,
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-date {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-main h3,
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-item-main span {
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet.layout-qm-blue-top-photo .qm-blue-date {
+    min-width: 132px;
+    font-size: 12px;
+    text-align: right;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-heading {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 8px 18px;
+    align-items: start;
+  }
+
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    min-width: 0;
+    gap: 5px 14px;
+  }
+
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-main > span::before {
+    content: '—';
+    margin-right: 8px;
+    color: #657278;
+  }
+
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-main h3,
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-main span,
+  .resume-sheet.layout-qm-classic-centered .classic-centered-date {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-main h3,
+  .resume-sheet.layout-qm-classic-centered .classic-centered-item-main span {
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet.layout-qm-classic-centered .classic-centered-date {
+    min-width: 150px;
+    font-size: 12px;
+    text-align: right;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .resume-sheet .timeline-card-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .resume-sheet .timeline-card-top > div,
+  .resume-sheet .spotlight-card-head > div {
+    min-width: 0;
+  }
+
+  .resume-sheet .timeline-card-top h3,
+  .resume-sheet .timeline-card-top p,
+  .resume-sheet .spotlight-card-head h3,
+  .resume-sheet .spotlight-card-head p {
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet .timeline-date,
+  .resume-sheet .spotlight-date {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .resume-sheet .spotlight-hero {
+    grid-template-columns: minmax(0, 1.3fr) 240px;
+  }
+
+  .resume-sheet .spotlight-meta-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+    padding: 15px;
+  }
+
+  .resume-sheet .spotlight-avatar {
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+
+  .resume-sheet .spotlight-meta-item {
+    gap: 3px;
+  }
+
+  .resume-sheet .spotlight-meta-item[data-contact-kind="email"],
+  .resume-sheet .spotlight-meta-item[data-contact-kind="site"] {
+    grid-column: 1 / -1;
+  }
+
+  .resume-sheet .spotlight-meta-item[data-contact-kind="phone"] {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .resume-sheet .spotlight-meta-item[data-contact-kind="experience"] {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .resume-sheet .spotlight-meta-item[data-contact-kind="email"] {
+    grid-row: 3;
+  }
+
+  .resume-sheet .spotlight-meta-item[data-contact-kind="gender"] {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  .resume-sheet .spotlight-meta-item[data-contact-kind="age"] {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .resume-sheet .spotlight-body {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .resume-sheet .spotlight-side {
+    padding: 22px 20px 26px;
+  }
+
+  .resume-sheet .spotlight-main {
+    padding: 18px 24px 22px;
+  }
+
+  .resume-sheet .spotlight-panel + .spotlight-panel,
+  .resume-sheet .spotlight-section + .spotlight-section {
+    margin-top: 12px;
+  }
+
+  .resume-sheet .spotlight-card {
+    padding: 11px 14px;
+  }
+
+  .resume-sheet .spotlight-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .resume-sheet .spotlight-card-head h3 {
+    font-size: 15px;
+  }
+
+  .resume-sheet .spotlight-card-head p {
+    margin: 4px 0 0;
+    font-size: 12px;
+  }
+
+  .resume-sheet .spotlight-date {
+    background: rgba(15, 23, 42, 0.05);
+    font-weight: 700;
+  }
+
+  .resume-sheet .spotlight-section > .section-heading {
+    margin-bottom: 9px;
+  }
+
+  .resume-sheet .spotlight-section > .section-heading h2 {
+    font-size: 16px;
+  }
+
+  .resume-sheet .spotlight-section .section-items {
+    gap: 10px;
+  }
+
+  .resume-sheet .spotlight-card > .item-description {
+    margin-top: 7px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .resume-sheet .outcome-metrics {
+    margin-top: 8px;
+  }
+
+  .resume-sheet .outcome-metrics span {
+    padding: 3px 7px;
+  }
+
+  .resume-sheet .ats-item-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 104px;
+    gap: 20px;
+    align-items: baseline;
+  }
+
+  .resume-sheet .ats-item-header > div {
+    min-width: 0;
+  }
+
+  .resume-sheet .ats-item-header h3,
+  .resume-sheet .ats-item-header p {
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet .ats-item-header h3 {
+    font-size: 14px;
+  }
+
+  .resume-sheet .ats-item-header p {
+    margin: 3px 0 0;
+    font-size: 12px;
+  }
+
+  .resume-sheet .ats-item-header time {
+    min-width: 104px;
+    font-size: 11px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .resume-sheet .formal-profile-table th {
+    text-align: center;
+  }
+
+  .resume-sheet .formal-profile-photo {
+    color: #94a3b8;
+    font-size: 11px;
+  }
+
+  .resume-sheet .formal-item-meta > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet .formal-item-meta time {
+    color: #526174;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-layout {
+    grid-template-columns: 40% 60%;
+    min-height: auto;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-anchor {
+    grid-template-columns: 104px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-avatar {
+    border: 0;
+    background: #eef1f1;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-compact-items article {
+    grid-template-columns: minmax(0, 1fr) 104px;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-compact-items article > * {
+    min-width: 0;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-compact-main {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-compact-items time {
+    min-width: 104px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-story-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 104px;
+    gap: 14px;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-story-head > div {
+    min-width: 0;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-story-head h3,
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-story-head p {
+    overflow-wrap: anywhere;
+  }
+
+  .resume-sheet.layout-qm-asymmetric-profile .asymmetric-story-head time {
+    min-width: 104px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .resume-sheet.layout-qm-student-editorial {
+    padding: 28px 48px 30px;
+    background: linear-gradient(90deg, var(--resume-primary) 0 8px, transparent 8px), #fff;
+  }
+
+  .resume-sheet .student-resume-header {
+    gap: 30px;
+    padding-bottom: 14px;
+  }
+
+  .resume-sheet .student-eyebrow {
+    margin: 0 0 6px;
+    font-size: 11px;
+  }
+
+  .resume-sheet .student-identity h1 {
+    font-size: 38px;
+  }
+
+  .resume-sheet .student-target {
+    margin: 7px 0 12px;
+    font-size: 15px;
+  }
+
+  .resume-sheet .student-contact-list {
+    gap: 7px 20px;
+    font-size: 12px;
+  }
+
+  .resume-sheet .student-contact-list strong {
+    margin-right: 6px;
+    font-style: normal;
+  }
+
+  .resume-sheet .student-avatar {
+    width: 88px;
+    height: 112px;
+    box-shadow: 8px 8px 0 rgba(47, 128, 167, 0.14);
+  }
+
+  .resume-sheet .student-education-spotlight {
+    grid-template-columns: 118px minmax(0, 1fr);
+    gap: 24px;
+    margin: 12px 0 14px;
+    padding: 12px 16px;
+    border-left-width: 4px;
+  }
+
+  .resume-sheet .student-section-kicker {
+    padding-top: 4px;
+    font-size: 11px;
+  }
+
+  .resume-sheet .student-education-items {
+    min-width: 0;
+  }
+
+  .resume-sheet .student-education-item {
+    grid-template-columns: minmax(0, 1fr) 104px;
+    gap: 4px 20px;
+  }
+
+  .resume-sheet .student-education-item > div,
+  .resume-sheet .student-item-header > div {
+    min-width: 0;
+  }
+
+  .resume-sheet .student-education-item + .student-education-item {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .resume-sheet .student-education-item h2,
+  .resume-sheet .student-item h3 {
+    font-size: 15px;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+
+  .resume-sheet .student-education-item p,
+  .resume-sheet .student-item-header p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+
+  .resume-sheet .student-education-item time,
+  .resume-sheet .student-item time {
+    min-width: 104px;
+    font-size: 11px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .resume-sheet .student-section + .student-section {
+    margin-top: 8px;
+  }
+
+  .resume-sheet .student-section-heading {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .resume-sheet .student-section-heading > span {
+    padding-bottom: 4px;
+    font-size: 12px;
+    border-bottom-width: 3px;
+  }
+
+  .resume-sheet .student-section-heading p {
+    margin: 0 0 2px;
+    font-size: 9px;
+  }
+
+  .resume-sheet .student-section-heading h2 {
+    font-size: 19px;
+  }
+
+  .resume-sheet .student-items {
+    gap: var(--resume-item-spacing);
+    padding-left: 46px;
+  }
+
+  .resume-sheet .student-item {
+    padding-bottom: 6px;
+  }
+
+  .resume-sheet .student-item-header {
+    grid-template-columns: minmax(0, 1fr) 104px;
+    gap: 18px;
+  }
+
+  .resume-sheet .student-description {
+    margin-top: 5px;
+    font-size: var(--resume-font-size);
+    line-height: 1.6;
+  }
+
+  .resume-sheet .student-skills-list {
+    gap: 7px;
+    padding-left: 46px;
+  }
+
+  .resume-sheet .student-skills-list span {
+    padding: 4px 9px;
+    font-size: 11px;
+  }
+
+  .resume-sheet .student-summary {
+    margin-left: 46px;
+    padding: 10px 14px;
+    border-left-width: 3px;
+  }
+
+  .resume-sheet .student-summary p {
+    font-size: var(--resume-font-size);
+    line-height: var(--resume-line-height);
+  }
+
+  /* Natural pagination: sections may split, but headings and normal items do not. */
+  .resume-sheet .resume-section,
+  .resume-sheet .timeline-section,
+  .resume-sheet .spotlight-section,
+  .resume-sheet .student-section,
+  .resume-sheet .ats-section,
+  .resume-sheet .formal-table-section,
+  .resume-sheet .asymmetric-story-section,
+  .resume-sheet .sidebar-layout,
+  .resume-sheet .spotlight-body,
+  .resume-sheet .asymmetric-layout {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .resume-sheet .section-item,
+  .resume-sheet .timeline-card,
+  .resume-sheet .spotlight-card,
+  .resume-sheet .ats-item,
+  .resume-sheet .student-education-item,
+  .resume-sheet .student-item,
+  .resume-sheet .formal-table-items article,
+  .resume-sheet .asymmetric-compact-items article,
+  .resume-sheet .asymmetric-story-section article {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .resume-sheet .section-heading,
+  .resume-sheet .item-heading,
+  .resume-sheet .timeline-marker,
+  .resume-sheet .student-section-heading,
+  .resume-sheet .ats-section-title,
+  .resume-sheet .formal-table-section > header,
+  .resume-sheet .asymmetric-story-section > header,
+  .resume-sheet .asymmetric-left-section > h2,
+  .resume-sheet .asymmetric-contact > h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .resume-sheet .resume-header,
+  .resume-sheet .qm-blue-identity,
+  .resume-sheet .classic-centered-header,
+  .resume-sheet .timeline-hero,
+  .resume-sheet .spotlight-hero,
+  .resume-sheet .ats-resume-header,
+  .resume-sheet .student-resume-header,
+  .resume-sheet .asymmetric-anchor,
+  .resume-sheet .formal-profile-table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .resume-sheet p,
+  .resume-sheet blockquote {
+    orphans: 2;
+    widows: 2;
+  }
+
+  .resume-sheet [data-contact-kind] {
+    min-width: 0;
+  }
+
+  .resume-sheet [data-contact-kind] > .contact-value,
+  .resume-sheet [data-contact-kind] .contact-value {
+    min-width: 0;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+ `
 
 export function buildCoreResumePrintHtml(resumeMarkup: string, title = 'Resume Export') {
   return `<!DOCTYPE html>

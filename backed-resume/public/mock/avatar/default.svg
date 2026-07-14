@@ -1,14 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="default avatar">
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500" role="img" aria-label="professional portrait placeholder">
   <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#e8f0ff"/>
-      <stop offset="1" stop-color="#f7f8fa"/>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eef3f8"/>
+      <stop offset="1" stop-color="#dfe8f1"/>
+    </linearGradient>
+    <linearGradient id="jacket" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#33485e"/>
+      <stop offset="1" stop-color="#1d2c3b"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#edf2f6"/>
     </linearGradient>
   </defs>
-  <rect width="256" height="256" rx="24" fill="url(#bg)"/>
-  <circle cx="128" cy="104" r="44" fill="#c7d2fe"/>
-  <path d="M48 218c14-44 50-66 80-66s66 22 80 66" fill="#c7d2fe"/>
-  <circle cx="128" cy="104" r="40" fill="#eef2ff"/>
-  <path d="M60 218c12-36 42-54 68-54s56 18 68 54" fill="#eef2ff"/>
-  <text x="128" y="246" text-anchor="middle" font-size="12" fill="#94a3b8" font-family="Arial, sans-serif">mock</text>
+
+  <rect width="400" height="500" fill="url(#background)"/>
+  <circle cx="200" cy="150" r="118" fill="#ffffff" opacity=".34"/>
+  <path d="M62 500c5-99 48-174 138-174s133 75 138 174z" fill="#c8d4df" opacity=".7"/>
+
+  <g>
+    <path d="M138 314c12-16 30-25 62-25s50 9 62 25l18 40-80 61-80-61z" fill="#e8b997"/>
+    <path d="M121 183c0-59 32-101 79-101s79 42 79 101v27c0 70-35 112-79 112s-79-42-79-112z" fill="#efc2a0"/>
+    <path d="M119 180c-8-67 28-116 83-116 48 0 82 38 81 101-15-10-30-23-43-40-23 23-58 37-109 41l-2 34z" fill="#263849"/>
+    <path d="M124 188c10-8 21-11 34-10 10 0 20 3 28 8" fill="none" stroke="#314252" stroke-width="7" stroke-linecap="round"/>
+    <path d="M214 186c9-6 19-9 29-8 13-1 24 2 34 10" fill="none" stroke="#314252" stroke-width="7" stroke-linecap="round"/>
+    <ellipse cx="158" cy="200" rx="5" ry="6" fill="#293745"/>
+    <ellipse cx="242" cy="200" rx="5" ry="6" fill="#293745"/>
+    <path d="M184 252c11 10 21 14 32 0" fill="none" stroke="#b76f67" stroke-width="5" stroke-linecap="round"/>
+
+    <path d="M105 500c3-77 21-143 66-177l29 63 29-63c45 34 63 100 66 177z" fill="url(#jacket)"/>
+    <path d="M171 323l29 63 29-63-7 127h-44z" fill="url(#shirt)"/>
+    <path d="M192 382h16l12 83-20 24-20-24z" fill="#315d85"/>
+    <path d="M169 321l31 65-53-31zM231 321l-31 65 53-31z" fill="#f8fafc"/>
+  </g>
+
+  <rect x="8" y="8" width="384" height="484" rx="12" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="4"/>
 </svg>
