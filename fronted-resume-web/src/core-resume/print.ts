@@ -3008,13 +3008,13 @@ const coreResumePrintStyles = `
   }
 
   .resume-sheet .student-section + .student-section {
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
   .resume-sheet .student-section-heading {
     grid-template-columns: 34px minmax(0, 1fr);
     gap: 12px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .resume-sheet .student-section-heading > span {
@@ -3038,7 +3038,7 @@ const coreResumePrintStyles = `
   }
 
   .resume-sheet .student-item {
-    padding-bottom: 6px;
+    padding-bottom: 5px;
   }
 
   .resume-sheet .student-item-header {

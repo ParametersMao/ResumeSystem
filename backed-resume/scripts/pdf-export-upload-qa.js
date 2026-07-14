@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { existsSync } = require('node:fs')
 const path = require('node:path')
 const puppeteer = require('puppeteer')
-const pdfjs = require('pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js')
 
 const serviceModule = path.resolve(__dirname, '../dist/modules/resumes/resumes.service.js')
 if (!existsSync(serviceModule)) {
@@ -56,28 +55,23 @@ async function main() {
   assert.deepEqual(downloadedKeys, ['resume-photos/user-7/photo-integration.png'])
   assert.ok(Buffer.isBuffer(exportedPdf) && exportedPdf.length > 1_000, 'exported PDF was not captured')
 
-  const document = await pdfjs.getDocument({ data: new Uint8Array(exportedPdf) }).promise
-  try {
-    const firstPage = await document.getPage(1)
-    const operators = await firstPage.getOperatorList()
-    const imageOperators = new Set(
-      Object.entries(pdfjs.OPS)
-        .filter(([name]) => /paint(?:Jpeg|Image|InlineImage)/.test(name))
-        .map(([, value]) => value),
-    )
-    assert.ok(
-      operators.fnArray.some((operator) => imageOperators.has(operator)),
-      'the uploaded raster was loaded but not embedded in the exported PDF',
-    )
-  } finally {
-    await document.destroy()
-  }
+  // Chromium keeps image dictionaries outside compressed content streams.
+  // Inspecting those dictionaries avoids pdf-parse's legacy PDF.js font loader,
+  // which touches a browser-only `document` during teardown on Linux runners.
+  const imageObjectCount = (
+    exportedPdf.toString('latin1').match(/\/Subtype\s*\/Image\b/g) || []
+  ).length
+  assert.ok(
+    imageObjectCount > 0,
+    'the uploaded raster was loaded but not embedded as a PDF image object',
+  )
 
   console.log(JSON.stringify({
     status: 'passed',
     pageCount: result.pageCount,
     uploadedPhotoKey: downloadedKeys[0],
     pdfBytes: exportedPdf.length,
+    imageObjectCount,
   }))
 }
 
