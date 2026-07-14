@@ -14,6 +14,7 @@ function requiredEnv(name) {
 async function main() {
   const browser = await puppeteer.launch({
     headless: true,
+    acceptInsecureCerts: process.env.QA_ACCEPT_INSECURE_CERTS === 'true',
     executablePath: resolveBrowserPath(),
     args: browserLaunchArgs(),
   })

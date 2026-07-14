@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
-import { buildAllowedOrigins, isOriginAllowed } from './cors';
+import { buildAllowedOrigins, validateCorsOrigin } from './cors';
 import { isPrivateKnowledgeUploadPath } from './security/upload-static-access';
 
 async function bootstrap() {
@@ -30,11 +30,7 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin, callback) => {
       // 允许没有 origin 的请求（如 Postman）
-      if (isOriginAllowed(origin, allowedOrigins)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS: origin ${origin} not allowed`));
-      }
+      validateCorsOrigin(origin, allowedOrigins, callback);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
