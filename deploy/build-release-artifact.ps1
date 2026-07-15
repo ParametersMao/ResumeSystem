@@ -159,11 +159,39 @@ foreach ($entry in $images.GetEnumerator()) {
       throw "Built image provenance does not match release commit/version: $($entry.Value.Target)"
     }
     switch ($entry.Key) {
-      'BACKEND_IMAGE' { docker run --rm $entry.Value.Target sh -c 'test -x /usr/bin/chromium-headless-shell' }
-      'WEB_IMAGE' { docker run --rm $entry.Value.Target sh -c 'grep -Fq ''src="/assets/'' /usr/share/nginx/html/index.html' }
-      'ADMIN_IMAGE' { docker run --rm $entry.Value.Target sh -c 'grep -Fq ''/admin/js/main-'' /usr/share/nginx/html/index.html' }
-      'NGINX_IMAGE' { docker run --rm --entrypoint sh $entry.Value.Target -c "grep -Fq 'server_name 121.43.208.184;' /etc/nginx/conf.d/default.conf && grep -Fq 'location /admin/' /etc/nginx/conf.d/default.conf" }
-      'AGENT_IMAGE' { docker run --rm --network none -e FASTEMBED_CACHE_PATH=/tmp/fastembed-cache/current -e EMBEDDING_BACKEND=fastembed -e EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5 $entry.Value.Target sh -c 'test "$FASTEMBED_CACHE_PATH" = /tmp/fastembed-cache/current && test -L "$FASTEMBED_CACHE_PATH" && python -c "from app.main import SERVICE_VERSION; import sys; assert SERVICE_VERSION == sys.argv[1]" "$1" && python scripts/bootstrap_fixture.py --help >/dev/null && python -c "from app.rag import embed_texts; assert len(embed_texts([''offline release probe''])[0]) == 512"' sh $version }
+      'BACKEND_IMAGE' {
+        docker run --rm --entrypoint test $entry.Value.Target -x /usr/bin/chromium-headless-shell
+      }
+      'WEB_IMAGE' {
+        docker run --rm --entrypoint grep $entry.Value.Target -Eq 'src=./assets/' /usr/share/nginx/html/index.html
+      }
+      'ADMIN_IMAGE' {
+        docker run --rm --entrypoint grep $entry.Value.Target -Fq '/admin/js/main-' /usr/share/nginx/html/index.html
+      }
+      'NGINX_IMAGE' {
+        docker run --rm --entrypoint grep $entry.Value.Target -Fq 'server_name 121.43.208.184;' /etc/nginx/conf.d/default.conf
+        if ($LASTEXITCODE -eq 0) {
+          docker run --rm --entrypoint grep $entry.Value.Target -Fq 'location /admin/' /etc/nginx/conf.d/default.conf
+        }
+      }
+      'AGENT_IMAGE' {
+        $agentRuntimeArguments = @(
+          'run', '--rm', '--network', 'none',
+          '-e', 'FASTEMBED_CACHE_PATH=/tmp/fastembed-cache/current',
+          '-e', 'EMBEDDING_BACKEND=fastembed',
+          '-e', 'EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5',
+          $entry.Value.Target
+        )
+        $agentProbeArguments = $agentRuntimeArguments + @(
+          'python', '-c',
+          'import os,sys; from app.main import SERVICE_VERSION; from app.rag import embed_texts; assert os.environ.get(''FASTEMBED_CACHE_PATH'') == ''/tmp/fastembed-cache/current''; assert os.path.islink(os.environ[''FASTEMBED_CACHE_PATH'']); assert SERVICE_VERSION == sys.argv[1]; assert len(embed_texts([''offline release probe''])[0]) == 512',
+          $version
+        )
+        & docker @agentProbeArguments
+        if ($LASTEXITCODE -eq 0) {
+          & docker @agentRuntimeArguments python scripts/bootstrap_fixture.py --help
+        }
+      }
     }
     if ($LASTEXITCODE -ne 0) { throw "Built image runtime assertion failed: $($entry.Key)" }
   } else {
