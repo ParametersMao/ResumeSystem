@@ -111,6 +111,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate production compose
         env:
+          MYSQL_IMAGE: resumesystem_mysql:ci
+          BACKEND_IMAGE: resumesystem_backend:ci
+          WEB_IMAGE: resumesystem_web:ci
+          ADMIN_IMAGE: resumesystem_admin:ci
+          NGINX_IMAGE: resumesystem_nginx:ci
+          AGENT_IMAGE: resumesystem_agent:ci
+          QDRANT_IMAGE: resumesystem_qdrant:ci
           MYSQL_ROOT_PASSWORD: ci-root-password
           DB_DATABASE: resume_system
           DB_USERNAME: resume_user
