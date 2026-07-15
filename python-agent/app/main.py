@@ -22,7 +22,7 @@ from .schemas import (
 )
 
 
-SERVICE_VERSION = "1.3.2"
+SERVICE_VERSION = "1.3.3"
 app = FastAPI(title="Resume Agent Service", version=SERVICE_VERSION)
 MAX_RAG_FILE_BYTES = 10 * 1024 * 1024
 

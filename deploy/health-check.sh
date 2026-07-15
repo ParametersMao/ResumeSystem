@@ -7,6 +7,8 @@ CORS_PROBE_ORIGIN="${CORS_PROBE_ORIGIN:-http://121.43.208.184}"
 REQUIRE_PUBLIC_HTTPS="${REQUIRE_PUBLIC_HTTPS:-true}"
 MAX_DISK_PERCENT="${MAX_DISK_PERCENT:-85}"
 MIN_AVAILABLE_MEMORY_MB="${MIN_AVAILABLE_MEMORY_MB:-256}"
+RAG_HEALTH_PROBE_TIMEOUT_SECONDS="${RAG_HEALTH_PROBE_TIMEOUT_SECONDS:-180}"
+RAG_HEALTH_PROBE_ATTEMPTS="${RAG_HEALTH_PROBE_ATTEMPTS:-2}"
 failures=()
 CERT_FILE="${CERT_FILE:-/etc/letsencrypt/live/aidana.top/fullchain.pem}"
 
@@ -35,10 +37,27 @@ agent_status="$(docker exec resume-agent python -c \
   2>/dev/null || true)"
 [[ "$agent_status" == "ok" ]] || failures+=("agent RAG health is $agent_status")
 
-rag_hits="$(docker exec resume-agent python -c \
-  "import json,os,urllib.request; query='\u8bc1\u636e\u8fb9\u754c\u56db\u539f\u5219 \u4e0d\u865a\u6784\u516c\u53f8 \u4e0d\u65b0\u589e\u539f\u6587\u6ca1\u6709\u7684\u6570\u5b57'; data=json.dumps({'query':query,'limit':1,'scope':'global'}).encode(); req=urllib.request.Request('http://127.0.0.1:8000/rag/search',data=data,headers={'Content-Type':'application/json','X-Agent-Secret':os.environ['AGENT_INTERNAL_SECRET']}); j=json.load(urllib.request.urlopen(req,timeout=15)); print(len(j.get('results',[])))" \
-  2>/dev/null || echo 0)"
-[[ "$rag_hits" =~ ^[0-9]+$ && "$rag_hits" -ge 1 ]] || failures+=("real RAG retrieval returned no source")
+rag_hits=0
+if ! [[ "$RAG_HEALTH_PROBE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  failures+=("RAG_HEALTH_PROBE_TIMEOUT_SECONDS must be a positive integer")
+elif ! [[ "$RAG_HEALTH_PROBE_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+  failures+=("RAG_HEALTH_PROBE_ATTEMPTS must be a positive integer")
+else
+  # FastEmbed loads the ONNX model lazily. On the production host the first
+  # real query after an Agent restart can take about two minutes even when the
+  # model files are already cached. Warm the same retrieval path users need and
+  # fail only after a bounded number of full cold-start attempts.
+  for ((attempt = 1; attempt <= RAG_HEALTH_PROBE_ATTEMPTS; attempt++)); do
+    rag_hits="$(docker exec resume-agent python -c \
+      "import json,os,urllib.request; query='\u8bc1\u636e\u8fb9\u754c\u56db\u539f\u5219 \u4e0d\u865a\u6784\u516c\u53f8 \u4e0d\u65b0\u589e\u539f\u6587\u6ca1\u6709\u7684\u6570\u5b57'; data=json.dumps({'query':query,'limit':1,'scope':'global'}).encode(); req=urllib.request.Request('http://127.0.0.1:8000/rag/search',data=data,headers={'Content-Type':'application/json','X-Agent-Secret':os.environ['AGENT_INTERNAL_SECRET']}); j=json.load(urllib.request.urlopen(req,timeout=${RAG_HEALTH_PROBE_TIMEOUT_SECONDS})); print(len(j.get('results',[])))" \
+      2>/dev/null || echo 0)"
+    if [[ "$rag_hits" =~ ^[0-9]+$ && "$rag_hits" -ge 1 ]]; then
+      break
+    fi
+    [[ "$attempt" -eq "$RAG_HEALTH_PROBE_ATTEMPTS" ]] || sleep 5
+  done
+  [[ "$rag_hits" =~ ^[0-9]+$ && "$rag_hits" -ge 1 ]] || failures+=("real RAG retrieval returned no source after ${RAG_HEALTH_PROBE_ATTEMPTS} attempt(s)")
+fi
 
 web_html="$(docker exec resume-web wget -qO- http://127.0.0.1/ 2>/dev/null || true)"
 [[ "$web_html" == *"<div id=\"app\"></div>"* ]] || failures+=("web entry failed")
