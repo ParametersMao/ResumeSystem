@@ -22,7 +22,8 @@ from .schemas import (
 )
 
 
-app = FastAPI(title="Resume Agent Service", version="1.3.0")
+SERVICE_VERSION = "1.3.2"
+app = FastAPI(title="Resume Agent Service", version=SERVICE_VERSION)
 MAX_RAG_FILE_BYTES = 10 * 1024 * 1024
 
 
@@ -42,7 +43,7 @@ def health() -> dict:
     return {
         "status": "ok" if rag.get("qdrant_reachable") else "degraded",
         "service": "resume-agent",
-        "version": "1.3.0",
+        "version": SERVICE_VERSION,
         "rag": rag,
     }
 
@@ -101,6 +102,7 @@ async def rag_index(
     licensed: bool = Form(False),
     pii_reviewed: bool = Form(False),
     expires_at: str | None = Form(None),
+    enabled: bool | None = Form(None),
     file: UploadFile = File(...),
 ) -> dict:
     data = await file.read(MAX_RAG_FILE_BYTES + 1)
@@ -121,6 +123,7 @@ async def rag_index(
             licensed=licensed,
             pii_reviewed=pii_reviewed,
             expires_at=expires_at,
+            enabled=enabled,
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)[:500]) from error

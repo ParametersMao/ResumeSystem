@@ -256,9 +256,11 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
 
   async reindex(id: number) {
     const document = await this.findGlobalOne(id);
+    const shouldEnable = Boolean(document.enabled);
     document.status = 'indexing';
     document.errorMessage = '';
     await this.repository.save(document);
+    let indexCompleted = false;
     try {
       const buffer = await this.storageService.downloadObject(document.storageKey);
       const result = await this.agentClient.indexDocument({
@@ -272,6 +274,7 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
         licensed: document.licensed,
         piiReviewed: document.piiReviewed,
         expiresAt: document.expiresAt,
+        enabled: shouldEnable,
         file: {
           buffer,
           originalname: document.fileName,
@@ -279,10 +282,29 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
           size: buffer.length,
         } as Express.Multer.File,
       });
-      document.status = document.enabled ? 'ready' : 'disabled';
+      indexCompleted = true;
+      if (!shouldEnable) {
+        // The Agent preserves existing Qdrant state during a rebuild, but an
+        // explicit write also covers disabled documents whose previous index is
+        // missing (for example, after an earlier failed first index).
+        await this.agentClient.setDocumentEnabled(document.id, false);
+      }
+      document.status = shouldEnable ? 'ready' : 'disabled';
       document.chunkCount = result.chunk_count;
       document.errorMessage = '';
     } catch (error: any) {
+      if (indexCompleted && !shouldEnable) {
+        // If the post-index disable failed and there were no previous points for
+        // the Agent to inherit, newly written points may be searchable. Remove
+        // them rather than expose a document whose database state is disabled.
+        try {
+          await this.agentClient.deleteDocument(document.id);
+        } catch (cleanupError: any) {
+          this.logger.warn(
+            `Failed to remove vectors after disabled reindex ${document.id}: ${String(cleanupError?.message || cleanupError).slice(0, 240)}`,
+          );
+        }
+      }
       document.status = 'failed';
       document.errorMessage = String(error?.message || '重新索引失败').slice(0, 1000);
     }
@@ -291,9 +313,14 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
 
   async toggle(id: number, enabled: boolean) {
     const document = await this.findGlobalOne(id);
+    if (enabled && document.status === 'failed') {
+      throw new BadRequestException('索引失败的文档不能直接启用，请先重新索引');
+    }
     await this.agentClient.setDocumentEnabled(id, enabled);
     document.enabled = enabled;
-    document.status = enabled ? 'ready' : 'disabled';
+    // Keep the diagnostic state for a failed document when it is disabled. A
+    // successful reindex is the only operation allowed to turn it ready again.
+    if (document.status !== 'failed') document.status = enabled ? 'ready' : 'disabled';
     return this.toMetadata(await this.repository.save(document));
   }
 
@@ -372,6 +399,7 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
         licensed: document.licensed,
         piiReviewed: document.piiReviewed,
         expiresAt: document.expiresAt,
+        enabled: true,
         file: safeFile,
       });
       document.status = 'ready';

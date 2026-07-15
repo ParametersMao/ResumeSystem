@@ -176,6 +176,96 @@ describe('KnowledgeService v1.3 boundaries', () => {
     expect(metadata).not.toHaveProperty('storageKey');
     expect(metadata).not.toHaveProperty('storageUrl');
   });
+
+  it('keeps a disabled document disabled after reindexing', async () => {
+    const document = {
+      id: 81,
+      scope: 'global',
+      status: 'disabled',
+      enabled: false,
+      name: 'Disabled standard',
+      category: 'standard',
+      sourceType: 'standard',
+      ownerUserId: null,
+      resumeId: null,
+      licensed: false,
+      piiReviewed: false,
+      expiresAt: null,
+      storageKey: 'knowledge/global/disabled.txt',
+      fileName: 'disabled.txt',
+      mimeType: 'text/plain',
+    };
+    knowledgeRepository.findOne.mockResolvedValue(document);
+    storageService.downloadObject.mockResolvedValue(Buffer.from('resume standard'));
+
+    const result = await service.reindex(81);
+
+    expect(agentClient.indexDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ documentId: 81, enabled: false }),
+    );
+    expect(agentClient.setDocumentEnabled).toHaveBeenCalledWith(81, false);
+    expect(result).toEqual(expect.objectContaining({ status: 'disabled', enabled: false }));
+  });
+
+  it('does not allow a failed document to be toggled into ready state', async () => {
+    knowledgeRepository.findOne.mockResolvedValue({
+      id: 82,
+      scope: 'global',
+      status: 'failed',
+      enabled: true,
+      errorMessage: 'embedding unavailable',
+    });
+
+    await expect(service.toggle(82, true)).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(agentClient.setDocumentEnabled).not.toHaveBeenCalled();
+    expect(knowledgeRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('removes newly indexed vectors when restoring disabled state fails', async () => {
+    const document = {
+      id: 84,
+      scope: 'global',
+      status: 'disabled',
+      enabled: false,
+      name: 'Disabled standard',
+      category: 'standard',
+      sourceType: 'standard',
+      ownerUserId: null,
+      resumeId: null,
+      licensed: false,
+      piiReviewed: false,
+      expiresAt: null,
+      storageKey: 'knowledge/global/disabled.txt',
+      fileName: 'disabled.txt',
+      mimeType: 'text/plain',
+    };
+    knowledgeRepository.findOne.mockResolvedValue(document);
+    storageService.downloadObject.mockResolvedValue(Buffer.from('resume standard'));
+    agentClient.setDocumentEnabled.mockRejectedValue(new Error('agent unavailable'));
+
+    const result = await service.reindex(84);
+
+    expect(agentClient.deleteDocument).toHaveBeenCalledWith(84);
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'failed', enabled: false }),
+    );
+  });
+
+  it('preserves failed status when a failed document is disabled', async () => {
+    knowledgeRepository.findOne.mockResolvedValue({
+      id: 83,
+      scope: 'global',
+      status: 'failed',
+      enabled: true,
+      errorMessage: 'embedding unavailable',
+    });
+
+    const result = await service.toggle(83, false);
+
+    expect(agentClient.setDocumentEnabled).toHaveBeenCalledWith(83, false);
+    expect(result).toEqual(expect.objectContaining({ status: 'failed', enabled: false }));
+  });
 });
 
 function textFile(name: string, text: string): Express.Multer.File {

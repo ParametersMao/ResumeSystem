@@ -21,7 +21,7 @@ describe('CORS policy (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication({ logger: false });
-    const allowedOrigins = buildAllowedOrigins('https://203.0.113.10');
+    const allowedOrigins = buildAllowedOrigins('http://203.0.113.10');
     app.enableCors({
       origin: (origin, callback) =>
         validateCorsOrigin(origin, allowedOrigins, callback),
@@ -37,18 +37,18 @@ describe('CORS policy (e2e)', () => {
   it('allows an explicitly configured public IP origin', async () => {
     await request(app.getHttpServer())
       .get('/cors-probe')
-      .set('Origin', 'https://203.0.113.10')
-      .expect('Access-Control-Allow-Origin', 'https://203.0.113.10')
+      .set('Origin', 'http://203.0.113.10')
+      .expect('Access-Control-Allow-Origin', 'http://203.0.113.10')
       .expect(200, { ok: true });
   });
 
   it('allows browser preflight from an explicitly configured public IP origin', async () => {
     await request(app.getHttpServer())
       .options('/cors-probe')
-      .set('Origin', 'https://203.0.113.10')
+      .set('Origin', 'http://203.0.113.10')
       .set('Access-Control-Request-Method', 'POST')
       .set('Access-Control-Request-Headers', 'content-type')
-      .expect('Access-Control-Allow-Origin', 'https://203.0.113.10')
+      .expect('Access-Control-Allow-Origin', 'http://203.0.113.10')
       .expect(204);
   });
 

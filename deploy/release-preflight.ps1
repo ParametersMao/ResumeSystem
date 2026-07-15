@@ -1,6 +1,7 @@
 param(
   [string]$EnvFile = '.env',
-  [string]$ComposeFile = 'docker-compose.prod.yml'
+  [string]$ComposeFile = 'docker-compose.prod.yml',
+  [string]$RequiredCorsOrigin = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +52,45 @@ if ($values['AI_EXECUTION_ENGINE'] -ne 'agent') {
 }
 if ($values['RAG_STRICT_SOURCES'] -ne 'true') {
   $errors += 'Production requires RAG_STRICT_SOURCES=true'
+}
+
+$frontendOrigins = @(
+  ([string]$values['FRONTEND_URL']).Split(',') |
+    ForEach-Object { $_.Trim() -replace '/$', '' } |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+)
+if (-not $frontendOrigins.Count) {
+  $errors += 'FRONTEND_URL must contain at least one explicit browser origin'
+}
+foreach ($origin in $frontendOrigins) {
+  $uri = $null
+  if ($origin.Contains('*') -or
+      -not [Uri]::TryCreate($origin, [UriKind]::Absolute, [ref]$uri) -or
+      $uri.Scheme -notin @('http', 'https') -or
+      -not [string]::IsNullOrEmpty($uri.UserInfo) -or
+      $uri.AbsolutePath -ne '/' -or
+      -not [string]::IsNullOrEmpty($uri.Query) -or
+      -not [string]::IsNullOrEmpty($uri.Fragment) -or
+      $uri.GetLeftPart([UriPartial]::Authority) -ne $origin) {
+    $errors += "FRONTEND_URL contains an invalid or non-origin entry: $origin"
+  }
+}
+if ([string]$values['REQUIRE_PUBLIC_HTTPS'] -notin @('true', 'false')) {
+  $errors += 'REQUIRE_PUBLIC_HTTPS must be true or false'
+}
+
+$corsProbeOrigin = if (-not [string]::IsNullOrWhiteSpace($RequiredCorsOrigin)) {
+  $RequiredCorsOrigin
+} else {
+  [string]$values['CORS_PROBE_ORIGIN']
+}
+if ([string]::IsNullOrWhiteSpace($corsProbeOrigin)) {
+  $errors += 'CORS_PROBE_ORIGIN must identify the browser origin used for production acceptance'
+} else {
+  $normalizedRequiredOrigin = $corsProbeOrigin.Trim() -replace '/$', ''
+  if ($frontendOrigins -cnotcontains $normalizedRequiredOrigin) {
+    $errors += "FRONTEND_URL must explicitly contain $normalizedRequiredOrigin"
+  }
 }
 
 if ($errors.Count) {

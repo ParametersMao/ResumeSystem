@@ -3,6 +3,8 @@ set -euo pipefail
 
 ENV_FILE="${ENV_FILE:-.env}"
 PUBLIC_HOST="${PUBLIC_HOST:-aidana.top}"
+CORS_PROBE_ORIGIN="${CORS_PROBE_ORIGIN:-http://121.43.208.184}"
+REQUIRE_PUBLIC_HTTPS="${REQUIRE_PUBLIC_HTTPS:-true}"
 MAX_DISK_PERCENT="${MAX_DISK_PERCENT:-85}"
 MIN_AVAILABLE_MEMORY_MB="${MIN_AVAILABLE_MEMORY_MB:-256}"
 failures=()
@@ -34,7 +36,7 @@ agent_status="$(docker exec resume-agent python -c \
 [[ "$agent_status" == "ok" ]] || failures+=("agent RAG health is $agent_status")
 
 rag_hits="$(docker exec resume-agent python -c \
-  "import json,os,urllib.request; data=json.dumps({'query':'简历事实边界与岗位匹配规范','limit':1,'scope':'global'}).encode(); req=urllib.request.Request('http://127.0.0.1:8000/rag/search',data=data,headers={'Content-Type':'application/json','X-Agent-Secret':os.environ['AGENT_INTERNAL_SECRET']}); j=json.load(urllib.request.urlopen(req,timeout=15)); print(len(j.get('results',[])))" \
+  "import json,os,urllib.request; query='\u8bc1\u636e\u8fb9\u754c\u56db\u539f\u5219 \u4e0d\u865a\u6784\u516c\u53f8 \u4e0d\u65b0\u589e\u539f\u6587\u6ca1\u6709\u7684\u6570\u5b57'; data=json.dumps({'query':query,'limit':1,'scope':'global'}).encode(); req=urllib.request.Request('http://127.0.0.1:8000/rag/search',data=data,headers={'Content-Type':'application/json','X-Agent-Secret':os.environ['AGENT_INTERNAL_SECRET']}); j=json.load(urllib.request.urlopen(req,timeout=15)); print(len(j.get('results',[])))" \
   2>/dev/null || echo 0)"
 [[ "$rag_hits" =~ ^[0-9]+$ && "$rag_hits" -ge 1 ]] || failures+=("real RAG retrieval returned no source")
 
@@ -51,12 +53,44 @@ else
     || failures+=("admin JavaScript asset is not served")
 fi
 
-public_health="$(curl -fsS --max-time 15 \
-  --resolve "${PUBLIC_HOST}:443:127.0.0.1" \
-  "https://${PUBLIC_HOST}/api/health" 2>/dev/null || true)"
-[[ "$public_health" == *'"status":"ok"'* ]] || failures+=("HTTPS public health failed")
-openssl x509 -checkend 1209600 -noout -in "$CERT_FILE" >/dev/null 2>&1 \
-  || failures+=("TLS certificate is missing or expires within 14 days")
+cors_probe_host="${CORS_PROBE_ORIGIN#*://}"
+cors_probe_host="${cors_probe_host%%/*}"
+case "$REQUIRE_PUBLIC_HTTPS" in
+  true)
+    public_health="$(curl -fsS --max-time 15 \
+      --resolve "${PUBLIC_HOST}:443:127.0.0.1" \
+      "https://${PUBLIC_HOST}/api/health" 2>/dev/null || true)"
+    [[ "$public_health" == *'"status":"ok"'* ]] || failures+=("HTTPS public health failed")
+    openssl x509 -checkend 1209600 -noout -in "$CERT_FILE" >/dev/null 2>&1 \
+      || failures+=("TLS certificate is missing or expires within 14 days")
+    ;;
+  false)
+    public_health="$(curl -fsS --max-time 15 \
+      -H "Host: ${cors_probe_host}" \
+      'http://127.0.0.1/api/health' 2>/dev/null || true)"
+    [[ "$public_health" == *'"status":"ok"'* ]] || failures+=("HTTP public-IP health failed")
+    ;;
+  *)
+    failures+=("REQUIRE_PUBLIC_HTTPS must be true or false")
+    ;;
+esac
+
+# A server-to-server health request has no Origin header and cannot detect a
+# browser-only CORS outage. Exercise the real Nginx -> backend preflight path.
+cors_preflight="$(curl -sS --max-time 15 -D - -o /dev/null \
+  -w '__STATUS__:%{http_code}\n' \
+  -X OPTIONS 'http://127.0.0.1/api/auth/login' \
+  -H "Host: ${cors_probe_host}" \
+  -H "Origin: ${CORS_PROBE_ORIGIN}" \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type,authorization' 2>/dev/null || true)"
+cors_preflight="$(printf '%s' "$cors_preflight" | tr -d '\r')"
+grep -Fqx '__STATUS__:204' <<<"$cors_preflight" \
+  || failures+=("browser CORS preflight returned a non-204 status for ${CORS_PROBE_ORIGIN}")
+grep -Fixq "Access-Control-Allow-Origin: ${CORS_PROBE_ORIGIN}" <<<"$cors_preflight" \
+  || failures+=("browser CORS preflight did not echo ${CORS_PROBE_ORIGIN}")
+grep -Fixq 'Access-Control-Allow-Credentials: true' <<<"$cors_preflight" \
+  || failures+=("browser CORS preflight did not allow credentials")
 
 ready_documents="$(docker exec resume-mysql mysql -N -B \
   -uroot -p"$MYSQL_ROOT_PASSWORD" "$DB_DATABASE" \
@@ -82,4 +116,4 @@ if (( ${#failures[@]} )); then
   exit 1
 fi
 
-echo "health-check: passed (ready_documents=$ready_documents disk=${disk_percent}% memory=${available_memory}MB)"
+echo "health-check: passed (ready_documents=$ready_documents cors_origin=${CORS_PROBE_ORIGIN} require_https=${REQUIRE_PUBLIC_HTTPS} disk=${disk_percent}% memory=${available_memory}MB)"

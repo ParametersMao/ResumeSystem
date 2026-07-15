@@ -23,6 +23,8 @@ interface AgentRawResponse {
   steps?: Array<Record<string, any>>;
   suggestions?: Array<Record<string, any>>;
   diagnostics?: string[];
+  strategy?: string[];
+  warnings?: string[];
   patch?: Record<string, any>;
   sources?: Array<Record<string, any>>;
   token_used?: number;
@@ -36,6 +38,8 @@ export interface AiAgentRuntimeResult {
   steps: Array<Record<string, any>>;
   suggestions: Array<Record<string, any>>;
   diagnostics: string[];
+  strategy: string[];
+  warnings: string[];
   patch: Record<string, any>;
   sources: Array<Record<string, any>>;
   tokenUsed: number;
@@ -181,10 +185,37 @@ export class AiAgentClientService {
       model: raw.model || 'resume-agent',
       steps: Array.isArray(raw.steps) ? raw.steps : [],
       suggestions: Array.isArray(raw.suggestions) ? raw.suggestions : [],
-      diagnostics: Array.isArray(raw.diagnostics) ? raw.diagnostics : [],
+      diagnostics: this.resolveAgentStringList(raw, 'diagnostics', 'analysis'),
+      strategy: this.resolveAgentStringList(raw, 'strategy', 'planning'),
+      warnings: this.resolveAgentStringList(raw, 'warnings', 'validation'),
       patch: raw.patch && typeof raw.patch === 'object' ? raw.patch : {},
       sources: Array.isArray(raw.sources) ? raw.sources : [],
       tokenUsed: Number(raw.token_used || 0),
     };
+  }
+
+  private resolveAgentStringList(
+    raw: AgentRawResponse,
+    key: 'diagnostics' | 'strategy' | 'warnings',
+    stepName: string,
+  ): string[] {
+    const topLevel = this.normalizeStringList(raw[key]);
+    if (topLevel.length) {
+      return topLevel;
+    }
+
+    const matchingStep = raw.steps?.find((step) => step?.name === stepName);
+    return this.normalizeStringList(matchingStep?.output?.[key]);
+  }
+
+  private normalizeStringList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 }

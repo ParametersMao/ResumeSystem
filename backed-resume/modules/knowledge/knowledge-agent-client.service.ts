@@ -5,6 +5,7 @@ interface IndexResult {
   document_id: number;
   chunk_count: number;
   embedding_backend: string;
+  enabled?: boolean;
 }
 
 @Injectable()
@@ -20,6 +21,7 @@ export class KnowledgeAgentClientService {
     licensed?: boolean;
     piiReviewed?: boolean;
     expiresAt?: Date | null;
+    enabled?: boolean;
     file: Express.Multer.File;
   }): Promise<IndexResult> {
     const form = new FormData();
@@ -33,6 +35,7 @@ export class KnowledgeAgentClientService {
     form.append('licensed', String(Boolean(input.licensed)));
     form.append('pii_reviewed', String(Boolean(input.piiReviewed)));
     if (input.expiresAt) form.append('expires_at', input.expiresAt.toISOString());
+    if (typeof input.enabled === 'boolean') form.append('enabled', String(input.enabled));
     form.append(
       'file',
       new Blob([input.file.buffer], { type: input.file.mimetype }),

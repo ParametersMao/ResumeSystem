@@ -978,6 +978,14 @@ interface AiSuggestionOption {
   fieldValues?: Record<string, string | CoreDateRange>
 }
 
+type AgentAwareGenerateResponse = AiGenerateResponse & {
+  suggestions?: Array<{
+    reason?: unknown
+    text?: unknown
+    html?: unknown
+  }>
+}
+
 interface AiDialogState {
   sectionId: string
   itemIndex: number
@@ -2083,7 +2091,12 @@ function getAiApplyLabel(suggestion: AiSuggestionOption) {
   return '替换当前内容'
 }
 
-function buildGenerateSuggestions(data: AiGenerateResponse, sectionType: CoreSectionType): AiSuggestionOption[] {
+function buildGenerateSuggestions(data: AgentAwareGenerateResponse, sectionType: CoreSectionType): AiSuggestionOption[] {
+  const agentSuggestions = normalizeAgentGenerateSuggestions(data.suggestions)
+  if (agentSuggestions.length) {
+    return agentSuggestions
+  }
+
   const firstProject = Array.isArray(data.projects) ? data.projects[0] : null
   const firstExperience = Array.isArray(data.experiences) ? data.experiences[0] : null
   const projectDesc = firstProject?.desc || firstProject?.content || ''
@@ -2122,6 +2135,29 @@ function buildGenerateSuggestions(data: AiGenerateResponse, sectionType: CoreSec
   return (suggestionMap[sectionType] || [
     { reason: '生成一段可直接填入的内容初稿。', text: data.summary || projectDesc || skillsText },
   ]).filter((suggestion) => suggestion.text)
+}
+
+function normalizeAgentGenerateSuggestions(
+  suggestions: AgentAwareGenerateResponse['suggestions'],
+): AiSuggestionOption[] {
+  if (!Array.isArray(suggestions)) {
+    return []
+  }
+
+  return suggestions
+    .map((suggestion) => {
+      const plainText = typeof suggestion?.text === 'string' ? suggestion.text.trim() : ''
+      const text = plainText || (typeof suggestion?.html === 'string' ? htmlToPlainText(suggestion.html) : '')
+      const reason = typeof suggestion?.reason === 'string'
+        ? suggestion.reason.trim()
+        : ''
+
+      return {
+        reason: reason || 'Agent 生成的可应用建议。',
+        text,
+      }
+    })
+    .filter((suggestion) => suggestion.text)
 }
 
 function buildExperienceSuggestion(

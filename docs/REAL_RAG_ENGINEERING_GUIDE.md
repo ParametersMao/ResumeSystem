@@ -1,7 +1,21 @@
 # ResumeSystem 真实 RAG 工程说明
 
-版本：2026-07-13（v1.3 安全与知识分层实现版）
-状态：v1.3 代码与本地自动门禁已完成；真实生产环境的 BGE/Qdrant/DeepSeek、租户隔离和密钥迁移验收通过后才可宣称生产 RAG 可用
+版本：2026-07-15（v1.3.2 公网入口与 RAG 可靠性修复版）
+状态：真实 BGE/Qdrant/DeepSeek 核心链路已验证；只有公网浏览器 Origin、响应契约、停用重建和发布 E2E 同时通过后，才可宣称对应入口可用
+
+## v1.3.2 修复基线与发布门禁
+
+本补丁处理“服务内部可调用，但公网浏览器不可用”和“健康或数据库状态与真实向量状态不一致”两类问题。实现与发布必须同时满足以下约束：
+
+1. `get_rag_status()` 只有在真实执行 Qdrant `collection_exists` 请求成功后，才能返回 `qdrant_reachable=true`；构造客户端不代表依赖可达，失败必须保留 `false` 并返回降级状态。
+2. 文档重建索引必须继承或显式传递原 `enabled` 状态。停用文档重建成功后仍为停用；停用状态同步失败时必须 fail-closed，清理本次新向量，禁止数据库显示停用但 Qdrant 仍可检索。
+3. `failed` 文档不能通过普通启用开关直接变成 `ready`，必须先重新索引成功；禁用失败文档时保留失败原因，便于后台排障。
+4. NestJS 必须保留 Agent 的 `strategy`、`warnings`、`suggestions` 和 `sources`。兼容当前 Agent 将策略和警告放在 `planning/validation` step output 的结构；C 端 `generate` 优先消费 Agent `suggestions`，没有时才回退到 direct provider 的 `summary/skills/projects` 契约。
+5. CORS 继续使用精确 scheme + host 白名单，禁止通配 Origin。公网 IP 通过 HTTP 提供页面时，生产 `FRONTEND_URL` 必须显式包含 `http://121.43.208.184`；HTTPS IP 是另一个 Origin，不能替代 HTTP IP。发布预检和健康检查统一读取 `.env` 的 `CORS_PROBE_ORIGIN`，禁止各自硬编码不同入口。
+6. 发布验收不能只用无 `Origin` 的 curl。必须以 `Origin: http://121.43.208.184` 验证登录预检、真实登录和 AI 请求，并断言未知 Origin 仍为 403。域名尚未通过外部 HTTPS 验收时使用 `REQUIRE_PUBLIC_HTTPS=false` 的 IP-only 门禁；域名可用后必须改为 `true`，恢复证书与 HTTPS 健康检查。
+7. RAG 发布烟测必须返回 `execution_mode=live`、真实 provider/model、`token_used > 0` 和非空 `sources`；同时校验 Agent 六节点完成、响应可被 C 端契约消费。
+
+当前生产知识库只有一份全局规范文档和两个切片，只足以证明核心链路与规范类检索可用，不代表岗位覆盖或私有 JD 质量已经完成。私有 JD 上线仍需独立执行跨用户、跨简历和匿名访问隔离 E2E。
 
 ## 0. 本轮架构决策与现状审计
 

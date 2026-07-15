@@ -252,6 +252,63 @@ class RagTest(unittest.TestCase):
         new_results = rag.search_documents("NewReplacementToken", limit=5)
         self.assertFalse(any(item["documentId"] == 40 for item in new_results))
 
+    def test_reindex_preserves_disabled_document_state(self) -> None:
+        rag.index_document(
+            document_id=41,
+            name="Disabled document",
+            category="standard",
+            file_name="disabled-old.txt",
+            content_type="text/plain",
+            data=b"OldDisabledToken resume guidance",
+        )
+        rag.set_document_enabled(41, False)
+
+        result = rag.index_document(
+            document_id=41,
+            name="Reindexed disabled document",
+            category="standard",
+            file_name="disabled-new.txt",
+            content_type="text/plain",
+            data=b"NewDisabledToken resume guidance",
+        )
+
+        self.assertFalse(result["enabled"])
+        self.assertFalse(rag.search_documents("NewDisabledToken", limit=5))
+        points, _ = rag.get_qdrant_client().scroll(
+            collection_name=rag.COLLECTION_NAME,
+            scroll_filter=rag._document_filter(41),
+            with_payload=True,
+            limit=10,
+        )
+        self.assertTrue(points)
+        self.assertTrue(all(point.payload["enabled"] is False for point in points))
+
+    def test_first_index_can_be_explicitly_disabled(self) -> None:
+        result = rag.index_document(
+            document_id=42,
+            name="Initially disabled document",
+            category="standard",
+            file_name="disabled.txt",
+            content_type="text/plain",
+            data=b"ExplicitDisabledToken resume guidance",
+            enabled=False,
+        )
+
+        self.assertFalse(result["enabled"])
+        self.assertFalse(rag.search_documents("ExplicitDisabledToken", limit=5))
+
+    def test_rag_status_only_marks_qdrant_reachable_after_real_request(self) -> None:
+        class UnreachableClient:
+            def collection_exists(self, _collection_name: str) -> bool:
+                raise ConnectionError("qdrant unavailable")
+
+        with patch.object(rag, "get_qdrant_client", return_value=UnreachableClient()):
+            status = rag.get_rag_status()
+
+        self.assertFalse(status["qdrant_reachable"])
+        self.assertFalse(status["collection_ready"])
+        self.assertIn("qdrant unavailable", status["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

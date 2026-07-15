@@ -38,6 +38,7 @@ describe('KnowledgeAgentClientService metadata contract', () => {
       licensed: false,
       piiReviewed: false,
       expiresAt: new Date('2026-08-01T00:00:00Z'),
+      enabled: false,
       file: {
         originalname: 'jd.txt',
         mimetype: 'text/plain',
@@ -55,6 +56,7 @@ describe('KnowledgeAgentClientService metadata contract', () => {
     expect(form.get('licensed')).toBe('false');
     expect(form.get('pii_reviewed')).toBe('false');
     expect(form.get('expires_at')).toBe('2026-08-01T00:00:00.000Z');
+    expect(form.get('enabled')).toBe('false');
   });
 
   it('sends source and tenant filters to /rag/search', async () => {

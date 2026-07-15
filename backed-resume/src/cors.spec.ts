@@ -24,10 +24,10 @@ describe('CORS origin policy', () => {
   });
 
   it('allows an explicitly configured public IP origin without broadening its scheme', () => {
-    const allowed = buildAllowedOrigins('https://203.0.113.10');
+    const allowed = buildAllowedOrigins('http://203.0.113.10');
 
-    expect(isOriginAllowed('https://203.0.113.10', allowed)).toBe(true);
-    expect(isOriginAllowed('http://203.0.113.10', allowed)).toBe(false);
+    expect(isOriginAllowed('http://203.0.113.10', allowed)).toBe(true);
+    expect(isOriginAllowed('https://203.0.113.10', allowed)).toBe(false);
   });
 
   it('allows server-to-server requests without an Origin header', () => {

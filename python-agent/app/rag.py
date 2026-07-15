@@ -64,6 +64,7 @@ def index_document(
     licensed: bool = False,
     pii_reviewed: bool = False,
     expires_at: datetime | str | None = None,
+    enabled: bool | None = None,
 ) -> dict[str, Any]:
     metadata = RagIndexMetadata.model_validate(
         {
@@ -99,6 +100,11 @@ def index_document(
         else None
     )
 
+    # Reindexing must not silently reactivate a document that an administrator
+    # disabled. Older callers do not send the enabled flag, so preserve the
+    # fail-closed state already stored in Qdrant. New documents remain enabled by
+    # default, while an explicit value always wins.
+    effective_enabled = _resolve_document_enabled(previous_points, enabled)
     points = [
         models.PointStruct(
             id=_point_id(document_id, chunk.index),
@@ -110,7 +116,7 @@ def index_document(
                 "file_name": file_name,
                 "chunk_index": chunk.index,
                 "text": chunk.text,
-                "enabled": True,
+                "enabled": effective_enabled,
                 "source_type": metadata.source_type,
                 "scope": metadata.scope,
                 "owner_user_id": metadata.owner_user_id,
@@ -159,6 +165,7 @@ def index_document(
         "licensed": metadata.licensed,
         "pii_reviewed": metadata.pii_reviewed,
         "expires_at": expires_at_value,
+        "enabled": effective_enabled,
     }
 
 
@@ -279,8 +286,12 @@ def get_rag_status() -> dict[str, Any]:
     }
     try:
         client = get_qdrant_client()
+        # Constructing QdrantClient performs no I/O. Only report the dependency as
+        # reachable after a real request succeeds; otherwise a network failure
+        # would leave qdrant_reachable stuck at a misleading true value.
+        collection_ready = bool(client.collection_exists(COLLECTION_NAME))
         status["qdrant_reachable"] = True
-        status["collection_ready"] = client.collection_exists(COLLECTION_NAME)
+        status["collection_ready"] = collection_ready
     except Exception as error:
         status["error"] = str(error)[:200]
     return status
@@ -468,6 +479,19 @@ def _document_filter(document_id: int) -> models.Filter:
             )
         ]
     )
+
+
+def _resolve_document_enabled(
+    previous_points: list[models.PointStruct],
+    requested_enabled: bool | None,
+) -> bool:
+    if requested_enabled is not None:
+        return bool(requested_enabled)
+    if not previous_points:
+        return True
+    # A mixed payload is inconsistent. Requiring every prior point to be enabled
+    # prevents a partial administrative disable from being undone by reindexing.
+    return all(bool((point.payload or {}).get("enabled", True)) for point in previous_points)
 
 
 def delete_document(
