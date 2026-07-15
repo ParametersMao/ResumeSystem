@@ -1,0 +1,13 @@
+[Unit]
+Description=Stop ResumeSystem public proxy for an incomplete rollout
+After=docker.service resumesystem-rollout-guard.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/resumesystem-rollout-guard --stop-proxy
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

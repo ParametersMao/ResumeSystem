@@ -5,6 +5,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
+TimeoutStartSec=270
 WorkingDirectory=/opt/resumesystem-current
 Environment=ENV_FILE=.env
 ExecStart=/opt/resumesystem-current/deploy/health-check.sh

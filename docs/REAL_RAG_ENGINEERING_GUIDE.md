@@ -1,9 +1,9 @@
 # ResumeSystem 真实 RAG 工程说明
 
-版本：2026-07-15（v1.3.3 公网入口、冷启动门禁与 RAG 可靠性修复版）
+版本：2026-07-15（v1.3.4 公网入口、单飞冷启动门禁与 RAG 可靠性修复版）
 状态：真实 BGE/Qdrant/DeepSeek 核心链路已验证；只有公网浏览器 Origin、响应契约、停用重建和发布 E2E 同时通过后，才可宣称对应入口可用
 
-## v1.3.3 修复基线与发布门禁
+## v1.3.4 修复基线与发布门禁
 
 本补丁处理“服务内部可调用，但公网浏览器不可用”和“健康或数据库状态与真实向量状态不一致”两类问题。实现与发布必须同时满足以下约束：
 
@@ -14,9 +14,25 @@
 5. CORS 继续使用精确 scheme + host 白名单，禁止通配 Origin。公网 IP 通过 HTTP 提供页面时，生产 `FRONTEND_URL` 必须显式包含 `http://121.43.208.184`；HTTPS IP 是另一个 Origin，不能替代 HTTP IP。发布预检和健康检查统一读取 `.env` 的 `CORS_PROBE_ORIGIN`，禁止各自硬编码不同入口。
 6. 发布验收不能只用无 `Origin` 的 curl。必须以 `Origin: http://121.43.208.184` 验证登录预检、真实登录和 AI 请求，并断言未知 Origin 仍为 403。域名尚未通过外部 HTTPS 验收时使用 `REQUIRE_PUBLIC_HTTPS=false` 的 IP-only 门禁；域名可用后必须改为 `true`，恢复证书与 HTTPS 健康检查。
 7. RAG 发布烟测必须返回 `execution_mode=live`、真实 provider/model、`token_used > 0` 和非空 `sources`；同时校验 Agent 六节点完成、响应可被 C 端契约消费。
-8. Agent 的 HTTP 健康并不代表 FastEmbed 已完成首次 ONNX 模型加载。发布门禁必须执行真实 `/rag/search` 预热，单次超时覆盖实测冷启动时间，并采用有限次数重试；不得因 15 秒客户端超时把仍在加载的真实检索误判为空来源，也不得跳过非空来源断言。
+8. Agent 的 HTTP 健康并不代表 FastEmbed 已完成首次 ONNX 模型加载。生产 lifespan 必须在 Uvicorn 接受请求前同步完成真实模型预热；初始化锁只允许单飞，任何意外并发初始化立即 fail-fast，禁止业务线程排队等待。`/rag/index` 的解析、Embedding 和 Qdrant 写入必须放入线程池，不能在 `async` 路由的事件循环中直接运行同步重任务。发布门禁从 MySQL 选择同一条 `ready + enabled + global` 文档，把其 `documentId + chunkCount` 交给内部 `/rag/health-probe`，由 Agent 从该文档的 Qdrant payload 派生查询并断言 Hybrid 检索返回同一文档，禁止再与固定文案或两个互不关联的断言耦合。
+9. `index_document`、`set_document_enabled` 和 `delete_document` 必须共享按 `documentId` 的非阻塞变更锁。同一文档已有重建、启停或删除操作时，新操作立即返回 HTTP 409，NestJS 保留该冲突语义交给调用端重试；重建冲突不得被 catch-all 转换为 `failed + HTTP 200`，也不得由失败方覆盖成功方最终状态。禁止排队后产生混合切片、回滚覆盖或删除后向量复活。发布预检必须要求 `RAG_ENABLED=true`，Agent `/health` 必须同时满足 `enabled=true`、`embedding_backend=fastembed`、Qdrant 可达和 collection ready；`/rag/health-probe` 在 RAG 关闭时必须返回 `rag_disabled`，不得绕过开关直接检索形成假阳性。
+10. 生产验收必须穿过反向代理并触发应用数据库查询：允许 Origin 的预检同时断言 `Access-Control-Allow-Origin` 与 `Access-Control-Allow-Credentials: true`，未知 Origin 必须返回 403，无效登录必须返回认证失败而不是 5xx。容器 `running/healthy` 不能替代这组验收。
+11. 首次真实 RAG 发布不能依赖“用户先上传一份文档”来通过健康门禁。Agent lifespan 必须用真实 FastEmbed 探针向量得到实际维度，并幂等创建 Qdrant collection 与 payload indexes；Qdrant 暂未就绪时最多重试 30 秒，既有 collection 维度不一致时立即失败，不得重试或创建 hash 兼容假集合。
+12. 发布在 Agent 与 Backend 健康、但公网仍处于维护态时，通过 `deploy/bootstrap-rag-fixture.sh` 把仓库内 SHA-256 受制品约束的 `docs/knowledge-base/resume-writing-standard-v1.md` 写入 uploads、MySQL 与真实 FastEmbed/Qdrant。已有 release fixture 只有在源文件 SHA-256 一致且 `documentId + chunkCount` 精确检索通过时才复用，禁止覆盖旧文件却保留旧向量。新建前先持久化 `/opt/resumesystem-rag-bootstrap-rollout.env`，任一步失败必须逐项验证并补偿删除该 DB 行、向量和文件；任一补偿失败都保留标记并保持公网关闭。发布后续失败时仅清理本次 release 新建的 fixture，不删除此前已验证来源。
+13. 生产 Agent 不得在启动时依赖 Hugging Face 外网下载模型。linux/amd64 构建阶段必须下载并真实执行一次 `BAAI/bge-small-zh-v1.5`，把模型文件、符号链接目标和逐文件 SHA-256 manifest 固化进不可变 Agent 镜像；容器 entrypoint 在 Uvicorn 启动前以 manifest digest 选择 `fastembed_models/releases/<digest>` 独立目录，空目录或损坏目录只能从镜像内受校验副本修复，禁止联网回退，也禁止清空其他版本的缓存。随后原子更新 `/models/fastembed/current` 稳定符号链接，Compose 把同一路径写入容器环境，确保 PID 1 与后续 `docker exec` 的 canonical fixture/恢复进程都解析到同一离线模型，而不是因看不到 PID 1 的临时环境改写再次联网。制品构建还必须在 `--network none` 下从镜像内模型完成 512 维探针，证明发布包可离线冷启动且旧镜像回滚仍保留旧缓存。
+14. Hybrid 命中不能单独证明 Dense 向量真实。索引 payload 必须同时保存原文件 `source_sha256` 和每个切片 `chunk_sha256`；健康探针逐切片校验摘要、重新执行真实 Embedding 并与 Qdrant 已存向量计算余弦（下限 0.995），再执行一次 Qdrant dense-only 查询，要求命中同一 point 且分数至少 0.995。canonical fixture 的 `source_sha256` 还必须与 `backend_uploads` 文件 SHA-256 相等，禁止 BM25 自匹配掩盖零向量、旧 hash 向量或跨存储错配。
 
-当前生产知识库只有一份全局规范文档和两个切片，只足以证明核心链路与规范类检索可用，不代表岗位覆盖或私有 JD 质量已经完成。私有 JD 上线仍需独立执行跨用户、跨简历和匿名访问隔离 E2E。
+模型冷启动由 Agent lifespan 和 Docker 容器健康门禁承担；服务进入 `healthy` 后的跨存储检索探针默认参数为 `RAG_HEALTH_PROBE_TIMEOUT_SECONDS=60`、`RAG_HEALTH_PROBE_ATTEMPTS=1`，允许范围分别为 30～120 秒和 1～2 次，包含重试间隔的总预算不得超过 120 秒。systemd oneshot 使用 `TimeoutStartSec=270`，小于 5 分钟 timer 周期并为其他检查与告警保留至少 150 秒，防止检查实例重叠。完整探针使用 non-blocking lock；已有探针运行时立即返回 `IN_PROGRESS`，绝不占用同步线程排队。期望 Agent 版本只读取不可变制品内的 `deploy/release-manifest.env`，预检同时比对源码 `SERVICE_VERSION`，避免持久 `.env` 放行旧镜像。探针错误必须区分 `TIMEOUT`、`IN_PROGRESS`、`HTTP`、`FAIL`、`ERROR` 和执行失败，日志中不得包含内部密钥。MySQL 探针通过容器内 `MYSQL_PWD` 读取已有环境变量，禁止把生产密码拼入宿主机 `docker exec` 参数。
+
+生产服务器禁止执行 Docker build、`npm ci` 或 `pip install`。完整七镜像集合（backend、web、admin、Agent、自带配置的 reverse-proxy，以及精确 ID 的 MySQL/Qdrant vendor 镜像）必须在独立的 linux/amd64 构建器生成或锁定，以 `v1.3.4-<commit前12位>` 不可变标签和 `docker save` 制品交付。服务器校验源码、运行脚本、Compose、镜像 ID、OCI revision/version 和 SHA-256 后，只允许 `docker load` 与 `docker-compose ... up --no-build`。发布不得隐式升级 MySQL/Qdrant；数据服务升级必须走独立迁移。Agent、backend 原地依次替换，随后强制重建 reverse-proxy，避免 Nginx 继续缓存旧容器 IP。首次从没有 release manifest/RAG 的轻量版升级时，备份以 `release-version=legacy` 明确标记，且只有显式 `ALLOW_PRE_RAG_BACKUP=true`、旧 `.env` commit、当前七容器 image ID 与备份映射全部一致时才可作为一次性回滚基线；不得向旧不可变目录补写新 manifest 伪造版本。
+
+发布、备份、恢复和回滚共用全局操作锁与 iptables 维护规则。v1.3.4+ 备份在冻结服务前必须校验原始制品 manifest 的 SHA-256，并逐项比对 `runtimeFiles` 与当前不可变目录；恢复在任何数据变更前再次逐项比对归档内 runtime，禁止把被修改或漏文件的运行目录包装成“可恢复备份”。备份先原子写入 root-only `/opt/resumesystem-backup-freeze.env`，再封锁外部 80/443、停止公网代理、backend、Agent 和 Qdrant，冻结写入后按同一逻辑时点保存 MySQL、Qdrant、uploads、FastEmbed 模型、源码环境、七个运行镜像 ID 和完整镜像包；服务恢复后必须通过 Web/Admin 静态资源与 MIME、CORS、认证数据库查询以及按版本要求的精确文档 RAG 探针，才可解除维护规则并删除 freeze marker。systemd 的 `ExecStopPost` 与开机 `resumesystem-backup-recovery.service` 都会识别该 marker，普通定时备份即使遭遇 SIGKILL 或主机重启也会恢复同一不可变版本；恢复失败保留 marker 并保持公网关闭。恢复在任何数据写入步骤失败时保持公网流量关闭；MySQL 使用目标镜像在干净 staging 数据卷导入并优雅停机后再替换主数据，禁止旧镜像先打开新数据目录。应用回滚使用 `rollback-images.sh` 按备份的运行 image ID 重新绑定临时不可变标签，全程不构建、不恢复数据。首次变更前必须原子写入 `/opt/resumesystem-rollout-in-progress.env`；marker 必须保存 operation、phase、目标/上一版目录、目标备份、健康与备份 timer 原状态，restore 在加载目标镜像前还必须生成并校验不可淘汰的 safety backup，把其绝对路径持久化后才允许进入 `data-mutation`。`deploy/recover-interrupted-rollout.sh --confirm /opt/resumesystem-rollout-in-progress.env` 对 deploy 执行 fixture 补偿和精确镜像回滚；对 restore 的 `pre-safety/pre-data` 分别恢复原栈或安全镜像，对 `data-mutation/data-recovery/target-running/pending` 使用 safety backup 重新 staging MySQL 并完整替换 MySQL、Qdrant、uploads、FastEmbed 四类状态。所有长操作处理 ERR/HUP/INT/TERM；SIGKILL 后开机 guard 保持 80/443 关闭，恢复命令可重复执行。开机 guard 同时识别 rollout、pending 和 backup-freeze 标记；rollout 的完整上下文必须保留到 15 分钟观察与 finalization 完成，不能在只剩 commit/epoch 的 pending 阶段丢失回滚信息。最终提交标记时必须先删除 pending 并同步 `/opt`、最后删除完整 rollout marker；任何中断最多留下可恢复的 rollout-only，禁止 pending-only 永久死锁。rollout/pending 期间健康与备份 timers 必须持久 disable；任何手工备份只有显式 `KEEP_PROXY_STOPPED=true` 才能运行，防止重启后的备份任务删除维护规则。
+
+部署脚本通过内部真实 DeepSeek + 严格来源 RAG 后只创建 pending 标记，不立即恢复定时任务。外部浏览器 E2E 与至少 15 分钟稳定性观察完成后，必须用 `finalize-release.sh --confirm <完整commit>` 再次执行恢复验收、生成当前版本 format-2 全镜像备份、运行 live LLM 健康检查并启用健康/备份 timers；pending 标记存在时禁止下一次发布。finalize 的验收、备份或 live LLM 任一步失败时必须重新进入维护态并停止公网 proxy，pending 保留供恢复，禁止“继续公网服务但监控仍停止”。
+
+当前 2 GiB ECS 的七容器 `mem_limit` 总和固定为 1920 MiB（MySQL 448、backend 512、Agent 512、Qdrant 256、web/admin/proxy 各 64）。主机必须预先配置至少 1536 MiB Swap；本次服务器基线使用 2 GiB Swap。发布前要求 `MemAvailable >= 768 MiB`、`SwapFree >= 1024 MiB` 且二者合计至少 2048 MiB；Agent/backend 启动后分阶段再次收紧检查。常规健康门禁要求物理内存至少 1800 MiB、SwapFree 至少 512 MiB、合计余量至少 1024 MiB，并拒绝任何 OOMKilled、容器重启、cgroup 上限漂移或单容器实时内存占用达到其上限 90% 的版本。Swap 只是抗突发保护，不替代 15 分钟 PDF + live RAG 并发观察。
+
+发布包内置一份受校验的全局规范 fixture，只用于打破首次启动死锁并证明完整跨存储链路，不代表岗位覆盖或私有 JD 质量已经完成。私有 JD 上线仍需独立执行跨用户、跨简历和匿名访问隔离 E2E。
 
 ## 0. 本轮架构决策与现状审计
 
@@ -138,7 +154,7 @@ flowchart LR
 6. Agent 检查 Qdrant collection 的向量维度；若旧 collection 维度不同则显式失败，不进行静默混写。
 7. Qdrant upsert 完成后返回 chunk 数；NestJS 把记录更新为 `ready`。失败则记录 `failed` 与经过截断的错误信息。
 
-删除、禁用和重建索引均同步操作 Qdrant。重建会先完成解析、Embedding 和新 points 构造，失败时恢复旧 points。私有 JD 替换只有在新索引 ready 后才删除旧版本；删除简历或用户时先清理关联原文和向量，清理失败会阻止业务删除。带 `expiresAt` 的私有资料由后端启动任务和每小时任务清理。知识原文固定保存在受保护的 `backend_uploads` 卷，即使系统启用了公开 R2/OSS 资产桶也不会把知识原文写入公开桶。Embedding 模型文件保存在 Docker 命名卷 `fastembed_models`，容器重建后无需重复下载。
+删除、禁用和重建索引均同步操作 Qdrant，并通过同一个按文档非阻塞锁串行化；冲突立即返回 409，不在 Agent 工作线程中排队。重建会先完成解析、Embedding 和新 points 构造，失败时恢复旧 points。私有 JD 替换只有在新索引 ready 后才删除旧版本；删除简历或用户时先清理关联原文和向量，清理失败会阻止业务删除。带 `expiresAt` 的私有资料由后端启动任务和每小时任务清理。知识原文固定保存在受保护的 `backend_uploads` 卷，即使系统启用了公开 R2/OSS 资产桶也不会把知识原文写入公开桶。Embedding 模型既固化在 Agent 镜像中，也按 manifest digest 分版本保存在 Docker 命名卷 `fastembed_models`；entrypoint 只校验/修复当前版本子目录并原子更新稳定 `current` 链接，容器重建、fixture 的 `docker exec` 进程或镜像回滚都不需要外网下载。
 
 ## 4. 检索与 Agent 流程
 
@@ -181,7 +197,7 @@ temperature=0.3
 
 Agent 为 DeepSeek V4 请求启用 thinking 与 high reasoning effort，并要求 JSON object。`LLM_TIMEOUT_SECONDS` 默认 120 秒，NestJS 的 `AGENT_REQUEST_TIMEOUT_MS` 默认 150 秒，外层超时必须大于内层，避免 DeepSeek 尚在生成时被主业务提前中止。
 
-知识库索引使用独立的 `KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS`，生产默认 300 秒，并限制在 120～600 秒之间。原因是 FastEmbed 在新机器、空模型卷或模型版本变更后会先完成模型下载与冷启动；业务后端的索引超时必须覆盖这段时间，不能在 Agent 随后成功写入向量时提前把 MySQL 文档标成失败。模型卷应持久化，发布验收必须包含一次冷启动或空缓存索引；普通搜索不依赖延长 LLM 超时。
+知识库索引使用独立的 `KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS`，生产默认 300 秒，并限制在 120～600 秒之间。原因是 FastEmbed 在新机器、空模型卷或模型版本变更后会先完成镜像内模型副本校验/物化与 ONNX 冷启动；业务后端的索引超时必须覆盖这段时间，不能在 Agent 随后成功写入向量时提前把 MySQL 文档标成失败。该流程禁止运行时联网下载，模型卷应持久化，发布验收必须包含一次断网冷启动、`docker exec` 索引和空缓存修复；普通搜索不依赖延长 LLM 超时。
 
 ## 6. 分页与 PDF 策略
 
@@ -236,11 +252,24 @@ Agent 内部 API：`/rag/index`、`/rag/search`、`/rag/documents/:id`、`/agent
 
 ## 8. 运行与验证
 
-启动真实 RAG：
+本地/CI 从干净 release commit 构建完整、不可变的 linux/amd64 制品（不得在生产服务器执行；三个 vendor 参数必须是精确 repo digest 或 `sha256:<image-id>`）：
 
 ```powershell
-docker compose -f docker-compose.prod.yml up -d --build backend web admin agent qdrant
-# 旧服务器也支持：docker-compose -f docker-compose.prod.yml up -d --build ...
+.\deploy\build-release-artifact.ps1 `
+  -ReleaseCommit <full-commit> `
+  -MySqlSourceImage <mysql-repo@sha256-or-image-id> `
+  -QdrantSourceImage <qdrant-repo@sha256-or-image-id> `
+  -NginxBaseImage <nginx-repo@sha256-or-image-id>
+```
+
+生产服务器只加载校验后的镜像制品并无构建切换：
+
+```bash
+sha256sum -c resumesystem-v1.3.4-*-SHA256SUMS
+docker load --input resumesystem-v1.3.4-*-images.tar
+VERIFIED_BACKUP_DIR=/opt/resumesystem-backups/<verified> ./deploy/deploy-loaded-release.sh --confirm
+# 外部 E2E 与 15 分钟观察通过后：
+./deploy/finalize-release.sh --confirm <full-commit>
 ```
 
 首次预热 Embedding：
@@ -269,15 +298,16 @@ node backed-resume/scripts/pagination-pdf-qa.js
 
 2026-07-11 历史实测：BGE 输出 512 维向量；标准知识库状态 ready、2 chunks；Hybrid 检索 2 hits；DeepSeek live 返回 sources 与 tokenUsed；严格来源无命中请求被结构化阻断。
 
-2026-07-13 发布前代码门禁：NestJS 135 项测试、Agent 15 项测试、三端生产构建和生产依赖审计通过。线上旧文档已恢复为 ready + enabled，但 v1.3 新 payload 过滤器不会读取缺少 `sourceType/scope` 的旧 points，因此部署必须无条件重建全部启用的全局文档，再执行真实 Hybrid、live DeepSeek 和私有 JD 租户 E2E；数据库状态不能替代这一步。
+2026-07-15 v1.3.4 本地代码门禁：NestJS 23 suites / 203 tests、Agent 40 tests、Nest build、Python compile、Shell/PowerShell 语法、Docker Compose 当前版与服务器 v1.25 配置解析全部通过。全新临时 Qdrant 中已完成断网 Agent 冷启动、canonical fixture、逐 chunk SHA、dense-only 1.000000、私有 JD 隔离和 live `deepseek-v4-pro`；缺少私有 JD 返回 424，LLM 上游失败或异常成功响应返回 502。MySQL 在 448 MiB cgroup 内用真实初始化 SQL 建立 16 张表，稳定约 169.4 MiB、无 OOM/重启。该结果只证明候选代码与发布脚本，不证明公网版本已经完成部署；线上发布仍必须执行同等 RAG/LLM 与浏览器 E2E。
 
 知识文档管理 API 必须把 MySQL `TINYINT` 元数据 `enabled/licensed/piiReviewed` 序列化为 JSON boolean，管理端加载后还要再次归一化。只读打开知识库页面不得产生 `PUT .../enabled` 等写请求；发布浏览器回归需要记录页面加载前后的审计日志和文档 enabled 状态，防止 UI 开关因 `1 !== true` 的类型差异在挂载时静默停用全局 RAG 来源。
 
 ## 9. 运维与故障排查
 
-- Agent health 为 degraded：先检查 Qdrant 网络、collection 和内部密钥，不要直接切换 hash。
+- Agent health 为 degraded：先检查 `RAG_ENABLED=true`、`EMBEDDING_BACKEND=fastembed`、Qdrant 网络和 collection，不要直接切换 hash，也不得让发布门禁跳过真实 RAG。
+- 知识文档操作返回 409：同一文档已有重建、启停或删除操作；等待当前操作结束后由用户显式重试，不要把冲突转换成 502，也不要并发补写 Qdrant。
 - 向量维度冲突：修改 Embedding 模型时必须使用新 collection 名或执行明确迁移，禁止在旧 collection 混写。
-- 首次索引慢：检查 `fastembed_models` 卷；首次模型下载后应持久化。
+- Agent 冷启动卡住：先检查镜像内 `/opt/fastembed-models.SHA256SUMS`、`/opt/fastembed-models.SYMLINKS`、`fastembed_models/releases/<digest>` 与 `/models/fastembed/current`；生产启动禁止临时访问 Hugging Face，损坏的当前版本目录应由 entrypoint 从镜像副本修复，其他版本目录不得删除。
 - 文档 `failed`：在后台查看 errorMessage，修正文档后点重建索引。
 - 检索无命中：分别检查 enabled、category、最低分数阈值、chunk 内容和 query；先调用后台 search API 隔离 LLM 因素。
 - LLM 401/402/429：分别检查密钥、余额/权限、速率限制；不得自动回落为 mock 并宣称成功。
@@ -285,11 +315,11 @@ node backed-resume/scripts/pagination-pdf-qa.js
 - PDF 503：确认容器中的 `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-headless-shell` 与镜像安装内容一致。
 - PDF 页数异常：保存原始 HTML 与 PDF，检查 `@page`、A4 宽度、字体加载、超长不可拆元素和图片尺寸。
 - HTTPS/证书：首次使用 `deploy/bootstrap-tls.sh --confirm` 通过 TLS-ALPN 签发证书；acme.sh 定时续期会短暂停止反向代理释放 443，完成后重启并 reload Nginx。健康检查同时断言证书剩余期、容器直连状态、HTTPS 公共路径和一次真实 RAG 检索。
-- 备份/恢复：`deploy/backup.sh` 在归档 Qdrant 卷时只短暂停止 Agent/Qdrant，默认保留最近 7 份；`deploy/restore.sh --confirm <backup>` 会先做强制备份，失败时尝试恢复在线栈。
+- 备份/恢复：`deploy/backup.sh` 生成 format-2 一致性备份，包含 MySQL dump、Qdrant、uploads、FastEmbed、精确源码/环境、七个镜像 ID 与完整镜像包；v1.3.4+ 还要求原始制品 manifest/checksums，并在冻结前验证当前 runtimeFiles。systemd 默认保留最近 3 份，手工执行默认 7 份。冻结期间的 durable marker 由 `deploy/recover-interrupted-backup.sh`、backup service `ExecStopPost` 和开机 recovery unit 共同兜底；备份恢复服务后先在维护规则内运行公共入口、认证数据库和按版本 RAG 验收，失败则保持关站。`deploy/restore.sh --confirm <backup>` 只接受带完整 hardened runtime 与制品 manifest 的 v1.3.4+ 备份，并在数据变更前验证归档 runtimeFiles；它会在停流量后做 pre-restore 安全备份，使用 staging MySQL 恢复，成功后进入 pending 观察态；必须再运行 `finalize-release.sh` 才会生成当前版本备份并恢复 timers。v1.3.4 之前的完整备份仍可用于 `rollback-images.sh` 精确镜像回滚及人工灾难恢复，但不得伪装成新版自动恢复。
 
 ## 10. 已知限制与下一步
 
-- 当前知识数据量只有一份规范文档和 2 个 chunks，即使重新启用也只能证明链路，不足以证明岗位覆盖和生产检索质量。
+- canonical fixture 只证明链路，不足以证明岗位覆盖和生产检索质量；正式知识库仍应按“全局规范 -> 私有 JD -> 合规脱敏样例”的顺序扩充并做离线检索评测。
 - 当前 BM25 在有限 scroll 候选上临时计算，不是全库稀疏索引；知识规模扩大后需使用 Qdrant sparse vector/BM25 索引并执行离线检索评测。
 - 当前重排是可解释的轻量融合，没有 Cross-Encoder；是否启用重模型必须以服务器内存、延迟和离线 nDCG/Recall 评测为依据。
 - 原始优秀简历不得直接进入生产库；先建立授权、脱敏、PII 复核和样例事实隔离流程。
@@ -303,6 +333,7 @@ node backed-resume/scripts/pagination-pdf-qa.js
 ## 11. 相关文件
 
 - `python-agent/app/rag.py`：解析、切分、Embedding、Qdrant。
+- `deploy/bootstrap-rag-fixture.sh` 与 `python-agent/scripts/bootstrap_fixture.py`：首次发布的 canonical fixture、精确探针与失败补偿。
 - `python-agent/app/graph.py`：Agent 节点与 RAG/LLM 编排。
 - `python-agent/app/llm.py`：DeepSeek OpenAI-compatible 调用与结构化输出。
 - `backed-resume/modules/knowledge/`：知识库业务与内部 Agent 客户端。

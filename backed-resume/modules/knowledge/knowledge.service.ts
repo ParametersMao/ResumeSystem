@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -18,7 +19,10 @@ import {
   KnowledgeDocumentQueryDto,
   KnowledgeSourceType,
 } from '../../dto/knowledge-document.dto';
-import { MAX_KNOWLEDGE_FILE_SIZE, validateKnowledgeFile } from './knowledge-file-validation';
+import {
+  MAX_KNOWLEDGE_FILE_SIZE,
+  validateKnowledgeFile,
+} from './knowledge-file-validation';
 
 interface CreateKnowledgeDocumentInput {
   file: Express.Multer.File;
@@ -74,15 +78,25 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
       qb.andWhere(
         new Brackets((where) => {
           where
-            .where('document.name LIKE :search', { search: `%${query.search}%` })
-            .orWhere('document.fileName LIKE :search', { search: `%${query.search}%` });
+            .where('document.name LIKE :search', {
+              search: `%${query.search}%`,
+            })
+            .orWhere('document.fileName LIKE :search', {
+              search: `%${query.search}%`,
+            });
         }),
       );
     }
-    if (query.category) qb.andWhere('document.category = :category', { category: query.category });
-    if (query.status) qb.andWhere('document.status = :status', { status: query.status });
+    if (query.category)
+      qb.andWhere('document.category = :category', {
+        category: query.category,
+      });
+    if (query.status)
+      qb.andWhere('document.status = :status', { status: query.status });
     if (query.sourceType) {
-      qb.andWhere('document.sourceType = :sourceType', { sourceType: query.sourceType });
+      qb.andWhere('document.sourceType = :sourceType', {
+        sourceType: query.sourceType,
+      });
     }
 
     const [list, total] = await qb
@@ -109,16 +123,27 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     adminId: number;
   }) {
     const sourceType = input.sourceType || 'standard';
-    if (!(ADMIN_KNOWLEDGE_SOURCE_TYPES as readonly string[]).includes(sourceType)) {
-      throw new BadRequestException('管理员只能上传全局规范、岗位框架或合规简历样例');
+    if (
+      !(ADMIN_KNOWLEDGE_SOURCE_TYPES as readonly string[]).includes(sourceType)
+    ) {
+      throw new BadRequestException(
+        '管理员只能上传全局规范、岗位框架或合规简历样例',
+      );
     }
-    if (sourceType === 'resume-exemplar' && (!input.licensed || !input.piiReviewed)) {
-      throw new BadRequestException('简历样例必须确认已获授权并完成 PII 脱敏复核');
+    if (
+      sourceType === 'resume-exemplar' &&
+      (!input.licensed || !input.piiReviewed)
+    ) {
+      throw new BadRequestException(
+        '简历样例必须确认已获授权并完成 PII 脱敏复核',
+      );
     }
 
     const document = await this.createAndIndex({
       file: input.file,
-      name: String(input.name || input.file.originalname.replace(/\.[^.]+$/, '')).trim(),
+      name: String(
+        input.name || input.file.originalname.replace(/\.[^.]+$/, ''),
+      ).trim(),
       category: String(input.category || 'general').trim() || 'general',
       description: String(input.description || '').trim(),
       sourceType,
@@ -126,7 +151,8 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
       ownerUserId: null,
       resumeId: null,
       licensed: sourceType === 'resume-exemplar' && Boolean(input.licensed),
-      piiReviewed: sourceType === 'resume-exemplar' && Boolean(input.piiReviewed),
+      piiReviewed:
+        sourceType === 'resume-exemplar' && Boolean(input.piiReviewed),
       expiresAt: null,
       createdBy: input.adminId,
       storagePrefix: `knowledge/global/${new Date().toISOString().slice(0, 10)}`,
@@ -145,7 +171,9 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     await this.ensureTable();
     const text = String(input.text || '').trim();
     if (input.file && text) {
-      throw new BadRequestException('请只选择上传文件或粘贴 JD 文本中的一种方式');
+      throw new BadRequestException(
+        '请只选择上传文件或粘贴 JD 文本中的一种方式',
+      );
     }
     if (!input.file && !text) {
       throw new BadRequestException('请上传 JD 文件或粘贴 JD 文本');
@@ -153,7 +181,10 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
 
     const file = input.file || this.textAsKnowledgeFile(text);
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
+    if (
+      expiresAt &&
+      (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())
+    ) {
       throw new BadRequestException('JD 过期时间必须是未来时间');
     }
 
@@ -208,7 +239,10 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     const unexpired = documents.filter(
       (document) => !document.expiresAt || document.expiresAt.getTime() > now,
     );
-    const current = unexpired.find((document) => document.status === 'ready' && document.enabled) || unexpired[0];
+    const current =
+      unexpired.find(
+        (document) => document.status === 'ready' && document.enabled,
+      ) || unexpired[0];
     return current ? this.toMetadata(current) : null;
   }
 
@@ -223,7 +257,8 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
         resumeId,
       },
     });
-    for (const document of documents) await this.deleteDocumentResources(document);
+    for (const document of documents)
+      await this.deleteDocumentResources(document);
   }
 
   async deletePrivateKnowledgeForUser(ownerUserId: number) {
@@ -231,7 +266,8 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     const documents = await this.repository.find({
       where: { scope: 'private', ownerUserId },
     });
-    for (const document of documents) await this.deleteDocumentResources(document);
+    for (const document of documents)
+      await this.deleteDocumentResources(document);
   }
 
   async purgeExpiredPrivateDocuments(now = new Date()) {
@@ -262,7 +298,9 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     await this.repository.save(document);
     let indexCompleted = false;
     try {
-      const buffer = await this.storageService.downloadObject(document.storageKey);
+      const buffer = await this.storageService.downloadObject(
+        document.storageKey,
+      );
       const result = await this.agentClient.indexDocument({
         documentId: document.id,
         name: document.name,
@@ -293,6 +331,10 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
       document.chunkCount = result.chunk_count;
       document.errorMessage = '';
     } catch (error: any) {
+      // A competing mutation owns the same document. Preserve HTTP 409 so the
+      // caller can retry, and never let the losing request overwrite the
+      // winning request's eventual ready/disabled state with failed.
+      if (error instanceof ConflictException) throw error;
       if (indexCompleted && !shouldEnable) {
         // If the post-index disable failed and there were no previous points for
         // the Agent to inherit, newly written points may be searchable. Remove
@@ -306,7 +348,10 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
         }
       }
       document.status = 'failed';
-      document.errorMessage = String(error?.message || '重新索引失败').slice(0, 1000);
+      document.errorMessage = String(error?.message || '重新索引失败').slice(
+        0,
+        1000,
+      );
     }
     return this.toMetadata(await this.repository.save(document));
   }
@@ -320,7 +365,8 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     document.enabled = enabled;
     // Keep the diagnostic state for a failed document when it is disabled. A
     // successful reindex is the only operation allowed to turn it ready again.
-    if (document.status !== 'failed') document.status = enabled ? 'ready' : 'disabled';
+    if (document.status !== 'failed')
+      document.status = enabled ? 'ready' : 'disabled';
     return this.toMetadata(await this.repository.save(document));
   }
 
@@ -349,7 +395,9 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async createAndIndex(input: CreateKnowledgeDocumentInput): Promise<KnowledgeDocument> {
+  private async createAndIndex(
+    input: CreateKnowledgeDocumentInput,
+  ): Promise<KnowledgeDocument> {
     await this.ensureTable();
     const validated = validateKnowledgeFile(input.file);
     const safeFile: Express.Multer.File = {
@@ -407,7 +455,10 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
       document.errorMessage = '';
     } catch (error: any) {
       document.status = 'failed';
-      document.errorMessage = String(error?.message || '文档索引失败').slice(0, 1000);
+      document.errorMessage = String(error?.message || '文档索引失败').slice(
+        0,
+        1000,
+      );
     }
     return this.repository.save(document);
   }
@@ -420,7 +471,9 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
 
   private async findGlobalOne(id: number) {
     await this.ensureTable();
-    const document = await this.repository.findOne({ where: { id, scope: 'global' } });
+    const document = await this.repository.findOne({
+      where: { id, scope: 'global' },
+    });
     if (!document) throw new NotFoundException('知识文档不存在');
     return document;
   }
@@ -448,7 +501,11 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private toMetadata(document: KnowledgeDocument) {
-    const { storageKey: _storageKey, storageUrl: _storageUrl, ...metadata } = document;
+    const {
+      storageKey: _storageKey,
+      storageUrl: _storageUrl,
+      ...metadata
+    } = document;
     return {
       ...metadata,
       enabled: Boolean(document.enabled),
@@ -458,7 +515,8 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async ensureTable() {
-    if (!this.ensureTablePromise) this.ensureTablePromise = this.createOrUpgradeTable();
+    if (!this.ensureTablePromise)
+      this.ensureTablePromise = this.createOrUpgradeTable();
     await this.ensureTablePromise;
   }
 
@@ -496,9 +554,11 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     `);
 
     const existingColumns = new Set(
-      ((await this.repository.query('SHOW COLUMNS FROM knowledge_documents')) || []).map(
-        (row: any) => String(row.Field || row.field || '').toLowerCase(),
-      ),
+      (
+        (await this.repository.query(
+          'SHOW COLUMNS FROM knowledge_documents',
+        )) || []
+      ).map((row: any) => String(row.Field || row.field || '').toLowerCase()),
     );
     const columns: Record<string, string> = {
       source_type: "VARCHAR(32) NOT NULL DEFAULT 'standard' AFTER category",
@@ -511,13 +571,18 @@ export class KnowledgeService implements OnModuleInit, OnModuleDestroy {
     };
     for (const [name, definition] of Object.entries(columns)) {
       if (!existingColumns.has(name)) {
-        await this.repository.query(`ALTER TABLE knowledge_documents ADD COLUMN ${name} ${definition}`);
+        await this.repository.query(
+          `ALTER TABLE knowledge_documents ADD COLUMN ${name} ${definition}`,
+        );
       }
     }
 
     const existingIndexes = new Set(
-      ((await this.repository.query('SHOW INDEX FROM knowledge_documents')) || []).map(
-        (row: any) => String(row.Key_name || row.key_name || '').toLowerCase(),
+      (
+        (await this.repository.query('SHOW INDEX FROM knowledge_documents')) ||
+        []
+      ).map((row: any) =>
+        String(row.Key_name || row.key_name || '').toLowerCase(),
       ),
     );
     if (!existingIndexes.has('idx_knowledge_source_scope')) {

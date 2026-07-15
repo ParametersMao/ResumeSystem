@@ -1,4 +1,10 @@
-import { BadGatewayException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { AiDiagnoseDto, AiGenerateDto, AiPolishDto } from '../../dto/ai-mock.dto';
 import { AiConfigDto } from '../../dto/system-config.dto';
 
@@ -123,12 +129,18 @@ export class AiAgentClientService {
 
       const raw = (await response.json().catch(() => ({}))) as AgentRawResponse & { detail?: string };
       if (!response.ok) {
+        if (response.status === HttpStatus.FAILED_DEPENDENCY) {
+          throw new HttpException(
+            raw?.detail || '当前请求缺少可用的 RAG 依据',
+            HttpStatus.FAILED_DEPENDENCY,
+          );
+        }
         throw new BadGatewayException(raw?.detail || `Agent 服务调用失败，状态码 ${response.status}`);
       }
 
       return this.normalizeAgentResponse(taskType, raw);
     } catch (error: any) {
-      if (error instanceof BadGatewayException || error instanceof ServiceUnavailableException) {
+      if (error instanceof HttpException) {
         throw error;
       }
 

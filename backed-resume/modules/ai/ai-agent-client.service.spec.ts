@@ -104,4 +104,24 @@ describe('AiAgentClientService response contract', () => {
     expect(result.strategy).toEqual([]);
     expect(result.warnings).toEqual([]);
   });
+
+  it('preserves Agent 424 when strict RAG evidence is unavailable', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: '当前简历缺少已索引的私有 JD' }), {
+        status: 424,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as any;
+
+    await expect(
+      new AiAgentClientService().diagnose(
+        { resumeId: 'resume-1', contentText: '简历正文' } as any,
+        7,
+        config,
+      ),
+    ).rejects.toMatchObject({
+      status: 424,
+      response: '当前简历缺少已索引的私有 JD',
+    });
+  });
 });

@@ -1,0 +1,14 @@
+[Unit]
+Description=Fail-close incomplete ResumeSystem rollout before Docker
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/resumesystem-rollout-guard --firewall-only
+User=root
+Group=root
+
+[Install]
+RequiredBy=docker.service

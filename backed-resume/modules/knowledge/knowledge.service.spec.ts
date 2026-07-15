@@ -1,7 +1,13 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { KnowledgeService } from './knowledge.service';
 
-jest.mock('../storage/storage.service', () => ({ StorageService: class StorageService {} }));
+jest.mock('../storage/storage.service', () => ({
+  StorageService: class StorageService {},
+}));
 
 describe('KnowledgeService v1.3 boundaries', () => {
   let knowledgeRepository: any;
@@ -51,18 +57,21 @@ describe('KnowledgeService v1.3 boundaries', () => {
     { licensed: false, piiReviewed: true },
     { licensed: true, piiReviewed: false },
     { licensed: false, piiReviewed: false },
-  ])('rejects a resume exemplar without both compliance gates: %o', async (flags) => {
-    await expect(
-      service.upload({
-        file: textFile('exemplar.md', '# anonymized exemplar'),
-        sourceType: 'resume-exemplar',
-        adminId: 1,
-        ...flags,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(storageService.uploadObject).not.toHaveBeenCalled();
-    expect(agentClient.indexDocument).not.toHaveBeenCalled();
-  });
+  ])(
+    'rejects a resume exemplar without both compliance gates: %o',
+    async (flags) => {
+      await expect(
+        service.upload({
+          file: textFile('exemplar.md', '# anonymized exemplar'),
+          sourceType: 'resume-exemplar',
+          adminId: 1,
+          ...flags,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(storageService.uploadObject).not.toHaveBeenCalled();
+      expect(agentClient.indexDocument).not.toHaveBeenCalled();
+    },
+  );
 
   it('passes licensed and PII-reviewed exemplar metadata to the Agent', async () => {
     await service.upload({
@@ -88,11 +97,19 @@ describe('KnowledgeService v1.3 boundaries', () => {
   it('fails closed when another tenant targets a resume they do not own', async () => {
     resumeRepository.findOne.mockResolvedValue(null);
 
-    await expect(service.getJobDescription(8, 99)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getJobDescription(8, 99)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     await expect(
-      service.replaceJobDescription({ resumeId: 8, ownerUserId: 99, text: 'private JD' }),
+      service.replaceJobDescription({
+        resumeId: 8,
+        ownerUserId: 99,
+        text: 'private JD',
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.deleteJobDescription(8, 99)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.deleteJobDescription(8, 99)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
 
     expect(resumeRepository.findOne).toHaveBeenCalledWith({
       where: { id: 8, userId: 99, status: 1 },
@@ -115,7 +132,9 @@ describe('KnowledgeService v1.3 boundaries', () => {
       updateTime: new Date('2026-07-12T00:00:00Z'),
     };
     knowledgeRepository.find.mockResolvedValue([oldDocument]);
-    agentClient.indexDocument.mockRejectedValue(new Error('embedding unavailable'));
+    agentClient.indexDocument.mockRejectedValue(
+      new Error('embedding unavailable'),
+    );
 
     const result = await service.replaceJobDescription({
       resumeId: 8,
@@ -138,15 +157,17 @@ describe('KnowledgeService v1.3 boundaries', () => {
   });
 
   it('purges expired private JD source files, vectors and metadata', async () => {
-    knowledgeRepository.find.mockResolvedValue([{
-      id: 71,
-      scope: 'private',
-      sourceType: 'job-description',
-      ownerUserId: 11,
-      resumeId: 8,
-      storageKey: 'knowledge/private/expired.txt',
-      expiresAt: new Date('2026-07-01T00:00:00Z'),
-    }]);
+    knowledgeRepository.find.mockResolvedValue([
+      {
+        id: 71,
+        scope: 'private',
+        sourceType: 'job-description',
+        ownerUserId: 11,
+        resumeId: 8,
+        storageKey: 'knowledge/private/expired.txt',
+        expiresAt: new Date('2026-07-01T00:00:00Z'),
+      },
+    ]);
 
     const count = await service.purgeExpiredPrivateDocuments(
       new Date('2026-07-13T00:00:00Z'),
@@ -154,7 +175,9 @@ describe('KnowledgeService v1.3 boundaries', () => {
 
     expect(count).toBe(1);
     expect(agentClient.deleteDocument).toHaveBeenCalledWith(71);
-    expect(storageService.deleteObject).toHaveBeenCalledWith('knowledge/private/expired.txt');
+    expect(storageService.deleteObject).toHaveBeenCalledWith(
+      'knowledge/private/expired.txt',
+    );
     expect(knowledgeRepository.remove).toHaveBeenCalled();
   });
 
@@ -168,11 +191,13 @@ describe('KnowledgeService v1.3 boundaries', () => {
       piiReviewed: 1,
     });
 
-    expect(metadata).toEqual(expect.objectContaining({
-      enabled: true,
-      licensed: false,
-      piiReviewed: true,
-    }));
+    expect(metadata).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        licensed: false,
+        piiReviewed: true,
+      }),
+    );
     expect(metadata).not.toHaveProperty('storageKey');
     expect(metadata).not.toHaveProperty('storageUrl');
   });
@@ -196,7 +221,9 @@ describe('KnowledgeService v1.3 boundaries', () => {
       mimeType: 'text/plain',
     };
     knowledgeRepository.findOne.mockResolvedValue(document);
-    storageService.downloadObject.mockResolvedValue(Buffer.from('resume standard'));
+    storageService.downloadObject.mockResolvedValue(
+      Buffer.from('resume standard'),
+    );
 
     const result = await service.reindex(81);
 
@@ -204,7 +231,48 @@ describe('KnowledgeService v1.3 boundaries', () => {
       expect.objectContaining({ documentId: 81, enabled: false }),
     );
     expect(agentClient.setDocumentEnabled).toHaveBeenCalledWith(81, false);
-    expect(result).toEqual(expect.objectContaining({ status: 'disabled', enabled: false }));
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'disabled', enabled: false }),
+    );
+  });
+
+  it('preserves a concurrent reindex conflict without overwriting the winner as failed', async () => {
+    const document = {
+      id: 85,
+      scope: 'global',
+      status: 'ready',
+      enabled: true,
+      errorMessage: '',
+      name: 'Concurrent standard',
+      category: 'standard',
+      sourceType: 'standard',
+      ownerUserId: null,
+      resumeId: null,
+      licensed: false,
+      piiReviewed: false,
+      expiresAt: null,
+      storageKey: 'knowledge/global/concurrent.txt',
+      fileName: 'concurrent.txt',
+      mimeType: 'text/plain',
+    };
+    knowledgeRepository.findOne.mockResolvedValue(document);
+    storageService.downloadObject.mockResolvedValue(
+      Buffer.from('resume standard'),
+    );
+    agentClient.indexDocument.mockRejectedValue(
+      new ConflictException('document 85 already has a mutation in progress'),
+    );
+
+    await expect(service.reindex(85)).rejects.toBeInstanceOf(ConflictException);
+
+    expect(agentClient.deleteDocument).not.toHaveBeenCalled();
+    expect(
+      knowledgeRepository.save.mock.calls.some(
+        ([value]) => value.status === 'failed',
+      ),
+    ).toBe(false);
+    expect(document.status).toBe('indexing');
+    expect(document.errorMessage).toBe('');
   });
 
   it('does not allow a failed document to be toggled into ready state', async () => {
@@ -216,7 +284,9 @@ describe('KnowledgeService v1.3 boundaries', () => {
       errorMessage: 'embedding unavailable',
     });
 
-    await expect(service.toggle(82, true)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.toggle(82, true)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
     expect(agentClient.setDocumentEnabled).not.toHaveBeenCalled();
     expect(knowledgeRepository.save).not.toHaveBeenCalled();
@@ -241,8 +311,12 @@ describe('KnowledgeService v1.3 boundaries', () => {
       mimeType: 'text/plain',
     };
     knowledgeRepository.findOne.mockResolvedValue(document);
-    storageService.downloadObject.mockResolvedValue(Buffer.from('resume standard'));
-    agentClient.setDocumentEnabled.mockRejectedValue(new Error('agent unavailable'));
+    storageService.downloadObject.mockResolvedValue(
+      Buffer.from('resume standard'),
+    );
+    agentClient.setDocumentEnabled.mockRejectedValue(
+      new Error('agent unavailable'),
+    );
 
     const result = await service.reindex(84);
 
@@ -264,7 +338,9 @@ describe('KnowledgeService v1.3 boundaries', () => {
     const result = await service.toggle(83, false);
 
     expect(agentClient.setDocumentEnabled).toHaveBeenCalledWith(83, false);
-    expect(result).toEqual(expect.objectContaining({ status: 'failed', enabled: false }));
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'failed', enabled: false }),
+    );
   });
 });
 
