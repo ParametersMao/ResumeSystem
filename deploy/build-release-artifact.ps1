@@ -134,13 +134,28 @@ foreach ($entry in $images.GetEnumerator()) {
     & docker @buildArguments
     if ($LASTEXITCODE -ne 0) { throw "Failed to build $($entry.Key) from clean HEAD" }
 
-    $metadata = docker image inspect $entry.Value.Target --format '{{.Os}}|{{.Architecture}}|{{.Id}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{index .Config.Labels "org.opencontainers.image.version"}}'
-    if ($LASTEXITCODE -ne 0 -or
-        $metadata -notmatch '^linux\|amd64\|(sha256:[0-9a-f]{64})\|([0-9a-f]{40})\|(\d+\.\d+\.\d+)$') {
+    $metadataJson = docker image inspect $entry.Value.Target
+    if ($LASTEXITCODE -ne 0) {
       throw "Built image metadata is invalid: $($entry.Value.Target)"
     }
-    $imageId = $matches[1]
-    if ($matches[2] -cne $ReleaseCommit -or $matches[3] -cne $version) {
+    try {
+      $metadataItems = @($metadataJson | ConvertFrom-Json -ErrorAction Stop)
+    } catch {
+      throw "Built image metadata JSON is invalid: $($entry.Value.Target)"
+    }
+    if ($metadataItems.Count -ne 1) {
+      throw "Built image metadata is ambiguous: $($entry.Value.Target)"
+    }
+    $metadata = $metadataItems[0]
+    $imageId = [string]$metadata.Id
+    $revision = [string]$metadata.Config.Labels.'org.opencontainers.image.revision'
+    $imageVersion = [string]$metadata.Config.Labels.'org.opencontainers.image.version'
+    if ([string]$metadata.Os -cne 'linux' -or
+        [string]$metadata.Architecture -cne 'amd64' -or
+        $imageId -notmatch '^sha256:[0-9a-f]{64}$') {
+      throw "Built image is not a valid linux/amd64 image: $($entry.Value.Target)"
+    }
+    if ($revision -cne $ReleaseCommit -or $imageVersion -cne $version) {
       throw "Built image provenance does not match release commit/version: $($entry.Value.Target)"
     }
     switch ($entry.Key) {
@@ -156,11 +171,25 @@ foreach ($entry in $images.GetEnumerator()) {
       docker pull --platform linux/amd64 $entry.Value.Source
       if ($LASTEXITCODE -ne 0) { throw "Failed to pull vendor image $($entry.Value.Source)" }
     }
-    $metadata = docker image inspect $entry.Value.Source --format '{{.Os}}|{{.Architecture}}|{{.Id}}'
-    if ($LASTEXITCODE -ne 0 -or $metadata -notmatch '^linux\|amd64\|(sha256:[0-9a-f]{64})$') {
+    $metadataJson = docker image inspect $entry.Value.Source
+    if ($LASTEXITCODE -ne 0) {
       throw "Vendor image is not linux/amd64: $($entry.Value.Source)"
     }
-    $imageId = $matches[1]
+    try {
+      $metadataItems = @($metadataJson | ConvertFrom-Json -ErrorAction Stop)
+    } catch {
+      throw "Vendor image metadata JSON is invalid: $($entry.Value.Source)"
+    }
+    if ($metadataItems.Count -ne 1) {
+      throw "Vendor image metadata is ambiguous: $($entry.Value.Source)"
+    }
+    $metadata = $metadataItems[0]
+    $imageId = [string]$metadata.Id
+    if ([string]$metadata.Os -cne 'linux' -or
+        [string]$metadata.Architecture -cne 'amd64' -or
+        $imageId -notmatch '^sha256:[0-9a-f]{64}$') {
+      throw "Vendor image is not linux/amd64: $($entry.Value.Source)"
+    }
     docker tag $entry.Value.Source $entry.Value.Target
     if ($LASTEXITCODE -ne 0) { throw "Failed to tag vendor image $($entry.Value.Target)" }
     $resolvedId = (docker image inspect $entry.Value.Target --format '{{.Id}}').Trim()
