@@ -8,6 +8,45 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+function Get-TarMemberSha256 {
+  param(
+    [Parameter(Mandatory = $true)][string]$ArchivePath,
+    [Parameter(Mandatory = $true)][string]$MemberPath
+  )
+
+  if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf) -or
+      $MemberPath -notmatch '^[A-Za-z0-9._/-]+$' -or
+      $MemberPath.StartsWith('/') -or
+      $MemberPath.Split('/') -contains '..') {
+    throw "Unsafe source archive member: $MemberPath"
+  }
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = 'tar'
+  $startInfo.Arguments = "-xOf `"$ArchivePath`" `"$MemberPath`""
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $startInfo.CreateNoWindow = $true
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  if (-not $process.Start()) {
+    throw "Could not start tar for $MemberPath"
+  }
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $digestBytes = $sha256.ComputeHash($process.StandardOutput.BaseStream)
+    $errorText = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+      throw "Source archive member could not be read: $MemberPath ($errorText)"
+    }
+    return ([System.BitConverter]::ToString($digestBytes)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $sha256.Dispose()
+    $process.Dispose()
+  }
+}
+
 if ($ReleaseCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'ReleaseCommit must be the full lowercase 40-character Git commit'
 }
@@ -278,9 +317,9 @@ $runtimeFilePaths = @(
 )
 $runtimeFiles = [ordered]@{}
 foreach ($runtimeFile in $runtimeFilePaths) {
-  $runtimeFiles[$runtimeFile] = (Get-FileHash -LiteralPath $runtimeFile -Algorithm SHA256).Hash.ToLowerInvariant()
+  $runtimeFiles[$runtimeFile] = Get-TarMemberSha256 -ArchivePath $sourceTarPath -MemberPath $runtimeFile
 }
-$composeHash = (Get-FileHash -LiteralPath 'docker-compose.prod.yml' -Algorithm SHA256).Hash.ToLowerInvariant()
+$composeHash = $runtimeFiles['docker-compose.prod.yml']
 $record = [ordered]@{
   releaseVersion = $version
   releaseCommit = $ReleaseCommit
