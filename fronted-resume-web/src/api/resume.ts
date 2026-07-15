@@ -83,6 +83,11 @@ export async function listMyResumes(userId: number, page = 1, limit = 10) {
   return data.data
 }
 
+export async function deleteResume(resumeId: string | number) {
+  const { data } = await http.delete<ApiResponse<null>>(`/api/resumes/${resumeId}`)
+  return data
+}
+
 export async function exportResumePdfByHtml(
   html: string,
   context: { resumeId?: number; templateId?: number } = {},

@@ -530,6 +530,16 @@ export function setupMock(instance: AxiosInstance) {
       return { data: { code: 200, message: 'success', data: updated }, status: 200, statusText: 'OK', headers: {}, config }
     }
 
+    if (method === 'delete' && /^\/resumes\/\d+$/.test(url)) {
+      const id = url.split('/')[2]
+      if (!db.resumes[id]) {
+        return { data: { code: 404, message: 'not found', data: null }, status: 404, statusText: 'NOT_FOUND', headers: {}, config }
+      }
+      delete db.resumes[id]
+      delete db.resumeVersions[id]
+      return { data: { code: 200, message: 'Deleted', data: null }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
     // Get resume detail
     if (method === 'get' && /^\/resumes\//.test(url)) {
       const id = url.split('/').pop()!

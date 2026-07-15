@@ -163,6 +163,7 @@ export class ResumesService {
     if (updateResumeDto.version !== undefined && resume.version !== updateResumeDto.version) {
       throw new ConflictException('简历版本冲突，请刷新后重试');
     }
+    const expectedVersion = resume.version;
 
     const oldBytes =
       Buffer.byteLength(resume.content || '', 'utf8') +
@@ -180,15 +181,35 @@ export class ResumesService {
 
     await this.saveVersionSnapshot(resume, 'save');
 
-    const { templateId, ...resumeChanges } = updateResumeDto;
-    Object.assign(resume, resumeChanges);
-    if (templateId !== undefined) {
-      resume.templateId = await this.resolveTemplateId(templateId);
+    const changes: {
+      title?: string;
+      content?: string;
+      templateId?: number | null;
+      previewImage?: string;
+      version: number;
+    } = { version: expectedVersion + 1 };
+    if (updateResumeDto.title !== undefined) {
+      changes.title = updateResumeDto.title;
     }
-    resume.version += 1;
+    if (updateResumeDto.content !== undefined) {
+      changes.content = updateResumeDto.content;
+    }
+    if (updateResumeDto.previewImage !== undefined) {
+      changes.previewImage = updateResumeDto.previewImage;
+    }
+    if (updateResumeDto.templateId !== undefined) {
+      changes.templateId = await this.resolveTemplateId(updateResumeDto.templateId);
+    }
 
-    const updatedResume = await this.resumeRepository.save(resume);
-    return this.mapToResponseDto(updatedResume);
+    const result = await this.resumeRepository.update(
+      { id, userId, status: 1, version: expectedVersion },
+      changes,
+    );
+    if (!result.affected) {
+      await this.throwResumeWriteConflict(id, userId, expectedVersion);
+    }
+
+    return this.findOne(id, userId);
   }
 
   private async resolveTemplateId(templateId?: number | null): Promise<number | null> {
@@ -265,19 +286,34 @@ export class ResumesService {
       throw new NotFoundException('历史版本不存在');
     }
 
+    const expectedVersion = resume.version;
     await this.saveVersionSnapshot(resume, 'rollback');
 
-    resume.content = version.content;
-    resume.version += 1;
-    const saved = await this.resumeRepository.save(resume);
-    return this.mapToResponseDto(saved);
+    const result = await this.resumeRepository.update(
+      { id: resumeId, userId, status: 1, version: expectedVersion },
+      { content: version.content, version: expectedVersion + 1 },
+    );
+    if (!result.affected) {
+      await this.throwResumeWriteConflict(resumeId, userId, expectedVersion);
+    }
+
+    return this.findOne(resumeId, userId);
   }
 
   async remove(id: number, userId: number): Promise<void> {
     const resume = await this.resumeRepository.findOne({
-      where: { id, userId, status: 1 },
+      select: { id: true, userId: true, status: true },
+      where: { id, userId },
     });
     if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    // DELETE is idempotent only for a resume that belongs to the caller. The
+    // owner-scoped lookup above deliberately keeps a missing or foreign id at
+    // 404 while allowing a lost successful response to be retried safely.
+    if (resume.status === 0) return;
+    if (resume.status !== 1) {
       throw new NotFoundException('简历不存在');
     }
 
@@ -285,8 +321,19 @@ export class ResumesService {
     // still active, because the knowledge boundary deliberately rejects access
     // to deleted resumes. A cleanup failure therefore aborts the resume delete.
     await this.knowledgeService.deleteJobDescription(id, userId);
-    resume.status = 0;
-    await this.resumeRepository.save(resume);
+    const result = await this.resumeRepository.update(
+      { id, userId, status: 1 },
+      { status: 0 },
+    );
+
+    if (!result.affected) {
+      const concurrentlyDeleted = await this.resumeRepository.exists({
+        where: { id, userId, status: 0 },
+      });
+      if (!concurrentlyDeleted) {
+        throw new NotFoundException('简历不存在');
+      }
+    }
   }
 
   async exportPdf(
@@ -593,6 +640,25 @@ export class ResumesService {
     if (!exists) {
       throw new NotFoundException('简历不存在');
     }
+  }
+
+  private async throwResumeWriteConflict(
+    resumeId: number,
+    userId: number,
+    expectedVersion: number,
+  ): Promise<never> {
+    const current = await this.resumeRepository.findOne({
+      select: { id: true, status: true, version: true },
+      where: { id: resumeId, userId },
+    });
+    if (!current || current.status !== 1) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    if (current.version !== expectedVersion) {
+      throw new ConflictException('简历版本冲突，请刷新后重试');
+    }
+    throw new ConflictException('简历状态已变化，请刷新后重试');
   }
 
   private async resolveExportTemplateId(
