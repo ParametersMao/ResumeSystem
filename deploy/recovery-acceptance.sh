@@ -156,6 +156,13 @@ if [[ "$RAG_REQUIRED_REQUESTED" == "true" ]]; then
   fixture_document_id="${BASH_REMATCH[1]}"
   fixture_chunk_count="${BASH_REMATCH[2]}"
   fixture_storage_key="${BASH_REMATCH[3]}"
+  rag_recovery_probe_timeout="${RAG_RECOVERY_PROBE_TIMEOUT_SECONDS:-180}"
+  [[ "$rag_recovery_probe_timeout" =~ ^[0-9]+$ \
+    && "$rag_recovery_probe_timeout" -ge 30 \
+    && "$rag_recovery_probe_timeout" -le 600 ]] \
+    || { echo "RAG_RECOVERY_PROBE_TIMEOUT_SECONDS must be between 30 and 600" >&2; exit 1; }
+  command -v timeout >/dev/null 2>&1 \
+    || { echo "Recovery RAG probe requires the timeout command" >&2; exit 1; }
   fixture_source_sha256=""
   if [[ "$fixture_storage_key" =~ ^knowledge/global/bootstrap/[0-9a-f]{40}/resume-writing-standard-v1[.]md$ ]]; then
     fixture_source_sha256="$(docker exec resume-backend sha256sum \
@@ -163,10 +170,17 @@ if [[ "$RAG_REQUIRED_REQUESTED" == "true" ]]; then
     [[ "$fixture_source_sha256" =~ ^[0-9a-f]{64}$ ]] \
       || { echo "Recovery canonical RAG source file is missing" >&2; exit 1; }
   fi
-  probe="$(docker exec -i resume-agent python - \
+  set +e
+  probe="$(timeout --signal=TERM --kill-after=5 \
+    "$((rag_recovery_probe_timeout + 15))" \
+    docker exec -i resume-agent python - \
     "$fixture_document_id" "$fixture_chunk_count" "$fixture_source_sha256" \
-    < "$SCRIPT_DIR/rag-recovery-probe.py" 2>/dev/null || true)"
-  [[ "$probe" == "OK|${fixture_document_id}|${fixture_chunk_count}|"* ]] \
+    "$rag_recovery_probe_timeout" \
+    < "$SCRIPT_DIR/rag-recovery-probe.py" 2>/dev/null)"
+  probe_status=$?
+  set -e
+  [[ "$probe_status" -eq 0 \
+    && "$probe" == "OK|${fixture_document_id}|${fixture_chunk_count}|"* ]] \
     || { echo "Recovery exact-document RAG probe failed: $probe" >&2; exit 1; }
 else
   [[ "$agent_status" == ok\|* ]] \

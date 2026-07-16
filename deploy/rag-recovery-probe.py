@@ -14,14 +14,20 @@ import urllib.error
 import urllib.request
 
 
-def request_json(url: str, payload: dict, headers: dict[str, str] | None = None) -> dict:
+def request_json(
+    url: str,
+    payload: dict,
+    headers: dict[str, str] | None = None,
+    *,
+    timeout_seconds: int,
+) -> dict:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", **(headers or {})},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         return json.load(response)
 
 
@@ -29,6 +35,9 @@ def main() -> int:
     document_id = int(sys.argv[1])
     expected_chunks = int(sys.argv[2])
     expected_source_sha256 = sys.argv[3] if len(sys.argv) > 3 else ""
+    timeout_seconds = int(sys.argv[4])
+    if not 30 <= timeout_seconds <= 600:
+        raise ValueError("timeout_seconds_out_of_range")
 
     try:
         attestation = request_json(
@@ -38,6 +47,7 @@ def main() -> int:
                 "expectedChunkCount": expected_chunks,
             },
             {"X-Agent-Secret": os.environ["AGENT_INTERNAL_SECRET"]},
+            timeout_seconds=timeout_seconds,
         )
     except urllib.error.HTTPError as error:
         if error.code not in {404, 405} or expected_source_sha256:
@@ -93,6 +103,7 @@ def main() -> int:
             f"{qdrant_url}/collections/{collection}/points/scroll",
             payload,
             qdrant_headers,
+            timeout_seconds=timeout_seconds,
         )
         result = scroll.get("result") or {}
         points.extend(result.get("points") or [])
@@ -111,6 +122,7 @@ def main() -> int:
         "http://127.0.0.1:8000/rag/search",
         {"query": probe_text, "limit": 20, "scope": "global"},
         {"X-Agent-Secret": os.environ["AGENT_INTERNAL_SECRET"]},
+        timeout_seconds=timeout_seconds,
     )
     match = next(
         (

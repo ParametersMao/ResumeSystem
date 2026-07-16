@@ -417,6 +417,35 @@ fail_release() {
   echo "$1" >&2
   rollback_on_error 1
 }
+wait_container_healthy() {
+  local container="$1"
+  local attempts="$2"
+  local snapshot="missing"
+  local status health restarts oom
+  local attempt
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] || return 1
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    snapshot="$(docker inspect "$container" \
+      --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.RestartCount}}|{{.State.OOMKilled}}' \
+      2>/dev/null || true)"
+    IFS='|' read -r status health restarts oom <<< "$snapshot"
+    if [[ "$status" == running && "$health" == healthy \
+      && "$restarts" == 0 && "$oom" == false ]]; then
+      return 0
+    fi
+    if [[ -z "$status" || "$health" == missing || "$restarts" != 0 || "$oom" != false \
+      || "$status" =~ ^(dead|exited|paused|removing)$ \
+      || "$health" == unhealthy ]]; then
+      echo "Container readiness failed for $container: ${snapshot:-missing}" >&2
+      return 1
+    fi
+    if ((attempt < attempts)); then
+      sleep 2
+    fi
+  done
+  echo "Container readiness timed out for $container: ${snapshot:-missing}" >&2
+  return 1
+}
 trap 'rollback_on_error $?' ERR
 trap 'rollback_on_error 129' HUP
 trap 'rollback_on_error 130' INT
@@ -538,8 +567,14 @@ fi
 
 "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
   up -d --no-build --no-deps --force-recreate web admin
+wait_container_healthy resume-web 60 \
+  || fail_release "New Web container did not become healthy"
+wait_container_healthy resume-admin 60 \
+  || fail_release "New Admin container did not become healthy"
 "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
   up -d --no-build --no-deps --force-recreate reverse-proxy
+wait_container_healthy resume-proxy 60 \
+  || fail_release "New reverse proxy did not become healthy"
 
 REQUIRE_LIVE_LLM_PROBE=true ENV_FILE="$ENV_FILE" \
   "$RELEASE_DIR/deploy/health-check.sh"

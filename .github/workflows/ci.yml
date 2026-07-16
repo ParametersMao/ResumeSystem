@@ -183,6 +183,11 @@ jobs:
           bash -n deploy/*.sh
           REPO_ROOT="$PWD" bash deploy/tests/maintenance-firewall.test.sh
           REPO_ROOT="$PWD" bash deploy/tests/recovery-acceptance-http-retry.test.sh
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -e REPO_ROOT=/repo \
+            python:3.12-bookworm \
+            bash /repo/deploy/tests/recover-interrupted-rollout.test.sh
       - name: Validate Docker save canonical image IDs
         shell: pwsh
         run: |

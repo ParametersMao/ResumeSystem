@@ -21,6 +21,14 @@ marker_value() {
   [[ "$(printf '%s\n' "$values" | sed '/^$/d' | wc -l)" -eq 1 ]] || return 1
   printf '%s' "$values"
 }
+env_value() {
+  local file="$1"
+  local key="$2"
+  local values
+  values="$(awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$file")"
+  [[ "$(printf '%s\n' "$values" | sed '/^$/d' | wc -l)" -eq 1 ]] || return 1
+  printf '%s' "$values"
+}
 canonical_path() {
   local requested="$1"
   local resolved
@@ -224,14 +232,109 @@ if [[ "$ROLLOUT_OPERATION" == "deploy" ]]; then
     "$release_dir/deploy/bootstrap-rag-fixture.sh"; do
     [[ -f "$required" ]] || { echo "Interrupted deploy recovery input is missing: $required" >&2; false; }
   done
-  manifest_commit="$(awk -F= '$1 == "RELEASE_COMMIT" {print $2}' \
-    "$release_dir/deploy/release-manifest.env" | tail -1 | tr -d '\r')"
-  release_env_commit="$(awk -F= '$1 == "RELEASE_COMMIT" {print $2}' \
-    "$release_dir/.env" | tail -1 | tr -d '\r')"
-  previous_env_commit="$(awk -F= '$1 == "RELEASE_COMMIT" {print $2}' \
-    "$previous_release/.env" | tail -1 | tr -d '\r')"
+  [[ ! -L "$release_dir/.env" \
+    && "$(stat -c '%u:%a' "$release_dir/.env")" == "0:600" ]] || {
+    echo "Interrupted deploy env must be root-owned mode 600" >&2
+    false
+  }
+  release_env_commit="$(env_value "$release_dir/.env" RELEASE_COMMIT)" || {
+    echo "Interrupted deploy env has an invalid RELEASE_COMMIT binding" >&2
+    false
+  }
+  artifact_manifest_requested="$(env_value "$release_dir/.env" RELEASE_ARTIFACT_MANIFEST)" || {
+    echo "Interrupted deploy env has an invalid artifact manifest binding" >&2
+    false
+  }
+  artifact_checksums_requested="$(env_value "$release_dir/.env" RELEASE_ARTIFACT_CHECKSUMS)" || {
+    echo "Interrupted deploy env has an invalid artifact checksum binding" >&2
+    false
+  }
+  artifact_manifest="$(canonical_path "$artifact_manifest_requested")" || {
+    echo "Interrupted deploy artifact manifest must not traverse symlinks" >&2
+    false
+  }
+  artifact_checksums="$(canonical_path "$artifact_checksums_requested")" || {
+    echo "Interrupted deploy artifact checksums must not traverse symlinks" >&2
+    false
+  }
+  [[ -f "$artifact_manifest" && ! -L "$artifact_manifest" \
+    && -f "$artifact_checksums" && ! -L "$artifact_checksums" \
+    && "$(dirname "$artifact_manifest")" == "$(dirname "$artifact_checksums")" ]] || {
+    echo "Interrupted deploy artifact bindings are incomplete" >&2
+    false
+  }
+  artifact_manifest_name="$(basename "$artifact_manifest")"
+  artifact_manifest_hashes="$(awk -v wanted="$artifact_manifest_name" \
+    '$2 == wanted && $1 ~ /^[0-9a-f]{64}$/ {print $1}' "$artifact_checksums")"
+  [[ "$(printf '%s\n' "$artifact_manifest_hashes" | sed '/^$/d' | wc -l)" -eq 1 \
+    && "$(sha256sum "$artifact_manifest" | awk '{print $1}')" == "$artifact_manifest_hashes" ]] || {
+    echo "Interrupted deploy artifact manifest checksum does not match" >&2
+    false
+  }
+  release_version="$(env_value \
+    "$release_dir/deploy/release-manifest.env" RELEASE_VERSION)" || {
+    echo "Interrupted deploy release manifest has an invalid version binding" >&2
+    false
+  }
+  [[ "$release_version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] || {
+    echo "Interrupted deploy release manifest has an invalid version" >&2
+    false
+  }
+  artifact_binding="$(python3 - "$artifact_manifest" "$release_dir" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import re
+import sys
+
+manifest_path, release_root = map(Path, sys.argv[1:])
+release_root = release_root.resolve(strict=True)
+with manifest_path.open(encoding="utf-8") as handle:
+    manifest = json.load(handle)
+commit = manifest.get("releaseCommit")
+version = manifest.get("releaseVersion")
+runtime = manifest.get("runtimeFiles")
+if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+    raise SystemExit("artifact releaseCommit is invalid")
+if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+    raise SystemExit("artifact releaseVersion is invalid")
+if not isinstance(runtime, dict):
+    raise SystemExit("artifact runtimeFiles is invalid")
+for relative in (
+    "docker-compose.prod.yml",
+    "deploy/release-manifest.env",
+    "deploy/recover-interrupted-rollout.sh",
+    "deploy/bootstrap-rag-fixture.sh",
+    "deploy/maintenance-firewall.sh",
+    "deploy/rollback-images.sh",
+    "deploy/recovery-acceptance.sh",
+    "deploy/rag-recovery-probe.py",
+):
+    expected = runtime.get(relative)
+    path = (release_root / relative).resolve(strict=True)
+    if path.parent != release_root and release_root not in path.parents:
+        raise SystemExit(f"artifact runtime path escaped release root: {relative}")
+    if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise SystemExit(f"artifact runtime binding is missing: {relative}")
+    if not path.is_file() or path.is_symlink():
+        raise SystemExit(f"artifact runtime file is unsafe: {relative}")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+        raise SystemExit(f"artifact runtime hash mismatch: {relative}")
+print(f"{commit}|{version}")
+PY
+)" || {
+    echo "Interrupted deploy artifact bindings could not be verified" >&2
+    false
+  }
+  artifact_commit="${artifact_binding%%|*}"
+  artifact_version="${artifact_binding#*|}"
+  previous_env_commit="$(env_value "$previous_release/.env" RELEASE_COMMIT)" || {
+    echo "Previous release env has an invalid RELEASE_COMMIT binding" >&2
+    false
+  }
   backup_commit="$(tr -d '\r\n' < "$backup_dir/release-commit.txt")"
-  [[ "$manifest_commit" == "$ROLLOUT_RELEASE_COMMIT" \
+  [[ "$artifact_commit" == "$ROLLOUT_RELEASE_COMMIT" \
+    && "$artifact_version" == "$release_version" \
     && "$release_env_commit" == "$ROLLOUT_RELEASE_COMMIT" \
     && "$previous_env_commit" =~ ^[0-9a-f]{40}$ \
     && "$backup_commit" == "$previous_env_commit" ]] || {
@@ -244,7 +347,8 @@ if [[ "$ROLLOUT_OPERATION" == "deploy" ]]; then
     false
   }
   if [[ -f /opt/resumesystem-rag-bootstrap-rollout.env ]]; then
-    RAG_BOOTSTRAP_MARKER=/opt/resumesystem-rag-bootstrap-rollout.env \
+    RELEASE_COMMIT="$ROLLOUT_RELEASE_COMMIT" \
+      RAG_BOOTSTRAP_MARKER=/opt/resumesystem-rag-bootstrap-rollout.env \
       "$release_dir/deploy/bootstrap-rag-fixture.sh" --cleanup-created \
       "$ROLLOUT_RELEASE_COMMIT"
   fi

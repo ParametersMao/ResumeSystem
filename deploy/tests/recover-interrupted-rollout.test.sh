@@ -20,18 +20,24 @@ BACKUP_ROOT=/opt/resumesystem-backups
 TARGET_BACKUP="$BACKUP_ROOT/v1.3-target"
 ROLLBACK_BACKUP="$BACKUP_ROOT/v1.3-rollback"
 SAFETY_BACKUP="$BACKUP_ROOT/v1.3-safety"
+ARTIFACT_ROOT=/opt/resumesystem-release-artifacts
+ARTIFACT_MANIFEST="$ARTIFACT_ROOT/resumesystem-test-manifest.json"
+ARTIFACT_CHECKSUMS="$ARTIFACT_ROOT/resumesystem-test-SHA256SUMS"
 MARKER=/opt/resumesystem-rollout-in-progress.env
 PENDING=/opt/resumesystem-release-pending.env
 
 mkdir -p "$RUNTIME" "$PREVIOUS/deploy" "$CANDIDATE/deploy" "$RESTORED" \
-  "$TARGET_BACKUP" "$ROLLBACK_BACKUP" "$SAFETY_BACKUP" /mock/bin /run/lock
+  "$TARGET_BACKUP" "$ROLLBACK_BACKUP" "$SAFETY_BACKUP" "$ARTIFACT_ROOT" \
+  /mock/bin /run/lock
 printf 'RELEASE_COMMIT=%s\n' "$PREVIOUS_COMMIT" > "$PREVIOUS/.env"
 printf 'services: {}\n' > "$PREVIOUS/docker-compose.prod.yml"
 printf 'RELEASE_VERSION=1.3.4\n' > "$PREVIOUS/deploy/release-manifest.env"
-printf 'RELEASE_COMMIT=%s\n' "$TARGET_COMMIT" > "$CANDIDATE/.env"
+printf 'RELEASE_COMMIT=%s\nRELEASE_ARTIFACT_MANIFEST=%s\nRELEASE_ARTIFACT_CHECKSUMS=%s\n' \
+  "$TARGET_COMMIT" "$ARTIFACT_MANIFEST" "$ARTIFACT_CHECKSUMS" > "$CANDIDATE/.env"
+chmod 0600 "$PREVIOUS/.env" "$CANDIDATE/.env"
 printf 'services: {}\n' > "$CANDIDATE/docker-compose.prod.yml"
-printf 'RELEASE_COMMIT=%s\nRELEASE_VERSION=1.3.4\n' \
-  "$TARGET_COMMIT" > "$CANDIDATE/deploy/release-manifest.env"
+printf 'RELEASE_VERSION=1.3.4\nAGENT_VERSION=1.3.4\n' \
+  > "$CANDIDATE/deploy/release-manifest.env"
 
 make_backup() {
   local directory="$1"
@@ -71,7 +77,8 @@ rm -f /opt/resumesystem-rollout-in-progress.env /opt/resumesystem-release-pendin
 EOF
 cat > "$CANDIDATE/deploy/bootstrap-rag-fixture.sh" <<'EOF'
 #!/usr/bin/env bash
-[[ "${1:-}" == --cleanup-created ]]
+[[ "${1:-}" == --cleanup-created \
+  && "${RELEASE_COMMIT:-}" == "${2:-}" ]]
 printf 'fixture-cleanup:%s\n' "${2:-}" >> /tmp/resumesystem-recovery-test.log
 rm -f /opt/resumesystem-rag-bootstrap-rollout.env
 EOF
@@ -101,6 +108,52 @@ EOF
 chmod 0755 "$RUNTIME/recovery-acceptance.sh" "$RUNTIME/rollback-images.sh" \
   "$RUNTIME/restore.sh" "$CANDIDATE/deploy/bootstrap-rag-fixture.sh" \
   /mock/bin/docker /mock/bin/systemctl /mock/bin/flock /mock/bin/sync
+
+for runtime_file in \
+  recover-interrupted-rollout.sh \
+  maintenance-firewall.sh \
+  rollback-images.sh \
+  recovery-acceptance.sh \
+  rag-recovery-probe.py; do
+  cp "$REPO_ROOT/deploy/$runtime_file" "$CANDIDATE/deploy/$runtime_file"
+done
+python3 - "$ARTIFACT_MANIFEST" "$CANDIDATE" "$TARGET_COMMIT" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+manifest_path = Path(sys.argv[1])
+release_root = Path(sys.argv[2])
+commit = sys.argv[3]
+runtime_files = {}
+for relative in (
+    "docker-compose.prod.yml",
+    "deploy/release-manifest.env",
+    "deploy/recover-interrupted-rollout.sh",
+    "deploy/bootstrap-rag-fixture.sh",
+    "deploy/maintenance-firewall.sh",
+    "deploy/rollback-images.sh",
+    "deploy/recovery-acceptance.sh",
+    "deploy/rag-recovery-probe.py",
+):
+    runtime_files[relative] = hashlib.sha256((release_root / relative).read_bytes()).hexdigest()
+manifest_path.write_text(
+    json.dumps(
+        {
+            "releaseCommit": commit,
+            "releaseVersion": "1.3.4",
+            "runtimeFiles": runtime_files,
+        },
+        sort_keys=True,
+    ),
+    encoding="utf-8",
+)
+PY
+(
+  cd "$ARTIFACT_ROOT"
+  sha256sum "$(basename "$ARTIFACT_MANIFEST")" > "$(basename "$ARTIFACT_CHECKSUMS")"
+)
 export PATH="/mock/bin:$PATH"
 
 write_marker() {
