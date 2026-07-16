@@ -1,0 +1,17 @@
+[Unit]
+Description=Recover an interrupted ResumeSystem backup freeze
+After=docker.service resumesystem-rollout-proxy-guard.service
+Requires=docker.service
+ConditionPathExists=/opt/resumesystem-backup-freeze.env
+
+[Service]
+Type=oneshot
+TimeoutStartSec=900
+ExecStart=/usr/local/sbin/resumesystem-recover-backup --confirm /opt/resumesystem-backup-freeze.env
+Restart=on-failure
+RestartSec=15s
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

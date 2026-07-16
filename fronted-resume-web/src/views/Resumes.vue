@@ -28,8 +28,20 @@
             <p>更新时间：{{ formatDate(item.updateTime) }}</p>
           </div>
           <div class="resume-actions">
-            <el-button size="small" @click="goEdit(item.id)">继续编辑</el-button>
-            <el-button size="small" @click="goPreview(item.id)">预览</el-button>
+            <el-button size="small" :disabled="deletingId !== null" @click="goEdit(item.id)">继续编辑</el-button>
+            <el-button size="small" :disabled="deletingId !== null" @click="goPreview(item.id)">预览</el-button>
+            <el-button
+              class="delete-resume-button"
+              type="danger"
+              plain
+              size="small"
+              :loading="deletingId === item.id"
+              :disabled="deletingId !== null && deletingId !== item.id"
+              :aria-label="`删除简历：${item.title}`"
+              @click="confirmDelete(item)"
+            >
+              删除
+            </el-button>
           </div>
         </div>
       </el-card>
@@ -102,9 +114,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createResume,
+  deleteResume,
   listMyResumes,
   parseResumeImport,
   type ResumeImportResult,
@@ -129,6 +142,7 @@ const limit = ref(8)
 const fileInput = ref<HTMLInputElement>()
 const importing = ref(false)
 const creatingImported = ref(false)
+const deletingId = ref<number | null>(null)
 const importDialogVisible = ref(false)
 const importResult = ref<ResumeImportResult | null>(null)
 
@@ -266,6 +280,40 @@ function goCreate() { router.push('/templates') }
 function goEdit(id: number) { router.push(`/resume-editor?resumeId=${id}`) }
 function goPreview(id: number) { router.push(`/preview/${id}`) }
 
+async function confirmDelete(item: ResumeListItem) {
+  if (deletingId.value !== null) return
+
+  try {
+    await ElMessageBox.confirm(
+      `删除“${item.title}”后，它会从简历列表中移除，绑定的私有 JD 和索引也会同步清理。当前无法从页面恢复，确定继续吗？`,
+      '删除简历',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        closeOnClickModal: false,
+      },
+    )
+  } catch {
+    return
+  }
+
+  deletingId.value = item.id
+  try {
+    await deleteResume(item.id)
+    if (list.value.length === 1 && page.value > 1) {
+      page.value -= 1
+    }
+    await load()
+    ElMessage.success('简历已删除')
+  } catch {
+    // 请求层会统一展示网络、鉴权和服务端错误，避免这里重复弹窗。
+    return
+  } finally {
+    deletingId.value = null
+  }
+}
+
 function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -292,7 +340,8 @@ function formatDate(value: string) {
 .resume-card-body { display: flex; flex-direction: column; gap: 18px; }
 .resume-meta h3 { margin: 0 0 8px; }
 .resume-meta p { margin: 6px 0 0; color: #64748b; }
-.resume-actions { display: flex; gap: 10px; }
+.resume-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.delete-resume-button { margin-left: auto; }
 .pagination { display: flex; justify-content: center; margin-top: 24px; }
 .import-review h3 { margin: 22px 0 12px; font-size: 16px; }
 .import-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }

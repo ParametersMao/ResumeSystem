@@ -1,9 +1,11 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import {
+  ElAlert,
   ElAvatar,
   ElButton,
   ElCard,
+  ElCheckbox,
   ElConfigProvider,
   ElDialog,
   ElDivider,
@@ -22,6 +24,7 @@ import {
   ElRadioGroup,
   ElSelect,
   ElSwitch,
+  ElTag,
   ElTooltip,
   ElUpload,
 } from 'element-plus'
@@ -33,9 +36,11 @@ import './styles/index.css'
 
 const app = createApp(App)
 const elementComponents = [
+  ElAlert,
   ElAvatar,
   ElButton,
   ElCard,
+  ElCheckbox,
   ElConfigProvider,
   ElDialog,
   ElDivider,
@@ -53,6 +58,7 @@ const elementComponents = [
   ElRadioGroup,
   ElSelect,
   ElSwitch,
+  ElTag,
   ElTooltip,
   ElUpload,
 ]

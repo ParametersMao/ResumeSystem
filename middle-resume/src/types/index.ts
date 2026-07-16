@@ -27,8 +27,11 @@ export interface Template {
   templateName: string
   description?: string
   previewImage?: string
-  templateData: Record<string, any>
+  // 列表接口有意省略完整 JSON；只有详情接口保证返回 templateData。
+  templateData?: string | Record<string, any>
   templateVariant?: 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
+  layoutKey?: string
+  avatarLayout?: Record<string, any>
   industryTags?: string
   recommendWeight?: number
   status: boolean
@@ -36,6 +39,10 @@ export interface Template {
   updateTime: string
   useCount: number
   downloadCount: number
+}
+
+export interface TemplateDetail extends Omit<Template, 'templateData'> {
+  templateData: string
 }
 
 // 统计数据相关类型

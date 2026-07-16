@@ -61,14 +61,30 @@ def call_structured_llm(
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
         raise LlmError(f"模型服务调用失败: {error}") from error
 
-    choices = raw.get("choices") or []
-    content = choices[0].get("message", {}).get("content") if choices else None
+    if not isinstance(raw, dict):
+        raise LlmError("模型服务响应不是 JSON 对象。")
+    choices = raw.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise LlmError("模型服务响应缺少有效 choices。")
+    message = choices[0].get("message")
+    content = message.get("content") if isinstance(message, dict) else None
     if not isinstance(content, str) or not content.strip():
         raise LlmError("模型服务没有返回可解析的内容。")
 
     result = _parse_json(content)
     usage = raw.get("usage") or {}
-    return result, int(usage.get("total_tokens") or 0)
+    if not isinstance(usage, dict):
+        raise LlmError("模型服务响应中的 usage 无效。")
+    token_value = usage.get("total_tokens") or 0
+    if isinstance(token_value, bool):
+        raise LlmError("模型服务响应中的 token 计数无效。")
+    try:
+        token_used = int(token_value)
+    except (TypeError, ValueError) as error:
+        raise LlmError("模型服务响应中的 token 计数无效。") from error
+    if token_used < 0:
+        raise LlmError("模型服务响应中的 token 计数无效。")
+    return result, token_used
 
 
 def _system_prompt() -> str:

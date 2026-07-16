@@ -11,7 +11,21 @@ export type TemplateLayoutKey =
   | 'qm-minimal-ats'
   | 'qm-executive-business'
   | 'qm-student-editorial'
-  | 'qm-spotlight-featured';
+  | 'qm-spotlight-featured'
+  | 'qm-table-formal'
+  | 'qm-asymmetric-profile';
+
+export type TemplateAvatarPlacement = 'default' | 'header-right' | 'sidebar-top' | 'meta-card';
+export type TemplateAvatarShape = 'square' | 'rounded' | 'circle';
+
+export interface TemplateAvatarLayout {
+  enabled: true;
+  placement: TemplateAvatarPlacement;
+  shape: TemplateAvatarShape;
+  width: number;
+  height: number;
+  objectPosition: 'center 20%';
+}
 
 export class CreateTemplateDto {
   @IsString()
@@ -81,6 +95,7 @@ export class TemplateListResponseDto {
   templateName: string;
   templateVariant?: TemplateVariant;
   layoutKey?: TemplateLayoutKey;
+  avatarLayout?: TemplateAvatarLayout;
   previewImage?: string;
   industryTags?: string;
   status?: boolean;
@@ -97,6 +112,7 @@ export class TemplateDetailResponseDto {
   templateData: string;
   templateVariant?: TemplateVariant;
   layoutKey?: TemplateLayoutKey;
+  avatarLayout?: TemplateAvatarLayout;
   previewImage?: string;
   industryTags?: string;
   status?: boolean;
@@ -113,6 +129,7 @@ export class TemplateResponseDto {
   templateData: string;
   templateVariant?: TemplateVariant;
   layoutKey?: TemplateLayoutKey;
+  avatarLayout?: TemplateAvatarLayout;
   previewImage?: string;
   industryTags?: string;
   status?: boolean;

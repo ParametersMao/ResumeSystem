@@ -1,4 +1,5 @@
 import { KnowledgeAgentClientService } from './knowledge-agent-client.service';
+import { ConflictException } from '@nestjs/common';
 
 describe('KnowledgeAgentClientService metadata contract', () => {
   const originalFetch = global.fetch;
@@ -18,10 +19,17 @@ describe('KnowledgeAgentClientService metadata contract', () => {
 
   it('sends all tenant and compliance metadata to /rag/index', async () => {
     const fetchMock = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ document_id: 7, chunk_count: 2, embedding_backend: 'fastembed' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({
+          document_id: 7,
+          chunk_count: 2,
+          embedding_backend: 'fastembed',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
     );
     global.fetch = fetchMock as any;
     const service = new KnowledgeAgentClientService();
@@ -38,6 +46,7 @@ describe('KnowledgeAgentClientService metadata contract', () => {
       licensed: false,
       piiReviewed: false,
       expiresAt: new Date('2026-08-01T00:00:00Z'),
+      enabled: false,
       file: {
         originalname: 'jd.txt',
         mimetype: 'text/plain',
@@ -55,6 +64,7 @@ describe('KnowledgeAgentClientService metadata contract', () => {
     expect(form.get('licensed')).toBe('false');
     expect(form.get('pii_reviewed')).toBe('false');
     expect(form.get('expires_at')).toBe('2026-08-01T00:00:00.000Z');
+    expect(form.get('enabled')).toBe('false');
   });
 
   it('sends source and tenant filters to /rag/search', async () => {
@@ -90,10 +100,17 @@ describe('KnowledgeAgentClientService metadata contract', () => {
     process.env.KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS = '900000';
     const timeoutSpy = jest.spyOn(global, 'setTimeout');
     global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ document_id: 9, chunk_count: 1, embedding_backend: 'fastembed' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({
+          document_id: 9,
+          chunk_count: 1,
+          embedding_backend: 'fastembed',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
     ) as any;
 
     await new KnowledgeAgentClientService().indexDocument({
@@ -109,6 +126,26 @@ describe('KnowledgeAgentClientService metadata contract', () => {
       } as Express.Multer.File,
     });
 
-    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 600_000)).toBe(true);
+    expect(timeoutSpy.mock.calls.some(([, delay]) => delay === 600_000)).toBe(
+      true,
+    );
+  });
+
+  it('surfaces a document mutation conflict as HTTP 409 instead of a gateway failure', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: 'document 7 already has a mutation in progress',
+        }),
+        {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    ) as any;
+
+    await expect(
+      new KnowledgeAgentClientService().deleteDocument(7),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

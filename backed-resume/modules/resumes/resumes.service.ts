@@ -21,6 +21,7 @@ import { PaginationResponse } from '../../common/interfaces/pagination.interface
 import { StorageService } from '../storage/storage.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { handlePdfResourceRequest, waitForPdfAssets } from './pdf-render-assets';
 
 interface ResumeVersionSchema {
   hasUserId: boolean;
@@ -162,6 +163,7 @@ export class ResumesService {
     if (updateResumeDto.version !== undefined && resume.version !== updateResumeDto.version) {
       throw new ConflictException('简历版本冲突，请刷新后重试');
     }
+    const expectedVersion = resume.version;
 
     const oldBytes =
       Buffer.byteLength(resume.content || '', 'utf8') +
@@ -179,15 +181,35 @@ export class ResumesService {
 
     await this.saveVersionSnapshot(resume, 'save');
 
-    const { templateId, ...resumeChanges } = updateResumeDto;
-    Object.assign(resume, resumeChanges);
-    if (templateId !== undefined) {
-      resume.templateId = await this.resolveTemplateId(templateId);
+    const changes: {
+      title?: string;
+      content?: string;
+      templateId?: number | null;
+      previewImage?: string;
+      version: number;
+    } = { version: expectedVersion + 1 };
+    if (updateResumeDto.title !== undefined) {
+      changes.title = updateResumeDto.title;
     }
-    resume.version += 1;
+    if (updateResumeDto.content !== undefined) {
+      changes.content = updateResumeDto.content;
+    }
+    if (updateResumeDto.previewImage !== undefined) {
+      changes.previewImage = updateResumeDto.previewImage;
+    }
+    if (updateResumeDto.templateId !== undefined) {
+      changes.templateId = await this.resolveTemplateId(updateResumeDto.templateId);
+    }
 
-    const updatedResume = await this.resumeRepository.save(resume);
-    return this.mapToResponseDto(updatedResume);
+    const result = await this.resumeRepository.update(
+      { id, userId, status: 1, version: expectedVersion },
+      changes,
+    );
+    if (!result.affected) {
+      await this.throwResumeWriteConflict(id, userId, expectedVersion);
+    }
+
+    return this.findOne(id, userId);
   }
 
   private async resolveTemplateId(templateId?: number | null): Promise<number | null> {
@@ -264,19 +286,34 @@ export class ResumesService {
       throw new NotFoundException('历史版本不存在');
     }
 
+    const expectedVersion = resume.version;
     await this.saveVersionSnapshot(resume, 'rollback');
 
-    resume.content = version.content;
-    resume.version += 1;
-    const saved = await this.resumeRepository.save(resume);
-    return this.mapToResponseDto(saved);
+    const result = await this.resumeRepository.update(
+      { id: resumeId, userId, status: 1, version: expectedVersion },
+      { content: version.content, version: expectedVersion + 1 },
+    );
+    if (!result.affected) {
+      await this.throwResumeWriteConflict(resumeId, userId, expectedVersion);
+    }
+
+    return this.findOne(resumeId, userId);
   }
 
   async remove(id: number, userId: number): Promise<void> {
     const resume = await this.resumeRepository.findOne({
-      where: { id, userId, status: 1 },
+      select: { id: true, userId: true, status: true },
+      where: { id, userId },
     });
     if (!resume) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    // DELETE is idempotent only for a resume that belongs to the caller. The
+    // owner-scoped lookup above deliberately keeps a missing or foreign id at
+    // 404 while allowing a lost successful response to be retried safely.
+    if (resume.status === 0) return;
+    if (resume.status !== 1) {
       throw new NotFoundException('简历不存在');
     }
 
@@ -284,8 +321,19 @@ export class ResumesService {
     // still active, because the knowledge boundary deliberately rejects access
     // to deleted resumes. A cleanup failure therefore aborts the resume delete.
     await this.knowledgeService.deleteJobDescription(id, userId);
-    resume.status = 0;
-    await this.resumeRepository.save(resume);
+    const result = await this.resumeRepository.update(
+      { id, userId, status: 1 },
+      { status: 0 },
+    );
+
+    if (!result.affected) {
+      const concurrentlyDeleted = await this.resumeRepository.exists({
+        where: { id, userId, status: 0 },
+      });
+      if (!concurrentlyDeleted) {
+        throw new NotFoundException('简历不存在');
+      }
+    }
   }
 
   async exportPdf(
@@ -342,45 +390,14 @@ export class ResumesService {
       page.setDefaultTimeout(30_000);
       await page.setRequestInterception(true);
       page.on('request', (request) => {
-        if (isAllowedPdfResourceUrl(request.url(), request.resourceType())) {
-          void request.continue().catch(() => {});
-          return;
-        }
-        void request.abort('blockedbyclient').catch(() => {});
+        void handlePdfResourceRequest(request, this.storageService, userId).catch(() => {
+          void request.abort('failed').catch(() => {});
+        });
       });
 
       await page.setContent(injectPdfSafeMargins(html), { waitUntil: 'load', timeout: 30_000 });
       await page.emulateMediaType('print');
-
-      await page.evaluate(async () => {
-        const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-        const waitFonts = async () => {
-          const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
-          if (fonts?.ready) {
-            try {
-              await fonts.ready;
-            } catch {
-              // ignore font loading errors
-            }
-          }
-        };
-
-        const waitImages = async () => {
-          const images = Array.from(document.images || []);
-          await Promise.all(
-            images.map((img) => {
-              if (img.complete) return Promise.resolve();
-              return new Promise<void>((resolve) => {
-                const done = () => resolve();
-                img.addEventListener('load', done, { once: true });
-                img.addEventListener('error', done, { once: true });
-              });
-            }),
-          );
-        };
-
-        await Promise.race([Promise.all([waitFonts(), waitImages()]), sleep(15_000)]);
-      });
+      await page.evaluate(waitForPdfAssets, 15_000);
 
       const pdfBuffer = (await page.pdf({
         format: 'A4',
@@ -625,6 +642,25 @@ export class ResumesService {
     }
   }
 
+  private async throwResumeWriteConflict(
+    resumeId: number,
+    userId: number,
+    expectedVersion: number,
+  ): Promise<never> {
+    const current = await this.resumeRepository.findOne({
+      select: { id: true, status: true, version: true },
+      where: { id: resumeId, userId },
+    });
+    if (!current || current.status !== 1) {
+      throw new NotFoundException('简历不存在');
+    }
+
+    if (current.version !== expectedVersion) {
+      throw new ConflictException('简历版本冲突，请刷新后重试');
+    }
+    throw new ConflictException('简历状态已变化，请刷新后重试');
+  }
+
   private async resolveExportTemplateId(
     userId: number,
     resumeId?: number,
@@ -674,28 +710,6 @@ function validatePreviewImage(previewImage?: string): void {
   if (!previewImage) return;
   if (Buffer.byteLength(previewImage, 'utf8') > MAX_RESUME_PREVIEW_BYTES) {
     throw new BadRequestException('简历预览图过大，请重新生成或减少图片体积');
-  }
-}
-
-function isAllowedPdfResourceUrl(rawUrl: string, resourceType: string): boolean {
-  if (resourceType === 'document') return true;
-  if (!rawUrl) return true;
-  if (/^(about:blank|data:|blob:)/i.test(rawUrl)) return true;
-
-  try {
-    const url = new URL(rawUrl);
-    if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
-      return false;
-    }
-
-    return (
-      url.pathname.startsWith('/uploads/') ||
-      url.pathname.startsWith('/mock/') ||
-      url.pathname.startsWith('/assets/') ||
-      url.pathname === '/favicon.ico'
-    );
-  } catch {
-    return false;
   }
 }
 

@@ -118,3 +118,10 @@ class RagIndexMetadata(BaseModel):
 
 class RagEnabledRequest(BaseModel):
     enabled: bool
+
+
+class RagHealthProbeRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    document_id: int = Field(ge=1, alias="documentId")
+    expected_chunk_count: int = Field(ge=1, alias="expectedChunkCount")

@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm test -- --runInBand
       - run: npm run build
+      - run: npm run qa:pdf-upload
       - run: npm audit --omit=dev --audit-level=moderate
 
   web:
@@ -42,9 +43,30 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: fronted-resume-web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: npm ci
+      - run: python -m pip install "pymupdf>=1.24,<2"
+      - run: npm test
       - run: npm run build
+      - run: npm run qa:template-photos
+      - run: npm run qa:template-pdf
       - run: npm audit --omit=dev --audit-level=moderate
+      - name: Upload template photo/layout QA evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-photo-layout-qa
+          path: fronted-resume-web/runtime-logs/template-photo-layout-qa
+          if-no-files-found: ignore
+      - name: Upload template PDF QA evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-pdf-layout-qa
+          path: fronted-resume-web/runtime-logs/template-pdf-layout-qa
+          if-no-files-found: ignore
 
   admin:
     runs-on: ubuntu-latest
@@ -89,6 +111,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate production compose
         env:
+          MYSQL_IMAGE: resumesystem_mysql:ci
+          BACKEND_IMAGE: resumesystem_backend:ci
+          WEB_IMAGE: resumesystem_web:ci
+          ADMIN_IMAGE: resumesystem_admin:ci
+          NGINX_IMAGE: resumesystem_nginx:ci
+          AGENT_IMAGE: resumesystem_agent:ci
+          QDRANT_IMAGE: resumesystem_qdrant:ci
           MYSQL_ROOT_PASSWORD: ci-root-password
           DB_DATABASE: resume_system
           DB_USERNAME: resume_user
@@ -152,6 +181,33 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck deploy/*.sh
           bash -n deploy/*.sh
+          REPO_ROOT="$PWD" bash deploy/tests/maintenance-firewall.test.sh
+          REPO_ROOT="$PWD" bash deploy/tests/recovery-acceptance-http-retry.test.sh
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -e REPO_ROOT=/repo \
+            python:3.12-bookworm \
+            bash /repo/deploy/tests/recover-interrupted-rollout.test.sh
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -e REPO_ROOT=/repo \
+            python:3.12-bookworm \
+            bash /repo/deploy/tests/recover-interrupted-backup.test.sh
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -e REPO_ROOT=/repo \
+            python:3.12-bookworm \
+            bash /repo/deploy/tests/finalize-marker-commit.test.sh
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -e REPO_ROOT=/repo \
+            python:3.12-bookworm \
+            bash /repo/deploy/tests/bootstrap-rag-fixture-failure.test.sh
+      - name: Validate Docker save canonical image IDs
+        shell: pwsh
+        run: |
+          $env:REPO_ROOT = $PWD.Path
+          ./deploy/tests/image-archive-manifest.test.ps1
       - name: Validate production Nginx configuration
         run: |
           mkdir -p /tmp/resumesystem-certs/live/aidana.top
@@ -166,3 +222,13 @@ jobs:
             -v "$PWD/deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro" \
             -v "/tmp/resumesystem-certs:/etc/letsencrypt:ro" \
             nginx:1.27-alpine nginx -t
+
+  deploy-windows-compat:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker archive parser on Windows PowerShell and bsdtar
+        shell: powershell
+        run: |
+          $env:REPO_ROOT = $PWD.Path
+          .\deploy\tests\image-archive-manifest.test.ps1

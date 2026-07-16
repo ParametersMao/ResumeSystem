@@ -2,14 +2,19 @@
 Description=ResumeSystem daily verified backup
 After=docker.service
 Requires=docker.service
+OnFailure=resumesystem-backup-recovery.service
 
 [Service]
 Type=oneshot
+TimeoutStartSec=1800
+TimeoutStopSec=900
 WorkingDirectory=/opt/resumesystem-current
 Environment=ENV_FILE=.env
 Environment=BACKUP_ROOT=/opt/resumesystem-backups
-Environment=INCLUDE_IMAGES=false
+Environment=INCLUDE_IMAGES=true
+Environment=RETENTION_COUNT=3
 ExecStart=/opt/resumesystem-current/deploy/backup.sh
+ExecStopPost=/usr/local/sbin/resumesystem-recover-backup --if-present /opt/resumesystem-backup-freeze.env
 User=root
 Group=root
 NoNewPrivileges=true

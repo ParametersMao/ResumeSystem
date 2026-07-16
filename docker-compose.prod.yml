@@ -2,13 +2,24 @@ version: "2.4"
 
 services:
   mysql:
-    image: mysql:8.0
+    image: ${MYSQL_IMAGE:?MYSQL_IMAGE is required}
     container_name: resume-mysql
     restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+08:00
+      # Keep deterministic headroom below the 448 MiB cgroup limit. The
+      # application does not consume Performance Schema, while its default
+      # instrumentation and caches are expensive on the 2 GiB production host.
+      - --performance-schema=OFF
+      - --innodb-buffer-pool-size=192M
+      - --innodb-buffer-pool-chunk-size=64M
+      - --max-connections=80
+      - --table-open-cache=400
+      - --table-definition-cache=400
+      - --thread-cache-size=16
+      - --temptable-max-ram=64M
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE}
@@ -17,7 +28,10 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
-    mem_limit: 650m
+    # Keep the aggregate hard limit below a 2 GiB host. Runtime bursts are
+    # absorbed by the required host swap instead of allowing one service to
+    # starve the Docker daemon and SSH.
+    mem_limit: 448m
     cpus: 1.0
     pids_limit: 200
     logging:
@@ -33,10 +47,7 @@ services:
     networks: [data]
 
   backend:
-    build:
-      context: ./backed-resume
-      args:
-        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-}
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
     container_name: resume-backend
     restart: unless-stopped
     depends_on:
@@ -78,7 +89,7 @@ services:
       R2_BUCKET: ${R2_BUCKET}
       R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-headless-shell
-    mem_limit: 600m
+    mem_limit: 512m
     cpus: 1.5
     pids_limit: 300
     logging:
@@ -96,14 +107,10 @@ services:
     networks: [app, data]
 
   web:
-    build:
-      context: ./fronted-resume-web
-      args:
-        VITE_API_BASE: /api
-        VITE_USE_MOCK: "false"
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
     container_name: resume-web
     restart: unless-stopped
-    mem_limit: 96m
+    mem_limit: 64m
     cpus: 0.5
     pids_limit: 100
     logging:
@@ -122,17 +129,10 @@ services:
     networks: [app]
 
   admin:
-    build:
-      context: ./middle-resume
-      args:
-        VITE_API_BASE_URL: /api
-        VITE_APP_ENV: production
-        VITE_DEBUG: "false"
-        VITE_USE_MOCK: "false"
-        VITE_BASE: /admin/
+    image: ${ADMIN_IMAGE:?ADMIN_IMAGE is required}
     container_name: resume-admin
     restart: unless-stopped
-    mem_limit: 96m
+    mem_limit: 64m
     cpus: 0.5
     pids_limit: 100
     logging:
@@ -151,10 +151,10 @@ services:
     networks: [app]
 
   reverse-proxy:
-    image: nginx:1.27-alpine
+    image: ${NGINX_IMAGE:?NGINX_IMAGE is required}
     container_name: resume-proxy
     restart: unless-stopped
-    mem_limit: 128m
+    mem_limit: 64m
     cpus: 0.5
     pids_limit: 100
     logging:
@@ -173,20 +173,16 @@ services:
       - "${HTTP_PORT}:80"
       - "${HTTPS_PORT}:443"
     volumes:
-      - ./deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://127.0.0.1/api/health"]
+      test: ["CMD-SHELL", "wget -q --header='Host: 121.43.208.184' --spider http://127.0.0.1/api/health"]
       interval: 15s
       timeout: 5s
       retries: 10
     networks: [public, app]
 
   agent:
-    build:
-      context: ./python-agent
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    image: ${AGENT_IMAGE:?AGENT_IMAGE is required}
     container_name: resume-agent
     restart: unless-stopped
     depends_on:
@@ -195,6 +191,7 @@ services:
     environment:
       AGENT_EXECUTION_MODE: ${AGENT_EXECUTION_MODE}
       AGENT_INTERNAL_SECRET: ${AGENT_INTERNAL_SECRET}
+      AI_PROVIDER: ${AI_PROVIDER}
       OPENAI_API_URL: ${OPENAI_API_URL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL}
@@ -204,7 +201,10 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       EMBEDDING_BACKEND: ${EMBEDDING_BACKEND}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      FASTEMBED_CACHE_PATH: /models/fastembed
+      # Keep this stable path visible to both PID 1 and later docker exec
+      # bootstrap/recovery processes. The entrypoint atomically points it at
+      # the immutable model-artifact version directory.
+      FASTEMBED_CACHE_PATH: /models/fastembed/current
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS}
       RAG_MIN_SCORE: ${RAG_MIN_SCORE}
       RAG_CANDIDATE_LIMIT: ${RAG_CANDIDATE_LIMIT}
@@ -218,7 +218,7 @@ services:
       retries: 20
     volumes:
       - fastembed_models:/models/fastembed
-    mem_limit: 650m
+    mem_limit: 512m
     cpus: 1.5
     pids_limit: 250
     logging:
@@ -229,12 +229,12 @@ services:
     networks: [app, data]
 
   qdrant:
-    image: qdrant/qdrant:v1.13.2
+    image: ${QDRANT_IMAGE:?QDRANT_IMAGE is required}
     container_name: resume-qdrant
     restart: unless-stopped
     volumes:
       - qdrant_data:/qdrant/storage
-    mem_limit: 300m
+    mem_limit: 256m
     cpus: 1.0
     pids_limit: 150
     logging:

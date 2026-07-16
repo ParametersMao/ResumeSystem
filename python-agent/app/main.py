@@ -1,29 +1,54 @@
 import hmac
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
-from .graph import run_agent
+from .graph import RagSourceUnavailableError, run_agent
+from .llm import LlmError
 from .rag import (
+    DocumentMutationConflict,
     delete_document,
     get_rag_metrics,
     get_rag_status,
+    initialize_rag_runtime,
     index_document,
+    is_rag_enabled,
     search_documents,
     set_document_enabled,
+    verify_document_searchable,
 )
 from .schemas import (
     AgentRequest,
     AgentResponse,
     RagEnabledRequest,
+    RagHealthProbeRequest,
     RagScope,
     RagSearchRequest,
     RagSourceType,
 )
 
 
-app = FastAPI(title="Resume Agent Service", version="1.3.0")
+SERVICE_VERSION = "1.3.4"
 MAX_RAG_FILE_BYTES = 10 * 1024 * 1024
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    if is_rag_enabled():
+        # Block startup, not request workers. Besides loading the actual ONNX
+        # model, initialize the dimension-checked Qdrant collection so a fresh
+        # installation can satisfy strict Docker health before any upload.
+        initialize_rag_runtime()
+    yield
+
+
+app = FastAPI(
+    title="Resume Agent Service",
+    version=SERVICE_VERSION,
+    lifespan=lifespan,
+)
 
 
 def require_internal_secret(
@@ -39,10 +64,16 @@ def require_internal_secret(
 @app.get("/health")
 def health() -> dict:
     rag = get_rag_status()
+    rag_ready = (
+        rag.get("enabled") is True
+        and rag.get("embedding_backend") == "fastembed"
+        and rag.get("qdrant_reachable") is True
+        and rag.get("collection_ready") is True
+    )
     return {
-        "status": "ok" if rag.get("qdrant_reachable") else "degraded",
+        "status": "ok" if rag_ready else "degraded",
         "service": "resume-agent",
-        "version": "1.3.0",
+        "version": SERVICE_VERSION,
         "rag": rag,
     }
 
@@ -82,11 +113,10 @@ def generate(request: AgentRequest) -> AgentResponse:
 def run_agent_safely(request: AgentRequest) -> AgentResponse:
     try:
         return run_agent(request)
-    except RuntimeError as error:
-        message = str(error)[:500]
-        if "严格来源模式" in message:
-            raise HTTPException(status_code=424, detail=message) from error
-        raise
+    except RagSourceUnavailableError as error:
+        raise HTTPException(status_code=424, detail=str(error)[:500]) from error
+    except LlmError as error:
+        raise HTTPException(status_code=502, detail=str(error)[:500]) from error
 
 
 @app.post("/rag/index", dependencies=[Depends(require_internal_secret)])
@@ -101,13 +131,15 @@ async def rag_index(
     licensed: bool = Form(False),
     pii_reviewed: bool = Form(False),
     expires_at: str | None = Form(None),
+    enabled: bool | None = Form(None),
     file: UploadFile = File(...),
 ) -> dict:
     data = await file.read(MAX_RAG_FILE_BYTES + 1)
     if len(data) > MAX_RAG_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Knowledge document must not exceed 10MB")
     try:
-        return index_document(
+        return await run_in_threadpool(
+            index_document,
             document_id=document_id,
             name=name,
             category=category,
@@ -121,7 +153,10 @@ async def rag_index(
             licensed=licensed,
             pii_reviewed=pii_reviewed,
             expires_at=expires_at,
+            enabled=enabled,
         )
+    except DocumentMutationConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)[:500]) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)[:500]) from error
 
@@ -141,12 +176,23 @@ def rag_search(request: RagSearchRequest) -> dict:
     }
 
 
+@app.post("/rag/health-probe", dependencies=[Depends(require_internal_secret)])
+def rag_health_probe(request: RagHealthProbeRequest) -> dict:
+    return verify_document_searchable(
+        request.document_id,
+        request.expected_chunk_count,
+    )
+
+
 @app.delete(
     "/rag/documents/{document_id}",
     dependencies=[Depends(require_internal_secret)],
 )
 def rag_delete(document_id: int) -> dict:
-    delete_document(document_id)
+    try:
+        delete_document(document_id)
+    except DocumentMutationConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)[:500]) from error
     return {"success": True}
 
 
@@ -155,5 +201,8 @@ def rag_delete(document_id: int) -> dict:
     dependencies=[Depends(require_internal_secret)],
 )
 def rag_enabled(document_id: int, request: RagEnabledRequest) -> dict:
-    set_document_enabled(document_id, request.enabled)
+    try:
+        set_document_enabled(document_id, request.enabled)
+    except DocumentMutationConflict as error:
+        raise HTTPException(status_code=409, detail=str(error)[:500]) from error
     return {"success": True, "enabled": request.enabled}

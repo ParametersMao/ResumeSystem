@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { PaginationParams } from '@/types'
+import type { PaginationParams, TemplateDetail } from '@/types'
 
 export type TemplateVariant = 'classic' | 'sidebar' | 'timeline' | 'spotlight' | 'ats' | 'executive' | 'compact' | 'editorial'
 
@@ -16,7 +16,7 @@ export const getTemplateList = (params: PaginationParams & { templateName?: stri
  * GET /api/templates/{id}
  */
 export const getTemplateDetail = (id: number) => {
-  return request.get(`/templates/admin/${id}`)
+  return request.get<TemplateDetail>(`/templates/admin/${id}`)
 }
 
 /**
@@ -25,13 +25,15 @@ export const getTemplateDetail = (id: number) => {
  */
 export const createTemplate = (data: {
   templateName: string
+  description?: string
   templateData: string
   previewImage?: string
   industryTags?: string
+  status?: boolean
   templateVariant?: TemplateVariant
   recommendWeight?: number
 }) => {
-  return request.post('/templates', data)
+  return request.post<TemplateDetail>('/templates', data)
 }
 
 /**
@@ -48,7 +50,7 @@ export const updateTemplate = (id: number, data: {
   templateVariant?: TemplateVariant
   recommendWeight?: number
 }) => {
-  return request.put(`/templates/${id}`, data)
+  return request.put<TemplateDetail>(`/templates/${id}`, data)
 }
 
 /**

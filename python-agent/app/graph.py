@@ -28,6 +28,10 @@ class AgentState(TypedDict, total=False):
     live_token_used: int
 
 
+class RagSourceUnavailableError(RuntimeError):
+    """Strict RAG evidence required by the request is unavailable."""
+
+
 def run_agent(request: AgentRequest) -> AgentResponse:
     if StateGraph is not None:
         return _run_langgraph_agent(request)
@@ -168,7 +172,7 @@ def retrieval_node(request: AgentRequest, perception: AgentStep) -> AgentStep:
                 resume_id=request.context.resume_id,
             )
             if not job_sources:
-                raise RuntimeError(
+                raise RagSourceUnavailableError(
                     "当前简历绑定的私有 JD 未命中，请重新保存并索引 JD 后再诊断。"
                 )
             global_sources = search_documents(
@@ -187,7 +191,9 @@ def retrieval_node(request: AgentRequest, perception: AgentStep) -> AgentStep:
                 resume_id=request.context.resume_id if owner_user_id else None,
             )
         if strict_sources and not sources:
-            raise RuntimeError("严格来源模式下未检索到达到阈值的知识库依据。")
+            raise RagSourceUnavailableError(
+                "严格来源模式下未检索到达到阈值的知识库依据。"
+            )
         return AgentStep(
             name="retrieval",
             title="知识检索",
@@ -201,9 +207,13 @@ def retrieval_node(request: AgentRequest, perception: AgentStep) -> AgentStep:
         )
     except Exception as error:
         if requires_private_jd:
-            raise RuntimeError(f"私有 JD 诊断失败：{str(error)[:240]}") from error
+            raise RagSourceUnavailableError(
+                f"私有 JD 诊断失败：{str(error)[:240]}"
+            ) from error
         if strict_sources:
-            raise RuntimeError(f"严格来源模式阻止无依据生成：{str(error)[:240]}") from error
+            raise RagSourceUnavailableError(
+                f"严格来源模式阻止无依据生成：{str(error)[:240]}"
+            ) from error
         return AgentStep(
             name="retrieval",
             title="知识检索",

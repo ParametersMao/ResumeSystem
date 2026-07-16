@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "qa:templates": "node scripts/template-render-qa.js",
+    "qa:pdf-upload": "node scripts/pdf-export-upload-qa.js",
     "qa:product-flow": "node scripts/product-flow-qa.js"
   },
   "dependencies": {

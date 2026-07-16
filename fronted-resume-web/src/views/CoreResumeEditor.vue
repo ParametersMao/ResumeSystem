@@ -44,19 +44,19 @@
           <span class="card-badge">固定模块</span>
         </div>
         <div class="profile-photo-editor">
-          <div class="profile-photo-preview" :class="{ 'has-photo': documentState.profile.avatar }">
-            <img v-if="documentState.profile.avatar" :src="documentState.profile.avatar" alt="个人照片" />
+          <div class="profile-photo-preview" :class="{ 'has-photo': editorAvatarUrl }">
+            <img v-if="editorAvatarUrl" :src="editorAvatarUrl" alt="个人照片" />
             <span v-else>照片</span>
           </div>
           <div class="profile-photo-copy">
             <strong>个人照片</strong>
-            <p>建议上传清晰证件照或职业头像，导出 PDF 时会同步显示。</p>
+            <p>建议上传清晰证件照或职业头像，当前模板会立即显示并同步到 PDF。</p>
             <div class="profile-photo-actions">
               <label class="profile-photo-upload">
                 {{ uploadingAvatar ? '上传中...' : '上传照片' }}
                 <input type="file" accept="image/png,image/jpeg,image/webp" :disabled="uploadingAvatar" @change="handleAvatarChange" />
               </label>
-              <el-button v-if="documentState.profile.avatar" text type="danger" size="small" @click="clearAvatar">移除</el-button>
+              <el-button v-if="editorAvatarUrl" text type="danger" size="small" @click="clearAvatar">移除</el-button>
             </div>
           </div>
         </div>
@@ -909,6 +909,7 @@ import {
   parseResumeContent,
 } from '@/core-resume/model'
 import { buildCoreResumePrintHtml } from '@/core-resume/print'
+import { applyResumePhotoToDocument, normalizeResumePhotoUrl } from '@/core-resume/photo'
 import { resolveTemplatePreset, resolveTemplateVariant } from '@/core-resume/templates'
 import {
   createResume,
@@ -975,6 +976,14 @@ interface AiSuggestionOption {
   reason: string
   text: string
   fieldValues?: Record<string, string | CoreDateRange>
+}
+
+type AgentAwareGenerateResponse = AiGenerateResponse & {
+  suggestions?: Array<{
+    reason?: unknown
+    text?: unknown
+    html?: unknown
+  }>
 }
 
 interface AiDialogState {
@@ -1104,6 +1113,7 @@ const visibleSectionsCount = computed(() => documentState.value.sections.filter(
 const hasUnsavedChanges = computed(() => serializeDocument() !== lastSavedSnapshot.value)
 const currentVersionSummary = computed(() => summarizeVersionContent(serializeDocument()))
 const activeTemplatePreset = computed(() => resolveTemplatePreset(documentState.value))
+const editorAvatarUrl = computed(() => normalizeResumePhotoUrl(documentState.value.profile.avatar))
 const hasThemeOverrides = computed(() => Object.keys(documentState.value.themeOverrides || {}).length > 0)
 const longItemWarnings = computed(() => documentState.value.sections
   .filter((section) => section.visible)
@@ -1336,8 +1346,18 @@ async function handleAvatarChange(event: Event) {
   uploadingAvatar.value = true
   try {
     const result = await uploadResumePhoto(file)
-    documentState.value.profile.avatar = result.url
-    ElMessage.success('照片上传成功')
+    const photoUrl = normalizeResumePhotoUrl(result.url)
+    if (!photoUrl) {
+      throw new Error('照片上传接口未返回可用地址')
+    }
+    documentState.value.templateLayout = {
+      ...(documentState.value.templateLayout || {}),
+      key: activeTemplatePreset.value.layoutKey,
+      avatar: { ...activeTemplatePreset.value.avatar },
+    }
+    applyResumePhotoToDocument(documentState.value, photoUrl)
+    await nextTick()
+    ElMessage.success('照片上传成功，已在当前模板中显示')
   } catch (error) {
     console.error('照片上传失败:', error)
     ElMessage.error('照片上传失败，请稍后重试')
@@ -2071,7 +2091,12 @@ function getAiApplyLabel(suggestion: AiSuggestionOption) {
   return '替换当前内容'
 }
 
-function buildGenerateSuggestions(data: AiGenerateResponse, sectionType: CoreSectionType): AiSuggestionOption[] {
+function buildGenerateSuggestions(data: AgentAwareGenerateResponse, sectionType: CoreSectionType): AiSuggestionOption[] {
+  const agentSuggestions = normalizeAgentGenerateSuggestions(data.suggestions)
+  if (agentSuggestions.length) {
+    return agentSuggestions
+  }
+
   const firstProject = Array.isArray(data.projects) ? data.projects[0] : null
   const firstExperience = Array.isArray(data.experiences) ? data.experiences[0] : null
   const projectDesc = firstProject?.desc || firstProject?.content || ''
@@ -2110,6 +2135,29 @@ function buildGenerateSuggestions(data: AiGenerateResponse, sectionType: CoreSec
   return (suggestionMap[sectionType] || [
     { reason: '生成一段可直接填入的内容初稿。', text: data.summary || projectDesc || skillsText },
   ]).filter((suggestion) => suggestion.text)
+}
+
+function normalizeAgentGenerateSuggestions(
+  suggestions: AgentAwareGenerateResponse['suggestions'],
+): AiSuggestionOption[] {
+  if (!Array.isArray(suggestions)) {
+    return []
+  }
+
+  return suggestions
+    .map((suggestion) => {
+      const plainText = typeof suggestion?.text === 'string' ? suggestion.text.trim() : ''
+      const text = plainText || (typeof suggestion?.html === 'string' ? htmlToPlainText(suggestion.html) : '')
+      const reason = typeof suggestion?.reason === 'string'
+        ? suggestion.reason.trim()
+        : ''
+
+      return {
+        reason: reason || 'Agent 生成的可应用建议。',
+        text,
+      }
+    })
+    .filter((suggestion) => suggestion.text)
 }
 
 function buildExperienceSuggestion(
@@ -2729,8 +2777,13 @@ function openTemplateCenter() {
 }
 
 function applyTemplateVariant(templateData?: unknown) {
-  const next = resolveTemplateVariant(documentState.value as VariantAwareDocument, templateData)
-  ;(documentState.value as VariantAwareDocument).templateVariant = next
+  const preset = resolveTemplatePreset(documentState.value as VariantAwareDocument, templateData)
+  ;(documentState.value as VariantAwareDocument).templateVariant = preset.variant
+  documentState.value.templateLayout = {
+    ...(documentState.value.templateLayout || {}),
+    key: preset.layoutKey,
+    avatar: { ...preset.avatar },
+  }
   applyTemplateSectionDefaults(templateData)
 }
 

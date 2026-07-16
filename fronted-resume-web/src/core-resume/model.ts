@@ -1,3 +1,9 @@
+import {
+  isCoreTemplateLayoutKey,
+  normalizeVisibleResumeAvatarLayout,
+  resolveResumeProfilePhoto,
+} from './photo'
+
 export type CoreSectionType =
   | 'intention'
   | 'education'
@@ -102,6 +108,7 @@ export interface CoreAvatarLayout {
   shape?: CoreAvatarShape
   width?: number
   height?: number
+  objectPosition?: string
 }
 
 export interface CoreTemplateLayout {
@@ -424,7 +431,12 @@ export function ensureAllSections(document: Partial<CoreResumeDocument>): CoreRe
     }
   })
 
-  base.profile = { ...base.profile, ...(document.profile || {}) }
+  const incomingProfile = document.profile || {}
+  base.profile = {
+    ...base.profile,
+    ...incomingProfile,
+    avatar: resolveResumeProfilePhoto(incomingProfile),
+  }
   base.documentTitle = typeof document.documentTitle === 'string' ? document.documentTitle : ''
   base.slogan = typeof document.slogan === 'string' ? document.slogan : ''
   base.templateTheme = normalizeThemePatch(document.templateTheme)
@@ -535,29 +547,15 @@ function normalizeTemplateLayout(layout: unknown): CoreTemplateLayout | undefine
   const result: CoreTemplateLayout = {}
   if (key) {
     result.key = key
-  }
-  if (avatar) {
+    result.avatar = normalizeVisibleResumeAvatarLayout(key, avatar)
+  } else if (avatar) {
     result.avatar = avatar
   }
   return Object.keys(result).length ? result : undefined
 }
 
 function normalizeTemplateLayoutKey(value: unknown): CoreTemplateLayoutKey | undefined {
-  if (
-    value === 'qm-blue-top-photo' ||
-    value === 'qm-sidebar-profile' ||
-    value === 'qm-classic-centered' ||
-    value === 'qm-ribbon-compact' ||
-    value === 'qm-timeline-icons' ||
-    value === 'qm-minimal-ats' ||
-    value === 'qm-executive-business' ||
-    value === 'qm-student-editorial' ||
-    value === 'qm-spotlight-featured'
-    || value === 'qm-table-formal'
-  ) {
-    return value
-  }
-  return undefined
+  return isCoreTemplateLayoutKey(value) ? value : undefined
 }
 
 function normalizeAvatarLayout(value: unknown): CoreAvatarLayout | undefined {
@@ -569,10 +567,10 @@ function normalizeAvatarLayout(value: unknown): CoreAvatarLayout | undefined {
   const avatar: CoreAvatarLayout = {}
 
   if (typeof source.enabled === 'boolean') {
-    avatar.enabled = source.enabled
+    avatar.enabled = true
   }
 
-  if (isAvatarPlacement(source.placement)) {
+  if (isAvatarPlacement(source.placement) && source.placement !== 'hidden') {
     avatar.placement = source.placement
   }
 
@@ -588,6 +586,13 @@ function normalizeAvatarLayout(value: unknown): CoreAvatarLayout | undefined {
   const height = toNumber(source.height)
   if (height !== undefined && height >= 40 && height <= 220) {
     avatar.height = height
+  }
+
+  if (typeof source.objectPosition === 'string') {
+    const objectPosition = source.objectPosition.trim()
+    if (objectPosition && objectPosition.length <= 64) {
+      avatar.objectPosition = objectPosition
+    }
   }
 
   return Object.keys(avatar).length ? avatar : undefined
@@ -707,7 +712,7 @@ function normalizeProfile(profile: unknown): Partial<CoreResumeProfile> {
   return {
     name: toText(basic.name),
     title: toText(basic.title),
-    avatar: toText(basic.avatar || basic.photo || source.avatar || source.photo),
+    avatar: resolveResumeProfilePhoto(basic) || resolveResumeProfilePhoto(source),
     phone: toText(contacts.phone || basic.phone),
     email: toText(contacts.email || basic.email),
     gender: toText(basic.gender),

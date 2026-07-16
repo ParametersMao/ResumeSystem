@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as OSS from 'ali-oss';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
-import { dirname, join, resolve, sep } from 'path';
+import { dirname } from 'path';
+import { resolveLocalObjectPath } from './local-storage-path';
 
 export interface UploadObjectInput {
   key: string;
@@ -126,8 +127,7 @@ export class StorageService {
   }
 
   private async uploadLocalObject(key: string, input: UploadObjectInput): Promise<UploadObjectResult> {
-    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    const targetPath = resolveLocalObjectPath(uploadRoot, key);
+    const targetPath = resolveLocalObjectPath(key);
     await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(targetPath, input.body);
     const publicBaseUrl = normalizePublicBaseUrl(process.env.PUBLIC_FILE_BASE_URL || '');
@@ -140,13 +140,11 @@ export class StorageService {
   }
 
   private async deleteLocalObject(key: string): Promise<void> {
-    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    await rm(resolveLocalObjectPath(uploadRoot, key), { force: true });
+    await rm(resolveLocalObjectPath(key), { force: true });
   }
 
   private async downloadLocalObject(key: string): Promise<Buffer> {
-    const uploadRoot = process.env.UPLOAD_PATH || './uploads';
-    return readFile(resolveLocalObjectPath(uploadRoot, key));
+    return readFile(resolveLocalObjectPath(key));
   }
 }
 
@@ -197,13 +195,4 @@ function sanitizeObjectKey(key: string): string {
   }
 
   return safeKey;
-}
-
-function resolveLocalObjectPath(uploadRoot: string, key: string): string {
-  const root = resolve(process.cwd(), uploadRoot);
-  const target = resolve(root, key);
-  if (target !== root && !target.startsWith(root + sep)) {
-    throw new Error('Invalid object key path');
-  }
-  return target;
 }

@@ -61,10 +61,6 @@ export default defineConfig({
       '/mock': {
         target: 'http://localhost:3000',
         changeOrigin: true
-      },
-      '/resumes': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
       }
     }
   }
