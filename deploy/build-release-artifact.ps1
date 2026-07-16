@@ -11,6 +11,27 @@ $ErrorActionPreference = 'Stop'
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $scriptRoot 'image-archive-manifest.ps1')
 
+function Resolve-PinnedVendorImage {
+  param([Parameter(Mandatory = $true)][string]$Source)
+
+  if ($Source -match '^sha256:') { return }
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    docker pull --platform linux/amd64 $Source
+    if ($LASTEXITCODE -eq 0) { return }
+    if ($attempt -lt 3) { Start-Sleep -Seconds (5 * $attempt) }
+  }
+
+  # All accepted sources are content-addressed digests. If the registry is
+  # temporarily unavailable, a locally cached object under that exact digest
+  # is immutable and will still pass the platform/config-ID checks below.
+  docker image inspect $Source *> $null
+  if ($LASTEXITCODE -eq 0) {
+    Write-Warning "Registry pull failed; using the cached pinned vendor image $Source"
+    return
+  }
+  throw "Failed to resolve pinned vendor image $Source"
+}
+
 if ($ReleaseCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'ReleaseCommit must be the full lowercase 40-character Git commit'
 }
@@ -200,10 +221,7 @@ foreach ($entry in $images.GetEnumerator()) {
     }
     if ($LASTEXITCODE -ne 0) { throw "Built image runtime assertion failed: $($entry.Key)" }
   } else {
-    if ($entry.Value.Source -notmatch '^sha256:') {
-      docker pull --platform linux/amd64 $entry.Value.Source
-      if ($LASTEXITCODE -ne 0) { throw "Failed to pull vendor image $($entry.Value.Source)" }
-    }
+    Resolve-PinnedVendorImage -Source $entry.Value.Source
     $metadataJson = docker image inspect $entry.Value.Source
     if ($LASTEXITCODE -ne 0) {
       throw "Vendor image is not linux/amd64: $($entry.Value.Source)"
