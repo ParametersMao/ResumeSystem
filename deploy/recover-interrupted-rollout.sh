@@ -78,6 +78,35 @@ restore_timer_state() {
     systemctl stop "$unit" >/dev/null 2>&1 || true
   fi
 }
+stack_images_match_backup() {
+  local container expected actual
+  for container in \
+    resume-mysql resume-backend resume-web resume-admin resume-proxy resume-agent resume-qdrant; do
+    expected="$(awk -F '\t' -v name="$container" \
+      'NR > 1 && $1 == name {print $3}' "$backup_dir/image-map.tsv")"
+    [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ \
+      && "$(printf '%s\n' "$expected" | sed '/^$/d' | wc -l)" -eq 1 ]] \
+      || return 1
+    actual="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null || true)"
+    [[ "$actual" == "$expected" ]] || return 1
+  done
+}
+stack_runtime_ready() {
+  local container snapshot status health restarts oom
+  for container in \
+    resume-mysql resume-backend resume-web resume-admin resume-proxy resume-agent resume-qdrant; do
+    snapshot="$(docker inspect "$container" \
+      --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.RestartCount}}|{{.State.OOMKilled}}' \
+      2>/dev/null || true)"
+    IFS='|' read -r status health restarts oom <<< "$snapshot"
+    [[ "$status" == running && "$restarts" == 0 && "$oom" == false ]] || return 1
+    if [[ "$container" == resume-qdrant ]]; then
+      [[ "$health" == missing || "$health" == healthy ]] || return 1
+    else
+      [[ "$health" == healthy ]] || return 1
+    fi
+  done
+}
 
 ROLLOUT_STATE="$(marker_value ROLLOUT_STATE)"
 ROLLOUT_OPERATION="$(marker_value ROLLOUT_OPERATION)"
@@ -353,6 +382,46 @@ PY
       "$ROLLOUT_RELEASE_COMMIT"
   fi
   relink_previous_release
+  current_release="$(readlink -f /opt/resumesystem-current 2>/dev/null || true)"
+  if [[ "$current_release" == "$previous_release" ]] \
+    && stack_images_match_backup; then
+    # A prior automatic rollback may have restored the exact image set and then
+    # failed only during a cold RAG probe. Preserve the warmed Agent process on
+    # retry instead of force-recreating the complete stack again.
+    docker start resume-proxy >/dev/null 2>&1 || true
+    recovered_runtime_ready=false
+    for _ in {1..60}; do
+      if stack_runtime_ready; then
+        recovered_runtime_ready=true
+        break
+      fi
+      sleep 2
+    done
+    if [[ "$recovered_runtime_ready" == true ]]; then
+      acceptance_runtime="$SCRIPT_DIR"
+      executing_runtime="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+      if [[ -f "$executing_runtime/recovery-acceptance.sh" \
+        && -f "$executing_runtime/rag-recovery-probe.py" ]]; then
+        acceptance_runtime="$executing_runtime"
+      fi
+      rag_ready="$(tr -d '\r\n' < "$backup_dir/rag-ready.txt" 2>/dev/null || echo false)"
+      [[ "$rag_ready" == true || "$rag_ready" == false ]] || {
+        echo "Interrupted deploy backup has an invalid RAG readiness marker" >&2
+        false
+      }
+      RAG_REQUIRED="$rag_ready" ENV_FILE="$previous_release/.env" \
+        "$acceptance_runtime/recovery-acceptance.sh"
+      restore_timer_state resumesystem-health.timer \
+        "$ROLLOUT_HEALTH_TIMER_ENABLED" "$ROLLOUT_HEALTH_TIMER_ACTIVE"
+      restore_timer_state resumesystem-backup.timer \
+        "$ROLLOUT_BACKUP_TIMER_ENABLED" "$ROLLOUT_BACKUP_TIMER_ACTIVE"
+      maintenance_disable
+      clear_recovery_markers
+      trap - ERR HUP INT TERM
+      echo "recover-interrupted-rollout: accepted already-restored $previous_release from $backup_dir"
+      exit 0
+    fi
+  fi
   ENV_FILE="$previous_release/.env" \
     COMPOSE_FILE="$previous_release/docker-compose.prod.yml" \
     BACKUP_ROOT="$backup_root" \
