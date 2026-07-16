@@ -130,6 +130,58 @@ try {
       -ReleaseCommit 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' -ReleaseVersion $version
   } '*provenance does not match*'
 
+  $releaseManifestAttribute = [string](& git -C $repoRoot check-attr eol -- deploy/release-manifest.env)
+  if ($LASTEXITCODE -ne 0 -or $releaseManifestAttribute -notmatch ': eol: lf$') {
+    throw 'deploy/release-manifest.env must be pinned to LF in .gitattributes'
+  }
+
+  $gitFixture = Join-Path $testRoot 'git archive fixture with space'
+  New-Item -ItemType Directory -Force -Path $gitFixture | Out-Null
+  & git -C $gitFixture init --quiet
+  if ($LASTEXITCODE -ne 0) { throw 'Could not initialize Git archive fixture' }
+  & git -C $gitFixture config core.autocrlf true
+  [System.IO.File]::WriteAllText(
+    (Join-Path $gitFixture 'release.env'),
+    "RELEASE_VERSION=1.3.4`nAGENT_VERSION=1.3.4`n",
+    [System.Text.UTF8Encoding]::new($false)
+  )
+  & git -C $gitFixture add -- release.env
+  & git -C $gitFixture -c user.name=ResumeSystem-QA `
+    -c user.email=resumesystem-qa@example.invalid commit --quiet -m fixture
+  if ($LASTEXITCODE -ne 0) { throw 'Could not commit Git archive fixture' }
+  $fixtureCommit = [string](& git -C $gitFixture rev-parse HEAD)
+  $fixtureCommit = $fixtureCommit.Trim()
+  $sourceArchive = Join-Path $testRoot 'source archive with space.tar'
+  New-DeterministicGitArchive `
+    -RepositoryPath $gitFixture `
+    -ReleaseCommit $fixtureCommit `
+    -ArchivePath $sourceArchive
+  Assert-TarArchiveMemberUsesLf -ArchivePath $sourceArchive -MemberPath 'release.env'
+  $archivedText = Get-TarArchiveMemberText -ArchivePath $sourceArchive -MemberPath 'release.env'
+  Assert-Equal $archivedText "RELEASE_VERSION=1.3.4`nAGENT_VERSION=1.3.4`n" `
+    'Deterministic Git archive changed LF bytes under core.autocrlf=true'
+  $archiveBlobHash = Get-TarArchiveMemberSha256 `
+    -ArchivePath $sourceArchive -MemberPath 'release.env'
+  $gitBlobHash = Get-GitBlobSha256 `
+    -RepositoryPath $gitFixture `
+    -ReleaseCommit $fixtureCommit `
+    -MemberPath 'release.env'
+  Assert-Equal $archiveBlobHash $gitBlobHash `
+    'Deterministic Git archive member does not match the commit blob'
+
+  $crlfRoot = Join-Path $testRoot 'crlf-source'
+  New-Item -ItemType Directory -Force -Path $crlfRoot | Out-Null
+  [System.IO.File]::WriteAllBytes(
+    (Join-Path $crlfRoot 'release.env'),
+    [System.Text.Encoding]::ASCII.GetBytes("RELEASE_VERSION=1.3.4`r`n")
+  )
+  $crlfArchive = Join-Path $testRoot 'crlf-source.tar'
+  & tar -cf $crlfArchive -C $crlfRoot release.env
+  if ($LASTEXITCODE -ne 0) { throw 'Could not create CRLF source fixture' }
+  Assert-ThrowsLike {
+    Assert-TarArchiveMemberUsesLf -ArchivePath $crlfArchive -MemberPath 'release.env'
+  } '*must use LF line endings*'
+
   Write-Output 'image-archive-manifest.test: passed'
 } finally {
   Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue

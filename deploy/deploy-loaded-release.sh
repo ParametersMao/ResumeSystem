@@ -86,6 +86,20 @@ previous_release="$(readlink -f /opt/resumesystem-current 2>/dev/null || true)"
   exit 1
 }
 
+manifest_cr_status=0
+LC_ALL=C grep -q $'\r' "$RELEASE_DIR/deploy/release-manifest.env" || manifest_cr_status=$?
+case "$manifest_cr_status" in
+  0)
+    echo "Release manifest must use LF line endings and match the Git blob" >&2
+    exit 1
+    ;;
+  1) ;;
+  *)
+    echo "Release manifest line endings could not be validated" >&2
+    exit 1
+    ;;
+esac
+
 set -a
 # shellcheck disable=SC1090,SC1091
 source "$ENV_FILE"

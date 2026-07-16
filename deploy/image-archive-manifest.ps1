@@ -8,6 +8,75 @@ function Assert-SafeTarMemberPath {
   }
 }
 
+function New-DeterministicGitArchive {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryPath,
+    [Parameter(Mandatory = $true)][string]$ReleaseCommit,
+    [Parameter(Mandatory = $true)][string]$ArchivePath
+  )
+
+  if ($ReleaseCommit -cnotmatch '^[0-9a-f]{40}$') {
+    throw 'ReleaseCommit must be the full lowercase 40-character Git commit'
+  }
+  $resolvedRepository = [System.IO.Path]::GetFullPath($RepositoryPath)
+  if (-not (Test-Path -LiteralPath $resolvedRepository -PathType Container)) {
+    throw "Git repository does not exist: $resolvedRepository"
+  }
+  $resolvedArchive = [System.IO.Path]::GetFullPath($ArchivePath)
+  $gitArguments = @(
+    '-C', $resolvedRepository,
+    '-c', 'core.autocrlf=false',
+    '-c', 'core.eol=lf',
+    'archive', '--format=tar', "--output=$resolvedArchive", $ReleaseCommit
+  )
+  & git @gitArguments
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $resolvedArchive -PathType Leaf)) {
+    throw "Deterministic Git archive failed for $ReleaseCommit"
+  }
+}
+
+function Get-GitBlobSha256 {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryPath,
+    [Parameter(Mandatory = $true)][string]$ReleaseCommit,
+    [Parameter(Mandatory = $true)][string]$MemberPath
+  )
+
+  if ($ReleaseCommit -cnotmatch '^[0-9a-f]{40}$') {
+    throw 'ReleaseCommit must be the full lowercase 40-character Git commit'
+  }
+  Assert-SafeTarMemberPath -MemberPath $MemberPath
+  $resolvedRepository = [System.IO.Path]::GetFullPath($RepositoryPath)
+  if ($resolvedRepository.Contains('"')) {
+    throw 'Git repository path contains an unsafe quote character'
+  }
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = 'git'
+  $startInfo.Arguments = "-C `"$resolvedRepository`" cat-file blob `"${ReleaseCommit}:$MemberPath`""
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $startInfo.CreateNoWindow = $true
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  if (-not $process.Start()) {
+    throw "Could not read Git blob: $MemberPath"
+  }
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $digestBytes = $sha256.ComputeHash($process.StandardOutput.BaseStream)
+    $errorText = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+      throw "Git blob could not be read: $MemberPath ($errorText)"
+    }
+    return ([System.BitConverter]::ToString($digestBytes)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $sha256.Dispose()
+    $process.Dispose()
+  }
+}
+
 function Get-TarArchiveMemberSha256 {
   param(
     [Parameter(Mandatory = $true)][string]$ArchivePath,
@@ -77,6 +146,18 @@ function Get-TarArchiveMemberText {
     return $text
   } finally {
     $process.Dispose()
+  }
+}
+
+function Assert-TarArchiveMemberUsesLf {
+  param(
+    [Parameter(Mandatory = $true)][string]$ArchivePath,
+    [Parameter(Mandatory = $true)][string]$MemberPath
+  )
+
+  $text = Get-TarArchiveMemberText -ArchivePath $ArchivePath -MemberPath $MemberPath
+  if ($text.Contains("`r") -or -not $text.EndsWith("`n")) {
+    throw "Shell-sourced archive member must use LF line endings: $MemberPath"
   }
 }
 

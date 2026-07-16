@@ -22,6 +22,19 @@ BOOTSTRAP_MARKER="${RAG_BOOTSTRAP_MARKER:-/opt/resumesystem-rag-bootstrap-rollou
   echo "Release manifest or canonical RAG fixture is missing" >&2
   exit 1
 }
+manifest_cr_status=0
+LC_ALL=C grep -q $'\r' "$RELEASE_DIR/deploy/release-manifest.env" || manifest_cr_status=$?
+case "$manifest_cr_status" in
+  0)
+    echo "Release manifest must use LF line endings and match the Git blob" >&2
+    exit 1
+    ;;
+  1) ;;
+  *)
+    echo "Release manifest line endings could not be validated" >&2
+    exit 1
+    ;;
+esac
 # shellcheck disable=SC1091
 source "$RELEASE_DIR/deploy/release-manifest.env"
 [[ "${RELEASE_COMMIT:-}" == "$CONFIRMED_COMMIT" ]] || {

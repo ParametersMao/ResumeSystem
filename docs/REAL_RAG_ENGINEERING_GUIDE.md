@@ -3,6 +3,8 @@
 版本：2026-07-15（v1.3.4 公网入口、单飞冷启动门禁与 RAG 可靠性修复版）
 状态：真实 BGE/Qdrant/DeepSeek 核心链路已验证；只有公网浏览器 Origin、响应契约、停用重建和发布 E2E 同时通过后，才可宣称对应入口可用
 
+发布源码归档必须与目标 Git commit 的原始 blob 逐字节一致，不能受构建机 `core.autocrlf` 或平台默认换行符影响。构建器必须以 `core.autocrlf=false`、`core.eol=lf` 生成归档，并逐项比对所有 `runtimeFiles` 的归档 SHA-256 与 Git blob SHA-256；任何会被 shell `source` 的文件只允许 LF，发现 CR 字节必须在镜像切换、维护规则或 rollout marker 写入前 fail-closed。制品清单不得为经过工作树 EOL 转换的字节“自洽背书”。
+
 ## v1.3.4 修复基线与发布门禁
 
 本补丁处理“服务内部可调用，但公网浏览器不可用”和“健康或数据库状态与真实向量状态不一致”两类问题。实现与发布必须同时满足以下约束：

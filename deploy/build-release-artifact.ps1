@@ -18,6 +18,7 @@ $head = (git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $head -cne $ReleaseCommit) {
   throw "ReleaseCommit does not match HEAD ($head)"
 }
+$repositoryRoot = (Get-Location).Path
 $trackedChanges = @(git status --porcelain --untracked-files=no)
 if ($LASTEXITCODE -ne 0 -or $trackedChanges.Count -gt 0) {
   throw 'Release artifact requires all tracked files to match HEAD'
@@ -251,8 +252,10 @@ if ($LASTEXITCODE -ne 0) { throw 'docker save failed' }
 $records = @(Resolve-DockerSaveImageRecords `
   -ArchivePath $tarPath -Records $records `
   -ReleaseCommit $ReleaseCommit -ReleaseVersion $version)
-git archive --format=tar --output=$sourceTarPath $ReleaseCommit
-if ($LASTEXITCODE -ne 0) { throw 'git archive failed' }
+New-DeterministicGitArchive `
+  -RepositoryPath $repositoryRoot `
+  -ReleaseCommit $ReleaseCommit `
+  -ArchivePath $sourceTarPath
 $sourceHash = (Get-FileHash -LiteralPath $sourceTarPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $runtimeFilePaths = @(
   'docker-compose.prod.yml',
@@ -284,8 +287,21 @@ $runtimeFilePaths = @(
   'deploy/systemd/resumesystem-backup-recovery.service'
 )
 $runtimeFiles = [ordered]@{}
+Assert-TarArchiveMemberUsesLf `
+  -ArchivePath $sourceTarPath `
+  -MemberPath 'deploy/release-manifest.env'
 foreach ($runtimeFile in $runtimeFilePaths) {
-  $runtimeFiles[$runtimeFile] = Get-TarArchiveMemberSha256 -ArchivePath $sourceTarPath -MemberPath $runtimeFile
+  $archiveHash = Get-TarArchiveMemberSha256 `
+    -ArchivePath $sourceTarPath `
+    -MemberPath $runtimeFile
+  $gitBlobHash = Get-GitBlobSha256 `
+    -RepositoryPath $repositoryRoot `
+    -ReleaseCommit $ReleaseCommit `
+    -MemberPath $runtimeFile
+  if ($archiveHash -cne $gitBlobHash) {
+    throw "Source archive member differs from Git blob: $runtimeFile"
+  }
+  $runtimeFiles[$runtimeFile] = $archiveHash
 }
 $composeHash = $runtimeFiles['docker-compose.prod.yml']
 $record = [ordered]@{

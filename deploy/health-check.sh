@@ -49,8 +49,15 @@ RELEASE_MANIFEST_FILE="$SCRIPT_DIR/release-manifest.env"
 EXPECTED_AGENT_VERSION=""
 RELEASE_VERSION=""
 if [[ -f "$RELEASE_MANIFEST_FILE" ]]; then
-  EXPECTED_AGENT_VERSION="$(awk -F= '$1 == "AGENT_VERSION" {print $2}' "$RELEASE_MANIFEST_FILE" | tail -1)"
-  RELEASE_VERSION="$(awk -F= '$1 == "RELEASE_VERSION" {print $2}' "$RELEASE_MANIFEST_FILE" | tail -1)"
+  manifest_cr_status=0
+  LC_ALL=C grep -q $'\r' "$RELEASE_MANIFEST_FILE" || manifest_cr_status=$?
+  if [[ "$manifest_cr_status" == 0 ]]; then
+    failures+=("release manifest must use LF line endings and match the Git blob")
+  elif [[ "$manifest_cr_status" != 1 ]]; then
+    failures+=("release manifest line endings could not be validated")
+  fi
+  EXPECTED_AGENT_VERSION="$(awk -F= '$1 == "AGENT_VERSION" {print $2}' "$RELEASE_MANIFEST_FILE" | tail -1 | tr -d '\r')"
+  RELEASE_VERSION="$(awk -F= '$1 == "RELEASE_VERSION" {print $2}' "$RELEASE_MANIFEST_FILE" | tail -1 | tr -d '\r')"
 else
   failures+=("release manifest is missing")
 fi
