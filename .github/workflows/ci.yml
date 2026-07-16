@@ -198,6 +198,11 @@ jobs:
             -e REPO_ROOT=/repo \
             python:3.12-bookworm \
             bash /repo/deploy/tests/finalize-marker-commit.test.sh
+          docker run --rm \
+            -v "$PWD:/repo:ro" \
+            -e REPO_ROOT=/repo \
+            python:3.12-bookworm \
+            bash /repo/deploy/tests/bootstrap-rag-fixture-failure.test.sh
       - name: Validate Docker save canonical image IDs
         shell: pwsh
         run: |

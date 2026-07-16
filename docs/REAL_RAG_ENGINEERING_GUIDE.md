@@ -1,5 +1,13 @@
 # ResumeSystem 真实 RAG 工程说明
 
+## 2026-07-16 canonical fixture 发布内存约束补充
+
+生产 `resume-agent` 的 cgroup 上限为 512 MiB。Agent lifespan 已在 PID 1 内预热真实 FastEmbed 模型后，canonical fixture 索引必须通过带 `X-Agent-Secret` 的内部 `/rag/index` 复用该进程；禁止再用 `docker exec` 启动第二个会 import `app.rag` 或加载 ONNX 模型的 Python 索引进程。宿主机 `MemAvailable` 和 Swap 门禁不能替代容器 cgroup 门禁：2026-07-16 的首次候选发布中，宿主机资源检查全部通过，但 PID 1 与 CLI 各自持有模型后触及 512 MiB 上限，内核以 memcg OOM 杀死 Uvicorn，发布因此按 fail-closed 流程自动回滚。
+
+发布 fixture 的容器内客户端只能使用 Python 标准库构造内部 HTTP 请求，不得 import FastEmbed、Qdrant client、LangGraph 或 `app.rag`。索引成功必须同时断言 HTTP 200、document id、正 chunk count、`fastembed` backend 与精确模型名；删除补偿同样走内部鉴权 API。脚本的 ERR 补偿只允许在最外层执行一次，禁止让 `errtrace` 把同一个失败传播进 command substitution 后先删 marker、再由父 shell 以“marker 缺失”重复补偿。任一步失败仍须保留或严格提交 marker，并逐项验证 MySQL、uploads 与 Qdrant 清理结果后才能恢复公网。
+
+对应发布回归必须在 512 MiB Agent 限额下启动真实 Uvicorn，等待离线 FastEmbed 预热完成，再依次执行 fixture 索引和 exact-document dense attestation；验收要求索引/探针均为 200、dense cosine 不低于 0.995、容器零重启且 `OOMKilled=false`。仅运行脱离 Uvicorn 的单进程 CLI 索引不能证明这条生产约束。
+
 版本：2026-07-15（v1.3.4 公网入口、单飞冷启动门禁与 RAG 可靠性修复版）
 状态：真实 BGE/Qdrant/DeepSeek 核心链路已验证；只有公网浏览器 Origin、响应契约、停用重建和发布 E2E 同时通过后，才可宣称对应入口可用
 
@@ -21,7 +29,7 @@
 10. 生产验收必须穿过反向代理并触发应用数据库查询：允许 Origin 的预检同时断言 `Access-Control-Allow-Origin` 与 `Access-Control-Allow-Credentials: true`，未知 Origin 必须返回 403，无效登录必须返回认证失败而不是 5xx。容器 `running/healthy` 不能替代这组验收。
 11. 首次真实 RAG 发布不能依赖“用户先上传一份文档”来通过健康门禁。Agent lifespan 必须用真实 FastEmbed 探针向量得到实际维度，并幂等创建 Qdrant collection 与 payload indexes；Qdrant 暂未就绪时最多重试 30 秒，既有 collection 维度不一致时立即失败，不得重试或创建 hash 兼容假集合。
 12. 发布在 Agent 与 Backend 健康、但公网仍处于维护态时，通过 `deploy/bootstrap-rag-fixture.sh` 把仓库内 SHA-256 受制品约束的 `docs/knowledge-base/resume-writing-standard-v1.md` 写入 uploads、MySQL 与真实 FastEmbed/Qdrant。已有 release fixture 只有在源文件 SHA-256 一致且 `documentId + chunkCount` 精确检索通过时才复用，禁止覆盖旧文件却保留旧向量。新建前先持久化 `/opt/resumesystem-rag-bootstrap-rollout.env`，任一步失败必须逐项验证并补偿删除该 DB 行、向量和文件；任一补偿失败都保留标记并保持公网关闭。发布后续失败时仅清理本次 release 新建的 fixture，不删除此前已验证来源。
-13. 生产 Agent 不得在启动时依赖 Hugging Face 外网下载模型。linux/amd64 构建阶段必须下载并真实执行一次 `BAAI/bge-small-zh-v1.5`，把模型文件、符号链接目标和逐文件 SHA-256 manifest 固化进不可变 Agent 镜像；容器 entrypoint 在 Uvicorn 启动前以 manifest digest 选择 `fastembed_models/releases/<digest>` 独立目录，空目录或损坏目录只能从镜像内受校验副本修复，禁止联网回退，也禁止清空其他版本的缓存。随后原子更新 `/models/fastembed/current` 稳定符号链接，Compose 把同一路径写入容器环境，确保 PID 1 与后续 `docker exec` 的 canonical fixture/恢复进程都解析到同一离线模型，而不是因看不到 PID 1 的临时环境改写再次联网。制品构建还必须在 `--network none` 下从镜像内模型完成 512 维探针，证明发布包可离线冷启动且旧镜像回滚仍保留旧缓存。
+13. 生产 Agent 不得在启动时依赖 Hugging Face 外网下载模型。linux/amd64 构建阶段必须下载并真实执行一次 `BAAI/bge-small-zh-v1.5`，把模型文件、符号链接目标和逐文件 SHA-256 manifest 固化进不可变 Agent 镜像；容器 entrypoint 在 Uvicorn 启动前以 manifest digest 选择 `fastembed_models/releases/<digest>` 独立目录，空目录或损坏目录只能从镜像内受校验副本修复，禁止联网回退，也禁止清空其他版本的缓存。随后原子更新 `/models/fastembed/current` 稳定符号链接，Compose 把同一路径写入容器环境，确保 PID 1 和构建阶段的单进程离线探针解析到受校验模型。canonical fixture 与恢复命令中的 `docker exec` 只能启动不 import RAG runtime 的轻量 HTTP 客户端，复用 PID 1 已预热模型；不得通过稳定链接再次加载第二份 ONNX。制品构建还必须在 `--network none` 下从镜像内模型完成 512 维探针，并在 512 MiB cgroup 下启动真实 Uvicorn、执行 fixture 索引与 dense attestation，证明发布包可离线冷启动且旧镜像回滚仍保留旧缓存。
 14. Hybrid 命中不能单独证明 Dense 向量真实。索引 payload 必须同时保存原文件 `source_sha256` 和每个切片 `chunk_sha256`；健康探针逐切片校验摘要、重新执行真实 Embedding 并与 Qdrant 已存向量计算余弦（下限 0.995），再执行一次 Qdrant dense-only 查询，要求命中同一 point 且分数至少 0.995。canonical fixture 的 `source_sha256` 还必须与 `backend_uploads` 文件 SHA-256 相等，禁止 BM25 自匹配掩盖零向量、旧 hash 向量或跨存储错配。
 
 模型冷启动由 Agent lifespan 和 Docker 容器健康门禁承担；服务进入 `healthy` 后的跨存储检索探针默认参数为 `RAG_HEALTH_PROBE_TIMEOUT_SECONDS=60`、`RAG_HEALTH_PROBE_ATTEMPTS=1`，允许范围分别为 30～120 秒和 1～2 次，包含重试间隔的总预算不得超过 120 秒。systemd oneshot 使用 `TimeoutStartSec=270`，小于 5 分钟 timer 周期并为其他检查与告警保留至少 150 秒，防止检查实例重叠。完整探针使用 non-blocking lock；已有探针运行时立即返回 `IN_PROGRESS`，绝不占用同步线程排队。期望 Agent 版本只读取不可变制品内的 `deploy/release-manifest.env`，预检同时比对源码 `SERVICE_VERSION`，避免持久 `.env` 放行旧镜像。探针错误必须区分 `TIMEOUT`、`IN_PROGRESS`、`HTTP`、`FAIL`、`ERROR` 和执行失败，日志中不得包含内部密钥。MySQL 探针通过容器内 `MYSQL_PWD` 读取已有环境变量，禁止把生产密码拼入宿主机 `docker exec` 参数。
@@ -209,7 +217,7 @@ temperature=0.3
 
 Agent 为 DeepSeek V4 请求启用 thinking 与 high reasoning effort，并要求 JSON object。`LLM_TIMEOUT_SECONDS` 默认 120 秒，NestJS 的 `AGENT_REQUEST_TIMEOUT_MS` 默认 150 秒，外层超时必须大于内层，避免 DeepSeek 尚在生成时被主业务提前中止。
 
-知识库索引使用独立的 `KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS`，生产默认 300 秒，并限制在 120～600 秒之间。原因是 FastEmbed 在新机器、空模型卷或模型版本变更后会先完成镜像内模型副本校验/物化与 ONNX 冷启动；业务后端的索引超时必须覆盖这段时间，不能在 Agent 随后成功写入向量时提前把 MySQL 文档标成失败。该流程禁止运行时联网下载，模型卷应持久化，发布验收必须包含一次断网冷启动、`docker exec` 索引和空缓存修复；普通搜索不依赖延长 LLM 超时。
+知识库索引使用独立的 `KNOWLEDGE_AGENT_REQUEST_TIMEOUT_MS`，生产默认 300 秒，并限制在 120～600 秒之间。原因是 FastEmbed 在新机器、空模型卷或模型版本变更后会先完成镜像内模型副本校验/物化与 ONNX 冷启动；业务后端的索引超时必须覆盖这段时间，不能在 Agent 随后成功写入向量时提前把 MySQL 文档标成失败。该流程禁止运行时联网下载，模型卷应持久化，发布验收必须包含一次断网冷启动、在已预热 Uvicorn 上由轻量 `docker exec` HTTP 客户端发起的索引、空缓存修复以及 exact-document dense 探针；普通搜索不依赖延长 LLM 超时。
 
 ## 6. 分页与 PDF 策略
 
@@ -287,7 +295,7 @@ VERIFIED_BACKUP_DIR=/opt/resumesystem-backups/<verified> ./deploy/deploy-loaded-
 首次预热 Embedding：
 
 ```powershell
-docker exec resume-agent python -c "from app.rag import embed_texts; print(len(embed_texts(['简历知识库'])[0]))"
+docker exec resume-agent python -c "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=10)); assert value['status']=='ok' and value['rag']['embedding_backend']=='fastembed' and value['rag']['collection_ready'] is True; print(value['rag']['embedding_model'])"
 ```
 
 完整 RAG 回归（密钥只在当前进程环境中存在）：

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+# Do not enable errtrace here. Several mutation commands use command
+# substitution; inheriting ERR into that subshell can commit compensation
+# there and then invoke the parent ERR trap a second time with no marker left.
+# The parent shell observes the failed assignment and owns the one cleanup.
+set -euo pipefail
 
 MODE=""
 CONFIRMED_COMMIT="${2:-}"
@@ -20,6 +24,10 @@ BOOTSTRAP_MARKER="${RAG_BOOTSTRAP_MARKER:-/opt/resumesystem-rag-bootstrap-rollou
 
 [[ -f "$RELEASE_DIR/deploy/release-manifest.env" && -f "$SEED_FILE" ]] || {
   echo "Release manifest or canonical RAG fixture is missing" >&2
+  exit 1
+}
+command -v timeout >/dev/null 2>&1 || {
+  echo "GNU timeout is required for bounded RAG fixture requests" >&2
   exit 1
 }
 manifest_cr_status=0
@@ -104,12 +112,14 @@ cleanup_release_fixture() {
       cleanup_status=1
       continue
     fi
-    docker exec resume-agent python scripts/bootstrap_fixture.py delete \
+    timeout --signal=TERM --kill-after=10s 210s \
+      docker exec resume-agent python scripts/bootstrap_fixture.py delete \
       "$current_id" >/dev/null 2>&1 || cleanup_status=1
   done <<< "$db_ids"
   if [[ "$marker_document_id" =~ ^[1-9][0-9]*$ ]] \
     && ! grep -Fxq "$marker_document_id" <<< "$db_ids"; then
-    docker exec resume-agent python scripts/bootstrap_fixture.py delete \
+    timeout --signal=TERM --kill-after=10s 210s \
+      docker exec resume-agent python scripts/bootstrap_fixture.py delete \
       "$marker_document_id" >/dev/null 2>&1 || cleanup_status=1
   fi
 
@@ -133,8 +143,14 @@ cleanup_release_fixture() {
     || cleanup_status=1
 
   if [[ "$cleanup_status" -eq 0 ]]; then
-    rm -f -- "$BOOTSTRAP_MARKER"
-    sync -f "$(dirname "$BOOTSTRAP_MARKER")"
+    if ! rm -f -- "$BOOTSTRAP_MARKER"; then
+      echo "RAG fixture cleanup passed but marker deletion failed" >&2
+      return 1
+    fi
+    if ! sync -f "$(dirname "$BOOTSTRAP_MARKER")"; then
+      echo "RAG fixture cleanup passed but marker deletion was not durable" >&2
+      return 1
+    fi
     return 0
   fi
   echo "RAG fixture cleanup is incomplete; durable marker retained" >&2
@@ -230,7 +246,8 @@ document_id="$(mysql_query \
 persist_bootstrap_marker prepared "$document_id"
 
 docker cp "$SEED_FILE" "resume-agent:$agent_fixture_path"
-index_result="$(docker exec resume-agent python scripts/bootstrap_fixture.py index \
+index_result="$(timeout --signal=TERM --kill-after=10s 210s \
+  docker exec resume-agent python scripts/bootstrap_fixture.py index \
   "$document_id" "$agent_fixture_path")"
 [[ "$index_result" =~ ^OK\|${document_id}\|([1-9][0-9]*)\|fastembed\|.+$ ]]
 chunk_count="${BASH_REMATCH[1]}"

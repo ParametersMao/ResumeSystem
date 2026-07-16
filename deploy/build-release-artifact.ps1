@@ -75,7 +75,8 @@ $requiredTrackedFiles = @(
   'deploy/rollout-guard.sh',
   'deploy/systemd/resumesystem-rollout-guard.service',
   'deploy/systemd/resumesystem-rollout-proxy-guard.service',
-  'deploy/systemd/resumesystem-backup-recovery.service'
+  'deploy/systemd/resumesystem-backup-recovery.service',
+  'deploy/tests/agent-fixture-memory.test.ps1'
 )
 foreach ($requiredFile in $requiredTrackedFiles) {
   git ls-files --error-unmatch -- $requiredFile 2>$null | Out-Null
@@ -263,6 +264,14 @@ foreach ($entry in $images.GetEnumerator()) {
   }
   $records += $imageRecord
 }
+
+# Reproduce the production failure mode before creating an immutable archive:
+# PID 1 holds the warm ONNX model while the canonical fixture is indexed under
+# the exact 512 MiB Agent limit. A lightweight CLI-only probe is insufficient.
+& (Join-Path $scriptRoot 'tests/agent-fixture-memory.test.ps1') `
+  -AgentImage $images['AGENT_IMAGE'].Target `
+  -QdrantImage $images['QDRANT_IMAGE'].Target `
+  -FixturePath (Join-Path $repositoryRoot 'docs/knowledge-base/resume-writing-standard-v1.md')
 
 $imageReferences = @($records | ForEach-Object { $_.reference })
 & docker save --output $tarPath @imageReferences
