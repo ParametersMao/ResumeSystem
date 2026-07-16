@@ -338,6 +338,24 @@ health_timer_was_enabled=disabled
 health_timer_was_active=inactive
 backup_timer_was_enabled=disabled
 backup_timer_was_active=inactive
+restore_saved_timer_state() {
+  local unit="$1"
+  local enabled_state="$2"
+  local active_state="$3"
+  case "$enabled_state" in
+    enabled) systemctl enable "$unit" >/dev/null || return 1 ;;
+    enabled-runtime) systemctl enable --runtime "$unit" >/dev/null || return 1 ;;
+    disabled) systemctl disable "$unit" >/dev/null 2>&1 || return 1 ;;
+    *) return 1 ;;
+  esac
+  if [[ "$active_state" == "active" ]]; then
+    systemctl start "$unit" || return 1
+  else
+    systemctl stop "$unit" >/dev/null 2>&1 || return 1
+  fi
+  [[ "$(systemctl is-enabled "$unit" 2>/dev/null || true)" == "$enabled_state" \
+    && "$(systemctl is-active "$unit" 2>/dev/null || true)" == "$active_state" ]]
+}
 rollback_on_error() {
   local exit_code="${1:-1}"
   trap - ERR HUP INT TERM
@@ -378,36 +396,45 @@ rollback_on_error() {
       docker stop --time 10 resume-proxy >/dev/null 2>&1 || true
       echo "Automatic rollback or RAG compensation was incomplete; public traffic remains stopped" >&2
     else
-      if maintenance_disable >/dev/null 2>&1; then
-        marker_commit_failed=false
-        # Pending is advisory; the complete rollout marker is the recovery
-        # record and must be unlinked last. Because this handler deliberately
-        # runs with traps disabled, check the pre-commit steps explicitly.
+      marker_commit_failed=false
+      rollback_reopen_failed=false
+      # Restore non-public timer state before committing marker deletion. A
+      # timer failure therefore remains retryable while the maintenance
+      # firewall and stopped proxy keep public traffic closed.
+      restore_saved_timer_state resumesystem-health.timer \
+        "$health_timer_was_enabled" "$health_timer_was_active" \
+        || rollback_reopen_failed=true
+      restore_saved_timer_state resumesystem-backup.timer \
+        "$backup_timer_was_enabled" "$backup_timer_was_active" \
+        || rollback_reopen_failed=true
+      if [[ "$rollback_reopen_failed" != "true" ]]; then
+        # This handler runs with traps disabled, so commit explicitly. Pending
+        # is advisory and the complete rollout marker is unlinked last.
         rm -f -- /opt/resumesystem-release-pending.env \
           || marker_commit_failed=true
         if [[ "$marker_commit_failed" != "true" ]]; then
           sync -f /opt || marker_commit_failed=true
         fi
         if [[ "$marker_commit_failed" != "true" ]]; then
-          if rm -f -- "$rollout_marker"; then
-            # The verified rollback is already the terminal state. A directory
-            # fsync failure may resurrect the rollout marker after a crash, in
-            # which case the boot guard safely closes traffic and recovery can
-            # be retried; do not manufacture a pending-only marker here.
-            sync -f /opt || echo "WARNING: rollback marker deletion could not be fsynced" >&2
-          else
-            marker_commit_failed=true
-          fi
+          rm -f -- "$rollout_marker" || marker_commit_failed=true
         fi
-        if [[ "$marker_commit_failed" == "true" ]]; then
-          maintenance_enable >/dev/null 2>&1 || true
-          docker stop --time 10 resume-proxy >/dev/null 2>&1 || true
-          echo "Automatic rollback passed but durable marker cleanup is incomplete; public traffic remains stopped" >&2
+        if [[ "$marker_commit_failed" != "true" ]]; then
+          sync -f /opt || marker_commit_failed=true
         fi
-      else
+      fi
+      if [[ "$marker_commit_failed" != "true" \
+        && "$rollback_reopen_failed" != "true" ]]; then
+        maintenance_disable >/dev/null 2>&1 || rollback_reopen_failed=true
+      fi
+      if [[ "$marker_commit_failed" == "true" \
+        || "$rollback_reopen_failed" == "true" ]]; then
         maintenance_enable >/dev/null 2>&1 || true
         docker stop --time 10 resume-proxy >/dev/null 2>&1 || true
-        echo "Automatic rollback passed but public traffic could not be safely reopened" >&2
+        if [[ "$marker_commit_failed" == "true" ]]; then
+          echo "Automatic rollback passed but durable marker cleanup is incomplete; public traffic remains stopped" >&2
+        else
+          echo "Automatic rollback passed but timers or public traffic could not be safely restored" >&2
+        fi
       fi
     fi
   fi
@@ -455,6 +482,18 @@ health_timer_was_enabled="$(systemctl is-enabled resumesystem-health.timer 2>/de
 health_timer_was_active="$(systemctl is-active resumesystem-health.timer 2>/dev/null || true)"
 backup_timer_was_enabled="$(systemctl is-enabled resumesystem-backup.timer 2>/dev/null || true)"
 backup_timer_was_active="$(systemctl is-active resumesystem-backup.timer 2>/dev/null || true)"
+for timer_state in "$health_timer_was_enabled" "$backup_timer_was_enabled"; do
+  [[ "$timer_state" =~ ^(enabled|enabled-runtime|disabled)$ ]] || {
+    echo "Production timer enablement is not safely restorable: $timer_state" >&2
+    exit 1
+  }
+done
+for timer_state in "$health_timer_was_active" "$backup_timer_was_active"; do
+  [[ "$timer_state" =~ ^(active|inactive)$ ]] || {
+    echo "Production timer activity is not safely restorable: $timer_state" >&2
+    exit 1
+  }
+done
 
 # Persist the unsafe rollout state before changing containers. The boot guard
 # is installed and enabled first, so a host reboot keeps 80/443 closed even if

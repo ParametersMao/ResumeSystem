@@ -198,10 +198,7 @@ persist_backup_marker() {
 }
 clear_backup_marker() {
   rm -f -- "$BACKUP_FREEZE_MARKER" || return 1
-  if ! sync -f /opt; then
-    [[ ! -e "$BACKUP_FREEZE_MARKER" ]] && return 0
-    return 1
-  fi
+  sync -f /opt
 }
 wait_container_health() {
   local container="$1"
@@ -243,7 +240,6 @@ recover_frozen_stack() {
   wait_container_health resume-proxy 30 || return 1
   RAG_REQUIRED="$recovery_rag_required" ENV_FILE="$ENV_FILE" \
     "$SCRIPT_DIR/recovery-acceptance.sh" || return 1
-  maintenance_disable
 }
 cleanup_on_error() {
   local exit_code="${1:-1}"
@@ -254,6 +250,9 @@ cleanup_on_error() {
     recovery_status=$?
     if [[ "$recovery_status" -eq 0 ]]; then
       clear_backup_marker || recovery_status=1
+    fi
+    if [[ "$recovery_status" -eq 0 && "$KEEP_PROXY_STOPPED" != "true" ]]; then
+      maintenance_disable || recovery_status=1
     fi
     if [[ "$recovery_status" -ne 0 ]]; then
       close_public_traffic
@@ -300,6 +299,10 @@ recover_frozen_stack \
   || fail_backup "Application services did not recover after the backup freeze"
 clear_backup_marker \
   || fail_backup "Durable backup freeze marker could not be committed"
+if [[ "$KEEP_PROXY_STOPPED" != "true" ]]; then
+  maintenance_disable \
+    || fail_backup "Verified backup runtime could not safely reopen public traffic"
+fi
 stack_stopped=false
 
 tar -czf "$TEMP_DIR/source-with-env.tar.gz" \

@@ -20,9 +20,11 @@ RAG_BOOTSTRAP_MARKER="${RAG_BOOTSTRAP_MARKER:-/opt/resumesystem-rag-bootstrap-ro
   echo "Current release or pending rollout marker is missing" >&2
   exit 1
 }
-[[ "$(stat -c '%u:%a' "$PENDING_FILE")" == "0:600" \
+[[ ! -L "$ENV_FILE" && ! -L "$PENDING_FILE" && ! -L "$ROLLOUT_MARKER" \
+  && "$(stat -c '%u:%a' "$ENV_FILE")" == "0:600" \
+  && "$(stat -c '%u:%a' "$PENDING_FILE")" == "0:600" \
   && "$(stat -c '%u:%a' "$ROLLOUT_MARKER")" == "0:600" ]] || {
-  echo "Pending and rollout markers must be root-owned mode-600 files" >&2
+  echo "Release env, pending marker and rollout marker must be root-owned mode-600 regular files" >&2
   exit 1
 }
 readonly EXPECTED_COMMIT RELEASE_DIR ENV_FILE PENDING_FILE ROLLOUT_MARKER
@@ -92,24 +94,42 @@ flock -n 9 || {
 }
 export RESUMESYSTEM_OPERATION_LOCK_HELD=true
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-# shellcheck disable=SC1090
-source "$PENDING_FILE"
-set +a
-[[ "${RELEASE_COMMIT:-}" == "$EXPECTED_COMMIT" \
-  && "${PENDING_RELEASE_COMMIT:-}" == "$EXPECTED_COMMIT" \
-  && "${PENDING_DEPLOYED_EPOCH:-}" =~ ^[1-9][0-9]{0,11}$ ]] || {
+strict_value() {
+  local file="$1"
+  local key="$2"
+  local -a values=()
+  mapfile -t values < <(
+    awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$file"
+  )
+  [[ "${#values[@]}" -eq 1 && -n "${values[0]}" ]] || return 1
+  printf '%s' "${values[0]}"
+}
+release_commit="$(strict_value "$ENV_FILE" RELEASE_COMMIT)" || {
+  echo "Release env has an invalid commit binding" >&2
+  fail_finalize 1
+}
+PENDING_RELEASE_COMMIT="$(strict_value "$PENDING_FILE" PENDING_RELEASE_COMMIT)" || {
+  echo "Pending marker has an invalid release binding" >&2
+  fail_finalize 1
+}
+PENDING_DEPLOYED_EPOCH="$(strict_value "$PENDING_FILE" PENDING_DEPLOYED_EPOCH)" || {
+  echo "Pending marker has an invalid deployment epoch" >&2
+  fail_finalize 1
+}
+[[ "$release_commit" == "$EXPECTED_COMMIT" \
+  && "$PENDING_RELEASE_COMMIT" == "$EXPECTED_COMMIT" \
+  && "$PENDING_DEPLOYED_EPOCH" =~ ^[1-9][0-9]{0,11}$ ]] || {
   echo "Pending rollout marker does not match the current release" >&2
   fail_finalize 1
 }
 pending_validated=true
-rollout_marker_state="$(awk -F= '$1 == "ROLLOUT_STATE" {print $2}' "$ROLLOUT_MARKER")"
-rollout_marker_phase="$(awk -F= '$1 == "ROLLOUT_PHASE" {print $2}' "$ROLLOUT_MARKER")"
-rollout_marker_commit="$(awk -F= '$1 == "ROLLOUT_RELEASE_COMMIT" {print $2}' "$ROLLOUT_MARKER")"
+rollout_marker_state="$(strict_value "$ROLLOUT_MARKER" ROLLOUT_STATE)" || false
+rollout_marker_operation="$(strict_value "$ROLLOUT_MARKER" ROLLOUT_OPERATION)" || false
+rollout_marker_phase="$(strict_value "$ROLLOUT_MARKER" ROLLOUT_PHASE)" || false
+rollout_marker_commit="$(strict_value "$ROLLOUT_MARKER" ROLLOUT_RELEASE_COMMIT)" || false
 [[ "$(stat -c '%u:%a' "$ROLLOUT_MARKER")" == "0:600" \
   && "$rollout_marker_state" == "pending" \
+  && "$rollout_marker_operation" == "deploy" \
   && "$rollout_marker_phase" == "pending" \
   && "$rollout_marker_commit" == "$EXPECTED_COMMIT" ]] || {
   echo "Durable rollout context does not match the pending release" >&2
@@ -117,9 +137,14 @@ rollout_marker_commit="$(awk -F= '$1 == "ROLLOUT_RELEASE_COMMIT" {print $2}' "$R
 }
 
 if [[ -f "$RAG_BOOTSTRAP_MARKER" ]]; then
-  bootstrap_marker_state="$(awk -F= '$1 == "RAG_BOOTSTRAP_STATE" {print $2}' "$RAG_BOOTSTRAP_MARKER")"
-  bootstrap_marker_commit="$(awk -F= '$1 == "RAG_BOOTSTRAP_RELEASE_COMMIT" {print $2}' "$RAG_BOOTSTRAP_MARKER")"
-  bootstrap_marker_document_id="$(awk -F= '$1 == "RAG_BOOTSTRAP_DOCUMENT_ID" {print $2}' "$RAG_BOOTSTRAP_MARKER")"
+  [[ ! -L "$RAG_BOOTSTRAP_MARKER" \
+    && "$(stat -c '%u:%a' "$RAG_BOOTSTRAP_MARKER")" == "0:600" ]] || {
+    echo "RAG bootstrap marker must be a root-owned mode-600 regular file" >&2
+    false
+  }
+  bootstrap_marker_state="$(strict_value "$RAG_BOOTSTRAP_MARKER" RAG_BOOTSTRAP_STATE)" || false
+  bootstrap_marker_commit="$(strict_value "$RAG_BOOTSTRAP_MARKER" RAG_BOOTSTRAP_RELEASE_COMMIT)" || false
+  bootstrap_marker_document_id="$(strict_value "$RAG_BOOTSTRAP_MARKER" RAG_BOOTSTRAP_DOCUMENT_ID)" || false
   [[ "$bootstrap_marker_state" == "created" \
     && "$bootstrap_marker_commit" == "$EXPECTED_COMMIT" \
     && "$bootstrap_marker_document_id" =~ ^[1-9][0-9]*$ ]] || {
@@ -210,20 +235,18 @@ systemctl enable --now resumesystem-health.timer resumesystem-backup.timer
 systemctl is-active --quiet resumesystem-health.timer
 systemctl is-active --quiet resumesystem-backup.timer
 
-# Reopen only after monitoring is active. Keep the pending marker until the
-# firewall transition succeeds, so a reboot in this tiny window remains closed.
-maintenance_disable
-
-# Commit a verified terminal state without ever leaving a pending-only marker.
-# While traps are active, remove pending (and the now-committed fixture marker)
-# first and fsync the directory; any failure therefore leaves the complete
-# rollout context recoverable. The rollout marker is the commit record and is
-# removed last with failure traps disabled: a kill before its unlink leaves a
-# rollout-only recovery state, while a kill after it is a finalized release.
+# Commit the verified terminal state while public traffic remains fail-closed.
+# Remove pending (and the now-committed fixture marker) first, then the complete
+# rollout record. Traps remain active through both directory syncs, so any
+# failure re-closes the proxy and never exposes traffic beside a durable marker.
 terminal_commit_started=true
 rm -f -- "$PENDING_FILE" "$RAG_BOOTSTRAP_MARKER"
 sync -f "$(dirname "$PENDING_FILE")"
-trap - ERR HUP INT TERM
 rm -f -- "$ROLLOUT_MARKER"
 sync -f "$(dirname "$ROLLOUT_MARKER")"
+
+# Monitoring is active and all durable rollout markers are committed absent.
+# Only this final transition may reopen public traffic.
+maintenance_disable
+trap - ERR HUP INT TERM
 echo "finalize-release: passed ($EXPECTED_COMMIT); health and backup timers enabled"

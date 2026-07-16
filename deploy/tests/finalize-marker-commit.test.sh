@@ -21,10 +21,19 @@ rm -f -- "$PENDING" "$ROLLOUT" "$RAG_MARKER"
 rm -rf -- /mock/finalize-bin /tmp/resumesystem-finalize-systemctl
 mkdir -p "$RELEASE/deploy" /mock/finalize-bin /tmp/resumesystem-finalize-systemctl /run/lock
 printf 'RELEASE_COMMIT=%s\n' "$COMMIT" > "$RELEASE/.env"
+chmod 0600 "$RELEASE/.env"
 printf 'services: {}\n' > "$RELEASE/docker-compose.prod.yml"
 cat > "$RELEASE/deploy/maintenance-firewall.sh" <<'EOF'
 maintenance_enable() { printf 'maintenance-enable\n' >> /tmp/resumesystem-finalize-marker-test.log; }
-maintenance_disable() { printf 'maintenance-disable\n' >> /tmp/resumesystem-finalize-marker-test.log; }
+maintenance_disable() {
+  [[ ! -e /opt/resumesystem-release-pending.env \
+    && ! -e /opt/resumesystem-rollout-in-progress.env ]] || {
+    printf 'maintenance-disable-before-marker-commit\n' \
+      >> /tmp/resumesystem-finalize-marker-test.log
+    return 1
+  }
+  printf 'maintenance-disable\n' >> /tmp/resumesystem-finalize-marker-test.log
+}
 EOF
 for helper in recovery-acceptance.sh backup.sh health-check.sh; do
   cat > "$RELEASE/deploy/$helper" <<'EOF'
@@ -103,6 +112,41 @@ write_markers() {
 
 : > "$TEST_LOG"
 write_markers
+printf 'RELEASE_COMMIT=%s\n' "$COMMIT" >> "$RELEASE/.env"
+if "$REPO_ROOT/deploy/finalize-release.sh" --confirm "$COMMIT" >/dev/null 2>&1; then
+  echo "Finalization accepted a duplicate release env binding" >&2
+  exit 1
+fi
+[[ -f "$PENDING" && -f "$ROLLOUT" && -f "$RAG_MARKER" ]]
+printf 'RELEASE_COMMIT=%s\n' "$COMMIT" > "$RELEASE/.env"
+chmod 0600 "$RELEASE/.env"
+
+write_markers
+printf 'PENDING_DEPLOYED_EPOCH=\n' >> "$PENDING"
+if "$REPO_ROOT/deploy/finalize-release.sh" --confirm "$COMMIT" >/dev/null 2>&1; then
+  echo "Finalization accepted a duplicate pending marker binding" >&2
+  exit 1
+fi
+[[ -f "$PENDING" && -f "$ROLLOUT" && -f "$RAG_MARKER" ]]
+
+write_markers
+printf 'ROLLOUT_PHASE=\n' >> "$ROLLOUT"
+if "$REPO_ROOT/deploy/finalize-release.sh" --confirm "$COMMIT" >/dev/null 2>&1; then
+  echo "Finalization accepted a duplicate rollout marker binding" >&2
+  exit 1
+fi
+[[ -f "$PENDING" && -f "$ROLLOUT" && -f "$RAG_MARKER" ]]
+
+write_markers
+printf 'RAG_BOOTSTRAP_DOCUMENT_ID=\n' >> "$RAG_MARKER"
+if "$REPO_ROOT/deploy/finalize-release.sh" --confirm "$COMMIT" >/dev/null 2>&1; then
+  echo "Finalization accepted a duplicate RAG marker binding" >&2
+  exit 1
+fi
+[[ -f "$PENDING" && -f "$ROLLOUT" && -f "$RAG_MARKER" ]]
+
+: > "$TEST_LOG"
+write_markers
 if FAIL_SYNC_WHEN_ROLLOUT_ONLY=true \
   "$REPO_ROOT/deploy/finalize-release.sh" --confirm "$COMMIT"; then
   echo "Finalization unexpectedly passed the injected marker fsync failure" >&2
@@ -116,5 +160,10 @@ grep -Fxq maintenance-enable "$TEST_LOG"
 write_markers
 "$REPO_ROOT/deploy/finalize-release.sh" --confirm "$COMMIT"
 [[ ! -e "$PENDING" && ! -e "$ROLLOUT" && ! -e "$RAG_MARKER" ]]
+grep -Fxq maintenance-disable "$TEST_LOG"
+if grep -Fxq maintenance-disable-before-marker-commit "$TEST_LOG"; then
+  echo "Finalization reopened traffic before committing marker deletion" >&2
+  exit 1
+fi
 
 echo "finalize-marker-commit.test: passed"

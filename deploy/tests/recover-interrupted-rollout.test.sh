@@ -56,7 +56,15 @@ make_backup "$SAFETY_BACKUP" "$PREVIOUS_COMMIT"
 
 cat > "$RUNTIME/maintenance-firewall.sh" <<'EOF'
 maintenance_enable() { printf 'maintenance-enable\n' >> /tmp/resumesystem-recovery-test.log; }
-maintenance_disable() { printf 'maintenance-disable\n' >> /tmp/resumesystem-recovery-test.log; }
+maintenance_disable() {
+  [[ ! -e /opt/resumesystem-rollout-in-progress.env \
+    && ! -e /opt/resumesystem-release-pending.env ]] || {
+    printf 'maintenance-disable-before-marker-commit\n' \
+      >> /tmp/resumesystem-recovery-test.log
+    return 1
+  }
+  printf 'maintenance-disable\n' >> /tmp/resumesystem-recovery-test.log
+}
 EOF
 cat > "$RUNTIME/recovery-acceptance.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -90,6 +98,33 @@ EOF
 cat > /mock/bin/systemctl <<'EOF'
 #!/usr/bin/env bash
 printf 'systemctl:%s\n' "$*" >> /tmp/resumesystem-recovery-test.log
+case "${1:-}" in
+  enable|disable|start|stop)
+    [[ -f /opt/resumesystem-rollout-in-progress.env ]] || {
+      printf 'systemctl-after-marker-commit:%s\n' "$*" \
+        >> /tmp/resumesystem-recovery-test.log
+      exit 1
+    }
+    ;;
+esac
+unit="${*: -1}"
+safe_unit="${unit//[^a-zA-Z0-9_.-]/_}"
+enabled_file="/tmp/systemctl-enabled-$safe_unit"
+active_file="/tmp/systemctl-active-$safe_unit"
+case "${1:-}" in
+  enable)
+    if [[ "${2:-}" == --runtime ]]; then
+      printf 'enabled-runtime\n' > "$enabled_file"
+    else
+      printf 'enabled\n' > "$enabled_file"
+    fi
+    ;;
+  disable) printf 'disabled\n' > "$enabled_file" ;;
+  start) printf 'active\n' > "$active_file" ;;
+  stop) printf 'inactive\n' > "$active_file" ;;
+  is-enabled) cat "$enabled_file" 2>/dev/null || printf 'disabled\n' ;;
+  is-active) cat "$active_file" 2>/dev/null || printf 'inactive\n' ;;
+esac
 exit 0
 EOF
 cat > /mock/bin/flock <<'EOF'
@@ -175,6 +210,48 @@ run_recovery() {
   [[ ! -e "$MARKER" && ! -e "$PENDING" ]]
 }
 
+# Empty and non-empty duplicate bindings must both be rejected before any
+# recovery mutation. Command substitution must not hide the empty duplicate.
+ln -sfn "$CANDIDATE" /opt/resumesystem-current
+write_marker deploy pending pending "$CANDIDATE"
+printf 'ROLLOUT_STATE=\n' >> "$MARKER"
+if "$REPO_ROOT/deploy/recover-interrupted-rollout.sh" --confirm "$MARKER"; then
+  echo "Recovery accepted a duplicate marker binding" >&2
+  exit 1
+fi
+[[ -f "$MARKER" && "$(readlink -f /opt/resumesystem-current)" == "$CANDIDATE" ]]
+
+write_marker deploy pending pending "$CANDIDATE"
+printf 'PENDING_RELEASE_COMMIT=%s\nPENDING_DEPLOYED_EPOCH=100\nPENDING_DEPLOYED_EPOCH=\n' \
+  "$TARGET_COMMIT" > "$PENDING"
+chmod 0600 "$PENDING"
+if "$REPO_ROOT/deploy/recover-interrupted-rollout.sh" --confirm "$MARKER"; then
+  echo "Recovery accepted a duplicate pending marker binding" >&2
+  exit 1
+fi
+[[ -f "$MARKER" && -f "$PENDING" ]]
+rm -f "$PENDING"
+
+write_marker deploy pending pending "$CANDIDATE"
+sed -i 's/ROLLOUT_HEALTH_TIMER_ENABLED=enabled/ROLLOUT_HEALTH_TIMER_ENABLED=masked/' \
+  "$MARKER"
+if "$REPO_ROOT/deploy/recover-interrupted-rollout.sh" --confirm "$MARKER"; then
+  echo "Recovery accepted a timer state that cannot be restored exactly" >&2
+  exit 1
+fi
+[[ -f "$MARKER" && "$(readlink -f /opt/resumesystem-current)" == "$CANDIDATE" ]]
+
+write_marker deploy pending pending "$CANDIDATE"
+printf 'RELEASE_COMMIT=%s\n' "$TARGET_COMMIT" >> "$CANDIDATE/.env"
+if "$REPO_ROOT/deploy/recover-interrupted-rollout.sh" --confirm "$MARKER"; then
+  echo "Recovery accepted a duplicate candidate env binding" >&2
+  exit 1
+fi
+[[ -f "$MARKER" && "$(readlink -f /opt/resumesystem-current)" == "$CANDIDATE" ]]
+printf 'RELEASE_COMMIT=%s\nRELEASE_ARTIFACT_MANIFEST=%s\nRELEASE_ARTIFACT_CHECKSUMS=%s\n' \
+  "$TARGET_COMMIT" "$ARTIFACT_MANIFEST" "$ARTIFACT_CHECKSUMS" > "$CANDIDATE/.env"
+chmod 0600 "$CANDIDATE/.env"
+
 : > "$TEST_LOG"
 ln -sfn "$CANDIDATE" /opt/resumesystem-current
 
@@ -211,8 +288,20 @@ run_recovery
 grep -Fxq "data-recovery:$SAFETY_BACKUP" "$TEST_LOG"
 
 write_marker restore pre-safety
+sed -i 's/ROLLOUT_HEALTH_TIMER_ENABLED=enabled/ROLLOUT_HEALTH_TIMER_ENABLED=enabled-runtime/' \
+  "$MARKER"
 run_recovery
 grep -Fxq 'acceptance:true' "$TEST_LOG"
 grep -Fxq 'maintenance-disable' "$TEST_LOG"
+if grep -Fxq 'maintenance-disable-before-marker-commit' "$TEST_LOG"; then
+  echo "Recovery reopened traffic before committing marker deletion" >&2
+  exit 1
+fi
+if grep -Fq 'systemctl-after-marker-commit:' "$TEST_LOG"; then
+  echo "Recovery restored timer state after deleting its retry marker" >&2
+  exit 1
+fi
+grep -Fxq 'systemctl:enable resumesystem-health.timer' "$TEST_LOG"
+grep -Fxq 'systemctl:enable --runtime resumesystem-health.timer' "$TEST_LOG"
 
 echo "recover-interrupted-rollout.test: passed"

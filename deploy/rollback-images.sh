@@ -187,21 +187,25 @@ restore_timer_state() {
   local enabled_state="$2"
   local active_state="$3"
   case "$enabled_state" in
-    enabled|enabled-runtime) systemctl enable "$unit" >/dev/null ;;
-    disabled|masked|not-found|"") systemctl disable "$unit" >/dev/null 2>&1 || true ;;
+    enabled) systemctl enable "$unit" >/dev/null ;;
+    enabled-runtime) systemctl enable --runtime "$unit" >/dev/null ;;
+    disabled) systemctl disable "$unit" >/dev/null 2>&1 || fail_rollback 1 "Could not disable $unit" ;;
     *) fail_rollback 1 "Invalid saved enabled state for $unit" ;;
   esac
   if [[ "$active_state" == "active" ]]; then
     systemctl start "$unit"
   else
-    systemctl stop "$unit" >/dev/null 2>&1 || true
+    systemctl stop "$unit" >/dev/null 2>&1 || fail_rollback 1 "Could not stop $unit"
   fi
+  [[ "$(systemctl is-enabled "$unit" 2>/dev/null || true)" == "$enabled_state" \
+    && "$(systemctl is-active "$unit" 2>/dev/null || true)" == "$active_state" ]] \
+    || fail_rollback 1 "Timer state postcondition failed for $unit"
 }
-restore_timer_state resumesystem-health.timer \
-  "${RESTORE_HEALTH_TIMER_ENABLED:-enabled}" "${RESTORE_HEALTH_TIMER_ACTIVE:-active}"
-restore_timer_state resumesystem-backup.timer \
-  "${RESTORE_BACKUP_TIMER_ENABLED:-enabled}" "${RESTORE_BACKUP_TIMER_ACTIVE:-active}"
 if [[ "$KEEP_TRAFFIC_CLOSED" != "true" ]]; then
+  restore_timer_state resumesystem-health.timer \
+    "${RESTORE_HEALTH_TIMER_ENABLED:-enabled}" "${RESTORE_HEALTH_TIMER_ACTIVE:-active}"
+  restore_timer_state resumesystem-backup.timer \
+    "${RESTORE_BACKUP_TIMER_ENABLED:-enabled}" "${RESTORE_BACKUP_TIMER_ACTIVE:-active}"
   maintenance_disable || fail_rollback 1 "Could not reopen verified rollback traffic"
 fi
 trap - ERR HUP INT TERM

@@ -20,10 +20,22 @@ fi
 
 marker_value() {
   local key="$1"
-  local values
-  values="$(awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$MARKER")"
-  [[ "$(printf '%s\n' "$values" | sed '/^$/d' | wc -l)" -eq 1 ]] || return 1
-  printf '%s' "$values"
+  local -a values=()
+  mapfile -t values < <(
+    awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$MARKER"
+  )
+  [[ "${#values[@]}" -eq 1 && -n "${values[0]}" ]] || return 1
+  printf '%s' "${values[0]}"
+}
+env_value() {
+  local file="$1"
+  local key="$2"
+  local -a values=()
+  mapfile -t values < <(
+    awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$file"
+  )
+  [[ "${#values[@]}" -eq 1 && -n "${values[0]}" ]] || return 1
+  printf '%s' "${values[0]}"
 }
 canonical_path() {
   local requested="$1"
@@ -65,8 +77,10 @@ current_release="$(readlink -f /opt/resumesystem-current 2>/dev/null || true)"
   echo "Interrupted backup immutable release context is invalid" >&2
   exit 1
 }
-release_env_commit="$(awk -F= '$1 == "RELEASE_COMMIT" {print $2}' \
-  "$release_dir/.env" | tail -1 | tr -d '\r')"
+release_env_commit="$(env_value "$release_dir/.env" RELEASE_COMMIT)" || {
+  echo "Interrupted backup release env has an invalid commit binding" >&2
+  exit 1
+}
 [[ "$release_env_commit" == "$BACKUP_RELEASE_COMMIT" ]] || {
   echo "Interrupted backup release commit does not match its immutable env" >&2
   exit 1
@@ -142,12 +156,7 @@ fail_recovery() {
 }
 clear_backup_marker() {
   rm -f -- "$MARKER" || return 1
-  if ! sync -f /opt; then
-    # Once unlink has succeeded, an fsync error must not manufacture an
-    # unmarked outage. A reboot may conservatively replay the old marker.
-    [[ ! -e "$MARKER" ]] && return 0
-    return 1
-  fi
+  sync -f /opt
 }
 trap 'fail_recovery $?' ERR
 trap 'fail_recovery 129' HUP
@@ -177,11 +186,12 @@ else
   wait_container_health resume-proxy 30
   RAG_REQUIRED="$BACKUP_RAG_REQUIRED" ENV_FILE="$ENV_FILE" \
     "$runtime_dir/recovery-acceptance.sh"
+fi
+# Commit the accepted recovery while the maintenance firewall is still active.
+# A marker can therefore never coexist with deliberately reopened traffic.
+clear_backup_marker
+if [[ "$BACKUP_KEEP_PROXY_STOPPED" != "true" ]]; then
   maintenance_disable
 fi
-# The stack is now a verified terminal state. From this point a retained marker
-# is safe and retryable, while a removed marker means recovery is committed;
-# a signal must not re-close traffic after the unlink.
 trap - ERR HUP INT TERM
-clear_backup_marker
 echo "recover-interrupted-backup: restored $release_dir"

@@ -16,18 +16,22 @@ MARKER="$2"
 
 marker_value() {
   local key="$1"
-  local values
-  values="$(awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$MARKER")"
-  [[ "$(printf '%s\n' "$values" | sed '/^$/d' | wc -l)" -eq 1 ]] || return 1
-  printf '%s' "$values"
+  local -a values=()
+  mapfile -t values < <(
+    awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$MARKER"
+  )
+  [[ "${#values[@]}" -eq 1 && -n "${values[0]}" ]] || return 1
+  printf '%s' "${values[0]}"
 }
 env_value() {
   local file="$1"
   local key="$2"
-  local values
-  values="$(awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$file")"
-  [[ "$(printf '%s\n' "$values" | sed '/^$/d' | wc -l)" -eq 1 ]] || return 1
-  printf '%s' "$values"
+  local -a values=()
+  mapfile -t values < <(
+    awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$file"
+  )
+  [[ "${#values[@]}" -eq 1 && -n "${values[0]}" ]] || return 1
+  printf '%s' "${values[0]}"
 }
 canonical_path() {
   local requested="$1"
@@ -39,13 +43,13 @@ canonical_path() {
 validate_timer_states() {
   local state
   for state in "$ROLLOUT_HEALTH_TIMER_ENABLED" "$ROLLOUT_BACKUP_TIMER_ENABLED"; do
-    [[ "$state" =~ ^(enabled|enabled-runtime|disabled|masked|not-found)$ ]] || {
+    [[ "$state" =~ ^(enabled|enabled-runtime|disabled)$ ]] || {
       echo "Interrupted rollout marker has an invalid timer enabled state" >&2
       return 1
     }
   done
   for state in "$ROLLOUT_HEALTH_TIMER_ACTIVE" "$ROLLOUT_BACKUP_TIMER_ACTIVE"; do
-    [[ "$state" =~ ^(active|inactive|failed|unknown)$ ]] || {
+    [[ "$state" =~ ^(active|inactive)$ ]] || {
       echo "Interrupted rollout marker has an invalid timer active state" >&2
       return 1
     }
@@ -68,15 +72,18 @@ restore_timer_state() {
   local enabled_state="$2"
   local active_state="$3"
   case "$enabled_state" in
-    enabled|enabled-runtime) systemctl enable "$unit" >/dev/null ;;
-    disabled|masked|not-found) systemctl disable "$unit" >/dev/null 2>&1 || true ;;
+    enabled) systemctl enable "$unit" >/dev/null ;;
+    enabled-runtime) systemctl enable --runtime "$unit" >/dev/null ;;
+    disabled) systemctl disable "$unit" >/dev/null 2>&1 || return 1 ;;
     *) return 1 ;;
   esac
   if [[ "$active_state" == "active" ]]; then
     systemctl start "$unit"
   else
-    systemctl stop "$unit" >/dev/null 2>&1 || true
+    systemctl stop "$unit" >/dev/null 2>&1 || return 1
   fi
+  [[ "$(systemctl is-enabled "$unit" 2>/dev/null || true)" == "$enabled_state" \
+    && "$(systemctl is-active "$unit" 2>/dev/null || true)" == "$active_state" ]]
 }
 stack_images_match_backup() {
   local container expected actual
@@ -132,6 +139,25 @@ ROLLOUT_STARTED_EPOCH="$(marker_value ROLLOUT_STARTED_EPOCH)"
   exit 1
 }
 validate_timer_states
+if [[ -f "$PENDING_FILE" ]]; then
+  [[ ! -L "$PENDING_FILE" && "$(stat -c '%u:%a' "$PENDING_FILE")" == "0:600" ]] || {
+    echo "Pending marker must be a root-owned mode-600 regular file" >&2
+    exit 1
+  }
+  pending_commit="$(env_value "$PENDING_FILE" PENDING_RELEASE_COMMIT)" || {
+    echo "Pending marker has an invalid release binding" >&2
+    exit 1
+  }
+  pending_epoch="$(env_value "$PENDING_FILE" PENDING_DEPLOYED_EPOCH)" || {
+    echo "Pending marker has an invalid deployment epoch" >&2
+    exit 1
+  }
+  [[ "$pending_commit" == "$ROLLOUT_RELEASE_COMMIT" \
+    && "$pending_epoch" =~ ^[1-9][0-9]{0,11}$ ]] || {
+    echo "Pending marker does not match the interrupted rollout" >&2
+    exit 1
+  }
+fi
 backup_root="$(canonical_path "$ROLLOUT_BACKUP_ROOT")" || {
   echo "Backup root must not traverse symlinks" >&2
   exit 1
@@ -228,9 +254,20 @@ relink_previous_release() {
 }
 clear_recovery_markers() {
   if [[ -f "$PENDING_FILE" ]]; then
-    pending_commit="$(awk -F= '$1 == "PENDING_RELEASE_COMMIT" {print $2}' "$PENDING_FILE")"
+    pending_commit="$(env_value "$PENDING_FILE" PENDING_RELEASE_COMMIT)" || {
+      echo "Pending marker has an invalid release binding" >&2
+      return 1
+    }
+    pending_epoch="$(env_value "$PENDING_FILE" PENDING_DEPLOYED_EPOCH)" || {
+      echo "Pending marker has an invalid deployment epoch" >&2
+      return 1
+    }
     [[ "$pending_commit" == "$ROLLOUT_RELEASE_COMMIT" ]] || {
       echo "Pending marker belongs to another release" >&2
+      return 1
+    }
+    [[ "$pending_epoch" =~ ^[1-9][0-9]{0,11}$ ]] || {
+      echo "Pending marker has an invalid deployment epoch" >&2
       return 1
     }
   fi
@@ -239,9 +276,20 @@ clear_recovery_markers() {
   # which is retryable; it must never leave an unrecoverable pending-only state.
   rm -f -- "$PENDING_FILE"
   sync -f /opt
-  trap - ERR HUP INT TERM
   rm -f -- "$MARKER"
   sync -f /opt
+}
+complete_recovery() {
+  # Restore non-public timer state first so a failure remains fully retryable
+  # through the durable marker. The maintenance firewall and stopped proxy stay
+  # fail-closed until marker deletion has been committed.
+  restore_timer_state resumesystem-health.timer \
+    "$ROLLOUT_HEALTH_TIMER_ENABLED" "$ROLLOUT_HEALTH_TIMER_ACTIVE"
+  restore_timer_state resumesystem-backup.timer \
+    "$ROLLOUT_BACKUP_TIMER_ENABLED" "$ROLLOUT_BACKUP_TIMER_ACTIVE"
+  clear_recovery_markers
+  maintenance_disable
+  trap - ERR HUP INT TERM
 }
 
 close_public_traffic
@@ -412,13 +460,7 @@ PY
       }
       RAG_REQUIRED="$rag_ready" ENV_FILE="$previous_release/.env" \
         "$acceptance_runtime/recovery-acceptance.sh"
-      restore_timer_state resumesystem-health.timer \
-        "$ROLLOUT_HEALTH_TIMER_ENABLED" "$ROLLOUT_HEALTH_TIMER_ACTIVE"
-      restore_timer_state resumesystem-backup.timer \
-        "$ROLLOUT_BACKUP_TIMER_ENABLED" "$ROLLOUT_BACKUP_TIMER_ACTIVE"
-      maintenance_disable
-      clear_recovery_markers
-      trap - ERR HUP INT TERM
+      complete_recovery
       echo "recover-interrupted-rollout: accepted already-restored $previous_release from $backup_dir"
       exit 0
     fi
@@ -432,9 +474,7 @@ PY
     RESTORE_BACKUP_TIMER_ACTIVE="$ROLLOUT_BACKUP_TIMER_ACTIVE" \
     KEEP_TRAFFIC_CLOSED=true \
     "$SCRIPT_DIR/rollback-images.sh" --confirm "$backup_dir"
-  maintenance_disable
-  clear_recovery_markers
-  trap - ERR HUP INT TERM
+  complete_recovery
   echo "recover-interrupted-rollout: restored $previous_release from $backup_dir"
   exit 0
 fi
@@ -478,13 +518,7 @@ if [[ "$ROLLOUT_PHASE" == "pre-safety" ]]; then
   fi
   RAG_REQUIRED="$rag_ready" ENV_FILE="$previous_release/.env" \
     "$SCRIPT_DIR/recovery-acceptance.sh"
-  restore_timer_state resumesystem-health.timer \
-    "$ROLLOUT_HEALTH_TIMER_ENABLED" "$ROLLOUT_HEALTH_TIMER_ACTIVE"
-  restore_timer_state resumesystem-backup.timer \
-    "$ROLLOUT_BACKUP_TIMER_ENABLED" "$ROLLOUT_BACKUP_TIMER_ACTIVE"
-  maintenance_disable
-  clear_recovery_markers
-  trap - ERR HUP INT TERM
+  complete_recovery
   echo "recover-interrupted-rollout: original stack recovered before safety snapshot"
   exit 0
 fi
@@ -516,9 +550,7 @@ if [[ "$ROLLOUT_PHASE" == "pre-data" ]]; then
     RESTORE_BACKUP_TIMER_ACTIVE="$ROLLOUT_BACKUP_TIMER_ACTIVE" \
     KEEP_TRAFFIC_CLOSED=true \
     "$SCRIPT_DIR/rollback-images.sh" --confirm "$safety_backup"
-  maintenance_disable
-  clear_recovery_markers
-  trap - ERR HUP INT TERM
+  complete_recovery
   echo "recover-interrupted-rollout: restored pre-mutation runtime from $safety_backup"
   exit 0
 fi

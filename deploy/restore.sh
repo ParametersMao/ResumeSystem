@@ -55,10 +55,12 @@ done
 marker_value() {
   local marker="$1"
   local key="$2"
-  local values
-  values="$(awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$marker")"
-  [[ "$(printf '%s\n' "$values" | sed '/^$/d' | wc -l)" -eq 1 ]] || return 1
-  printf '%s' "$values"
+  local -a values=()
+  mapfile -t values < <(
+    awk -F= -v wanted="$key" '$1 == wanted {sub(/^[^=]*=/, ""); print}' "$marker"
+  )
+  [[ "${#values[@]}" -eq 1 && -n "${values[0]}" ]] || return 1
+  printf '%s' "${values[0]}"
 }
 
 if [[ "$RECOVERY_MODE" == "true" ]]; then
@@ -326,15 +328,18 @@ restore_timer_state() {
   local enabled_state="$2"
   local active_state="$3"
   case "$enabled_state" in
-    enabled|enabled-runtime) systemctl enable "$unit" >/dev/null || return 1 ;;
-    disabled|masked|not-found|"") systemctl disable "$unit" >/dev/null 2>&1 || true ;;
+    enabled) systemctl enable "$unit" >/dev/null || return 1 ;;
+    enabled-runtime) systemctl enable --runtime "$unit" >/dev/null || return 1 ;;
+    disabled) systemctl disable "$unit" >/dev/null 2>&1 || return 1 ;;
     *) return 1 ;;
   esac
   if [[ "$active_state" == "active" ]]; then
     systemctl start "$unit" || return 1
   else
-    systemctl stop "$unit" >/dev/null 2>&1 || true
+    systemctl stop "$unit" >/dev/null 2>&1 || return 1
   fi
+  [[ "$(systemctl is-enabled "$unit" 2>/dev/null || true)" == "$enabled_state" \
+    && "$(systemctl is-active "$unit" 2>/dev/null || true)" == "$active_state" ]]
 }
 fail_restore() {
   local exit_code="${1:-1}"
@@ -385,10 +390,10 @@ fail_restore() {
         || recovery_status=1
     fi
     if [[ "$recovery_status" -eq 0 ]]; then
-      maintenance_disable || recovery_status=1
+      clear_rollout_marker || recovery_status=1
     fi
     if [[ "$recovery_status" -eq 0 ]]; then
-      clear_rollout_marker || recovery_status=1
+      maintenance_disable || recovery_status=1
     fi
     if [[ "$recovery_status" -ne 0 ]]; then
       [[ -f "$ROLLOUT_MARKER" ]] || persist_rollout_marker >/dev/null 2>&1 || true
@@ -420,6 +425,18 @@ if [[ "$RECOVERY_MODE" != "true" ]]; then
   backup_timer_was_enabled="$(systemctl is-enabled resumesystem-backup.timer 2>/dev/null || true)"
   backup_timer_was_active="$(systemctl is-active resumesystem-backup.timer 2>/dev/null || true)"
 fi
+for timer_state in "$health_timer_was_enabled" "$backup_timer_was_enabled"; do
+  [[ "$timer_state" =~ ^(enabled|enabled-runtime|disabled)$ ]] || {
+    echo "Restore timer enablement is not safely restorable: $timer_state" >&2
+    exit 1
+  }
+done
+for timer_state in "$health_timer_was_active" "$backup_timer_was_active"; do
+  [[ "$timer_state" =~ ^(active|inactive)$ ]] || {
+    echo "Restore timer activity is not safely restorable: $timer_state" >&2
+    exit 1
+  }
+done
 
 # Persist the rollout intent before the first running-stack mutation. The
 # boot-time units installed above will keep ports 80/443 closed if power is
@@ -771,21 +788,32 @@ systemctl is-enabled --quiet resumesystem-rollout-proxy-guard.service
 systemctl is-enabled --quiet resumesystem-backup-recovery.service
 
 if [[ "$RECOVERY_MODE" == "true" ]]; then
+  # Restore non-public timer state while the recovery marker is still retryable
+  # and the maintenance firewall remains active.
   restore_timer_state resumesystem-health.timer \
     "$health_timer_was_enabled" "$health_timer_was_active" \
     || fail_restore 1 "Could not restore the health timer state"
   restore_timer_state resumesystem-backup.timer \
     "$backup_timer_was_enabled" "$backup_timer_was_active" \
     || fail_restore 1 "Could not restore the backup timer state"
-  maintenance_disable || fail_restore 1 "Could not reopen safety-backup traffic"
-  # Commit the verified recovery with the full rollout context removed last.
-  # Before traps are disabled, pending removal failures remain retryable through
-  # the rollout marker; after that point a kill is either rollout-only or done.
+  if [[ -f "$PENDING_FILE" ]]; then
+    pending_commit="$(marker_value "$PENDING_FILE" PENDING_RELEASE_COMMIT)" \
+      || fail_restore 1 "Pending restore marker has an invalid release binding"
+    pending_epoch="$(marker_value "$PENDING_FILE" PENDING_DEPLOYED_EPOCH)" \
+      || fail_restore 1 "Pending restore marker has an invalid deployment epoch"
+    [[ "$pending_commit" == "$recovery_release_commit" ]] \
+      || fail_restore 1 "Pending restore marker belongs to another release"
+    [[ "$pending_epoch" =~ ^[1-9][0-9]{0,11}$ ]] \
+      || fail_restore 1 "Pending restore marker has an invalid deployment epoch"
+  fi
+  # Commit the accepted recovery while public traffic is still fail-closed. A
+  # kill after marker deletion is either closed or fully recovered; it can no
+  # longer leave a durable recovery marker alongside reopened public traffic.
   rm -f -- "$PENDING_FILE"
   sync -f /opt
-  trap - ERR HUP INT TERM
   rm -f -- "$ROLLOUT_MARKER"
   sync -f /opt
+  maintenance_disable || fail_restore 1 "Could not reopen safety-backup traffic"
 else
   umask 077
   pending_epoch="$(date +%s)"

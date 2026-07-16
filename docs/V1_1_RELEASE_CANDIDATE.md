@@ -47,7 +47,7 @@
 
 - 应用回滚使用已验证备份中的镜像 ID 和 `deploy/rollback-images.sh`，全程 `--no-build`。
 - 数据库或向量数据发生不兼容变化时，先停止写入，再使用同一时间戳的 MySQL、Qdrant 和 uploads 三件套恢复。
-- 历史数据 restore 必须先生成不可淘汰的 safety backup，并在 `data-mutation` 前持久化其路径；异常掉电或 SIGKILL 后执行 `deploy/recover-interrupted-rollout.sh --confirm /opt/resumesystem-rollout-in-progress.env`，由 phase 决定恢复原栈、镜像，或用 safety backup 完整重放 MySQL/Qdrant/uploads/FastEmbed。
+- 历史数据 restore 必须先生成不可淘汰的 safety backup，并在 `data-mutation` 前持久化其路径；异常掉电或 SIGKILL 后执行 `deploy/recover-interrupted-rollout.sh --confirm /opt/resumesystem-rollout-in-progress.env`，由 phase 决定恢复原栈、镜像，或用 safety backup 完整重放 MySQL/Qdrant/uploads/FastEmbed。中断恢复验收通过后仍须保持维护规则，先恢复可精确回放的 timer 状态，再持久清除恢复 marker，最后才开放公网；任何中间失败都保持 fail-closed。
 - 禁止在脏工作区运行自动回滚，禁止仅恢复数据库而不恢复对应知识文件和向量集合。
 
 ## 当前已知非阻断项

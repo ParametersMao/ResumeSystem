@@ -19,7 +19,13 @@ printf 'services: {}\n' > "$RELEASE/docker-compose.prod.yml"
 
 cat > "$RUNTIME/maintenance-firewall.sh" <<'EOF'
 maintenance_enable() { echo maintenance_enable >> /tmp/resumesystem-backup-recovery.log; }
-maintenance_disable() { echo maintenance_disable >> /tmp/resumesystem-backup-recovery.log; }
+maintenance_disable() {
+  [[ ! -e /opt/resumesystem-backup-freeze.env ]] || {
+    echo maintenance_disable_before_marker_commit >> /tmp/resumesystem-backup-recovery.log
+    return 1
+  }
+  echo maintenance_disable >> /tmp/resumesystem-backup-recovery.log
+}
 EOF
 cat > "$RUNTIME/recovery-acceptance.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -74,6 +80,30 @@ run_recovery() {
     "$REPO_ROOT/deploy/recover-interrupted-backup.sh" --confirm "$MARKER"
 }
 
+# Exercise backup.sh's production marker-commit helper itself: a directory
+# fsync failure after unlink must be reported, never normalized to success.
+# shellcheck disable=SC2034
+BACKUP_FREEZE_MARKER="$MARKER"
+# shellcheck disable=SC2294
+eval "$(awk '/^clear_backup_marker\(\) \{/{capture=1} capture{print} capture && /^\}/{exit}' \
+  "$REPO_ROOT/deploy/backup.sh")"
+write_marker false
+if PATH="/mock/bin:$PATH" INJECT_DIR_SYNC_FAILURE=true clear_backup_marker; then
+  echo "backup.sh accepted a failed durable marker commit" >&2
+  exit 1
+fi
+[[ ! -e "$MARKER" ]]
+
+# Duplicate bindings, including an empty duplicate hidden by command
+# substitution, are never a valid durable recovery context.
+write_marker false
+printf 'BACKUP_RELEASE_COMMIT=\n' >> "$MARKER"
+if run_recovery >/dev/null 2>&1; then
+  echo "Backup recovery accepted a duplicate marker binding" >&2
+  exit 1
+fi
+[[ -f "$MARKER" ]]
+
 : > "$LOG"
 write_marker false
 run_recovery
@@ -98,17 +128,25 @@ fi
 run_recovery >/dev/null
 [[ ! -e "$MARKER" ]]
 
-# An fsync error after a successful unlink must not manufacture a false
-# recovery failure and an unmarked outage.
+# An fsync error after unlink is fail-closed even if the current namespace no
+# longer contains the marker; public traffic must not reopen without a durable
+# marker commit.
 : > "$LOG"
 write_marker false
-INJECT_DIR_SYNC_FAILURE=true run_recovery >/dev/null
+set +e
+INJECT_DIR_SYNC_FAILURE=true run_recovery >/dev/null 2>&1
+status=$?
+set -e
+[[ "$status" -ne 0 ]]
 [[ ! -e "$MARKER" ]]
-grep -Fxq maintenance_disable "$LOG"
+grep -Fq 'stop reverse-proxy' "$LOG"
+if grep -Fxq maintenance_disable "$LOG"; then
+  echo "Backup recovery reopened traffic after a marker fsync failure" >&2
+  exit 1
+fi
 
-# Inject HUP after the verified stack has reopened but before marker unlink.
-# Signal traps are deliberately disabled at that terminal boundary: traffic
-# stays healthy and the durable marker remains safely retryable.
+# Inject HUP during marker unlink. The trap remains active until the marker has
+# been committed, so traffic is re-closed and the marker remains retryable.
 : > "$LOG"
 write_marker false
 set +e
@@ -116,9 +154,9 @@ INJECT_RM_HUP=true run_recovery >/dev/null 2>&1
 status=$?
 set -e
 [[ "$status" -ne 0 && -f "$MARKER" ]]
-grep -Fxq maintenance_disable "$LOG"
-if grep -Fq 'stop reverse-proxy' "$LOG"; then
-  echo "Terminal HUP incorrectly re-closed verified traffic" >&2
+grep -Fq 'stop reverse-proxy' "$LOG"
+if grep -Fxq maintenance_disable "$LOG"; then
+  echo "Marker-unlink HUP unexpectedly reopened verified traffic" >&2
   exit 1
 fi
 run_recovery >/dev/null
@@ -132,6 +170,10 @@ run_recovery
 grep -Fq 'stop reverse-proxy' "$LOG"
 if grep -Fxq maintenance_disable "$LOG"; then
   echo "Enclosing rollout backup unexpectedly reopened traffic" >&2
+  exit 1
+fi
+if grep -Fxq maintenance_disable_before_marker_commit "$LOG"; then
+  echo "Backup recovery reopened traffic before marker deletion" >&2
   exit 1
 fi
 
