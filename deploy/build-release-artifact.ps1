@@ -8,44 +8,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-function Get-TarMemberSha256 {
-  param(
-    [Parameter(Mandatory = $true)][string]$ArchivePath,
-    [Parameter(Mandatory = $true)][string]$MemberPath
-  )
-
-  if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf) -or
-      $MemberPath -notmatch '^[A-Za-z0-9._/-]+$' -or
-      $MemberPath.StartsWith('/') -or
-      $MemberPath.Split('/') -contains '..') {
-    throw "Unsafe source archive member: $MemberPath"
-  }
-  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-  $startInfo.FileName = 'tar'
-  $startInfo.Arguments = "-xOf `"$ArchivePath`" `"$MemberPath`""
-  $startInfo.UseShellExecute = $false
-  $startInfo.RedirectStandardOutput = $true
-  $startInfo.RedirectStandardError = $true
-  $startInfo.CreateNoWindow = $true
-  $process = New-Object System.Diagnostics.Process
-  $process.StartInfo = $startInfo
-  if (-not $process.Start()) {
-    throw "Could not start tar for $MemberPath"
-  }
-  $sha256 = [System.Security.Cryptography.SHA256]::Create()
-  try {
-    $digestBytes = $sha256.ComputeHash($process.StandardOutput.BaseStream)
-    $errorText = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) {
-      throw "Source archive member could not be read: $MemberPath ($errorText)"
-    }
-    return ([System.BitConverter]::ToString($digestBytes)).Replace('-', '').ToLowerInvariant()
-  } finally {
-    $sha256.Dispose()
-    $process.Dispose()
-  }
-}
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptRoot 'image-archive-manifest.ps1')
 
 if ($ReleaseCommit -cnotmatch '^[0-9a-f]{40}$') {
   throw 'ReleaseCommit must be the full lowercase 40-character Git commit'
@@ -69,6 +33,7 @@ if ($LASTEXITCODE -ne 0 -or $inputChanges.Count -gt 0) {
 }
 $requiredTrackedFiles = @(
   'deploy/release-manifest.env',
+  'deploy/image-archive-manifest.ps1',
   'python-agent/scripts/health_probe_client.py',
   'python-agent/scripts/bootstrap_fixture.py',
   'python-agent/scripts/agent-entrypoint.sh',
@@ -265,7 +230,7 @@ foreach ($entry in $images.GetEnumerator()) {
   $imageRecord = [ordered]@{
     variable = $entry.Key
     reference = $entry.Value.Target
-    imageId = $imageId
+    imageId = $null
     os = 'linux'
     architecture = 'amd64'
     kind = $entry.Value.Kind
@@ -283,6 +248,9 @@ foreach ($entry in $images.GetEnumerator()) {
 $imageReferences = @($records | ForEach-Object { $_.reference })
 & docker save --output $tarPath @imageReferences
 if ($LASTEXITCODE -ne 0) { throw 'docker save failed' }
+$records = @(Resolve-DockerSaveImageRecords `
+  -ArchivePath $tarPath -Records $records `
+  -ReleaseCommit $ReleaseCommit -ReleaseVersion $version)
 git archive --format=tar --output=$sourceTarPath $ReleaseCommit
 if ($LASTEXITCODE -ne 0) { throw 'git archive failed' }
 $sourceHash = (Get-FileHash -LiteralPath $sourceTarPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -317,7 +285,7 @@ $runtimeFilePaths = @(
 )
 $runtimeFiles = [ordered]@{}
 foreach ($runtimeFile in $runtimeFilePaths) {
-  $runtimeFiles[$runtimeFile] = Get-TarMemberSha256 -ArchivePath $sourceTarPath -MemberPath $runtimeFile
+  $runtimeFiles[$runtimeFile] = Get-TarArchiveMemberSha256 -ArchivePath $sourceTarPath -MemberPath $runtimeFile
 }
 $composeHash = $runtimeFiles['docker-compose.prod.yml']
 $record = [ordered]@{

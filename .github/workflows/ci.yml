@@ -181,6 +181,13 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck deploy/*.sh
           bash -n deploy/*.sh
+          REPO_ROOT="$PWD" bash deploy/tests/maintenance-firewall.test.sh
+          REPO_ROOT="$PWD" bash deploy/tests/recovery-acceptance-http-retry.test.sh
+      - name: Validate Docker save canonical image IDs
+        shell: pwsh
+        run: |
+          $env:REPO_ROOT = $PWD.Path
+          ./deploy/tests/image-archive-manifest.test.ps1
       - name: Validate production Nginx configuration
         run: |
           mkdir -p /tmp/resumesystem-certs/live/aidana.top
@@ -195,3 +202,13 @@ jobs:
             -v "$PWD/deploy/nginx/resume-system.conf:/etc/nginx/conf.d/default.conf:ro" \
             -v "/tmp/resumesystem-certs:/etc/letsencrypt:ro" \
             nginx:1.27-alpine nginx -t
+
+  deploy-windows-compat:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker archive parser on Windows PowerShell and bsdtar
+        shell: powershell
+        run: |
+          $env:REPO_ROOT = $PWD.Path
+          .\deploy\tests\image-archive-manifest.test.ps1

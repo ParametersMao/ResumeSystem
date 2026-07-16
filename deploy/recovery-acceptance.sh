@@ -21,38 +21,91 @@ backend_health="$(curl -fsS --max-time 15 -H "Host: $public_host" \
 [[ "$backend_health" == *'"status":"ok"'* ]] \
   || { echo "Recovery public API health failed" >&2; exit 1; }
 
-web_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
-  http://127.0.0.1/ 2>/dev/null | tr -d '\r' || true)"
-grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$web_headers" \
-  || { echo "Recovery public web entry failed" >&2; exit 1; }
-if grep -Eiq '^Location:' <<< "$web_headers"; then
-  echo "Recovery public web entry redirects" >&2
-  exit 1
-fi
-web_html="$(curl -fsS --max-time 15 -H "Host: $public_host" \
-  http://127.0.0.1/ 2>/dev/null || true)"
-[[ "$web_html" == *'<div id="app"></div>'* ]] \
-  || { echo "Recovery public web HTML is invalid" >&2; exit 1; }
-web_asset="$(printf '%s' "$web_html" | grep -oE 'src="/assets/[^"]+\.js"' \
-  | head -1 | cut -d'"' -f2 || true)"
-[[ -n "$web_asset" ]] || { echo "Recovery web asset is missing" >&2; exit 1; }
-web_asset_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
-  "http://127.0.0.1${web_asset}" 2>/dev/null | tr -d '\r' || true)"
-grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$web_asset_headers" \
-  || { echo "Recovery web JavaScript failed" >&2; exit 1; }
-grep -Eiq '^Content-Type:[[:space:]]*(application|text)/javascript' <<< "$web_asset_headers" \
-  || { echo "Recovery web JavaScript MIME is invalid" >&2; exit 1; }
+static_probe_error=""
+probe_public_static_entries() {
+  local web_headers web_html web_asset web_asset_headers
+  local admin_headers admin_html admin_asset admin_asset_headers
 
-admin_html="$(curl -fsS --max-time 15 -H "Host: $public_host" \
-  http://127.0.0.1/admin/ 2>/dev/null || true)"
-admin_asset="$(printf '%s' "$admin_html" | grep -oE '/admin/js/main-[^"]+\.js' | head -1 || true)"
-[[ -n "$admin_asset" ]] || { echo "Recovery admin asset is missing" >&2; exit 1; }
-asset_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
-  "http://127.0.0.1${admin_asset}" 2>/dev/null | tr -d '\r' || true)"
-grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$asset_headers" \
-  || { echo "Recovery admin JavaScript failed" >&2; exit 1; }
-grep -Eiq '^Content-Type:[[:space:]]*(application|text)/javascript' <<< "$asset_headers" \
-  || { echo "Recovery admin JavaScript MIME is invalid" >&2; exit 1; }
+  web_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
+    http://127.0.0.1/ 2>/dev/null | tr -d '\r' || true)"
+  if ! grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$web_headers"; then
+    static_probe_error="Recovery public web entry failed"
+    return 1
+  fi
+  if grep -Eiq '^Location:' <<< "$web_headers"; then
+    static_probe_error="Recovery public web entry redirects"
+    return 1
+  fi
+  web_html="$(curl -fsS --max-time 15 -H "Host: $public_host" \
+    http://127.0.0.1/ 2>/dev/null || true)"
+  if [[ "$web_html" != *'<div id="app"></div>'* ]]; then
+    static_probe_error="Recovery public web HTML is invalid"
+    return 1
+  fi
+  web_asset="$(printf '%s' "$web_html" | grep -oE 'src="/assets/[^"]+\.js"' \
+    | head -1 | cut -d'"' -f2 || true)"
+  if [[ -z "$web_asset" ]]; then
+    static_probe_error="Recovery web asset is missing"
+    return 1
+  fi
+  web_asset_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
+    "http://127.0.0.1${web_asset}" 2>/dev/null | tr -d '\r' || true)"
+  if ! grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$web_asset_headers"; then
+    static_probe_error="Recovery web JavaScript failed"
+    return 1
+  fi
+  if ! grep -Eiq '^Content-Type:[[:space:]]*(application|text)/javascript' <<< "$web_asset_headers"; then
+    static_probe_error="Recovery web JavaScript MIME is invalid"
+    return 1
+  fi
+
+  admin_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
+    http://127.0.0.1/admin/ 2>/dev/null | tr -d '\r' || true)"
+  if ! grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$admin_headers"; then
+    static_probe_error="Recovery public admin entry failed"
+    return 1
+  fi
+  if grep -Eiq '^Location:' <<< "$admin_headers"; then
+    static_probe_error="Recovery public admin entry redirects"
+    return 1
+  fi
+  admin_html="$(curl -fsS --max-time 15 -H "Host: $public_host" \
+    http://127.0.0.1/admin/ 2>/dev/null || true)"
+  admin_asset="$(printf '%s' "$admin_html" | grep -oE '/admin/js/main-[^"]+\.js' | head -1 || true)"
+  if [[ -z "$admin_asset" ]]; then
+    static_probe_error="Recovery admin asset is missing"
+    return 1
+  fi
+  admin_asset_headers="$(curl -sS --max-time 15 -D - -o /dev/null -H "Host: $public_host" \
+    "http://127.0.0.1${admin_asset}" 2>/dev/null | tr -d '\r' || true)"
+  if ! grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' <<< "$admin_asset_headers"; then
+    static_probe_error="Recovery admin JavaScript failed"
+    return 1
+  fi
+  if ! grep -Eiq '^Content-Type:[[:space:]]*(application|text)/javascript' <<< "$admin_asset_headers"; then
+    static_probe_error="Recovery admin JavaScript MIME is invalid"
+    return 1
+  fi
+}
+
+static_probe_attempts="${RECOVERY_STATIC_PROBE_ATTEMPTS:-15}"
+static_probe_delay="${RECOVERY_STATIC_PROBE_DELAY_SECONDS:-2}"
+[[ "$static_probe_attempts" =~ ^[1-9][0-9]*$ ]] \
+  || { echo "RECOVERY_STATIC_PROBE_ATTEMPTS must be a positive integer" >&2; exit 1; }
+[[ "$static_probe_delay" =~ ^[0-9]+$ ]] \
+  || { echo "RECOVERY_STATIC_PROBE_DELAY_SECONDS must be a non-negative integer" >&2; exit 1; }
+static_probe_ready=false
+for ((static_probe_attempt = 1; static_probe_attempt <= static_probe_attempts; static_probe_attempt += 1)); do
+  if probe_public_static_entries; then
+    static_probe_ready=true
+    break
+  fi
+  if ((static_probe_attempt < static_probe_attempts)); then
+    sleep "$static_probe_delay"
+  fi
+done
+[[ "$static_probe_ready" == true ]] \
+  || { echo "$static_probe_error after $static_probe_attempts attempts" >&2; exit 1; }
 
 cors_headers="$(curl -sS --max-time 15 -D - -o /dev/null \
   -X OPTIONS http://127.0.0.1/api/auth/cuser/login -H "Host: $public_host" \
