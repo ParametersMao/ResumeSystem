@@ -294,8 +294,9 @@ if [[ "$ROLLOUT_OPERATION" == "deploy" ]]; then
   }
   artifact_manifest_name="$(basename "$artifact_manifest")"
   artifact_manifest_hashes="$(awk -v wanted="$artifact_manifest_name" \
-    '$2 == wanted && $1 ~ /^[0-9a-f]{64}$/ {print $1}' "$artifact_checksums")"
+    '$2 == wanted {print $1}' "$artifact_checksums")"
   [[ "$(printf '%s\n' "$artifact_manifest_hashes" | sed '/^$/d' | wc -l)" -eq 1 \
+    && "$artifact_manifest_hashes" =~ ^[0-9a-f]{64}$ \
     && "$(sha256sum "$artifact_manifest" | awk '{print $1}')" == "$artifact_manifest_hashes" ]] || {
     echo "Interrupted deploy artifact manifest checksum does not match" >&2
     false
